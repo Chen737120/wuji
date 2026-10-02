@@ -1,0 +1,104 @@
+import 'dart:io';
+import 'package:flutter_test/flutter_test.dart';
+import 'package:wuji/services/archive_fs.dart';
+import 'package:wuji/services/archive_store.dart';
+import 'package:wuji/services/manifest.dart';
+import 'package:wuji/data/db.dart' show ClassRecord, MediaAsset;
+
+void main() {
+  late Directory tmp;
+  late ArchiveStore store;
+  setUp(() async {
+    tmp = await Directory.systemTemp.createTemp('wuji_test');
+    store = ArchiveStore(LocalArchiveFs(tmp.path));
+  });
+  tearDown(() async {
+    if (await tmp.exists()) await tmp.delete(recursive: true);
+  });
+
+  test('mediaRel follows YYYY-MM layout', () {
+    expect(store.mediaRel(DateTime(2026, 9, 30), 'abc', 'mp4'),
+        'media/2026-09/abc.mp4');
+  });
+
+  test('stage/commit/discard lifecycle', () async {
+    final src = File('${tmp.path}/src.bin')..writeAsBytesSync([1, 2, 3]);
+    final tempRel = await store.stageFromPath(src.path, ext: 'mp4');
+    expect(tempRel.startsWith('media/.staging/'), isTrue);
+    final finalRel =
+        await store.commit(tempRel, DateTime(2026, 10, 2), 'xyz', 'mp4');
+    expect(finalRel, 'media/2026-10/xyz.mp4');
+    expect(await store.fs.exists(finalRel), isTrue);
+    expect(await store.fs.exists(tempRel), isFalse);
+    expect(await File('${tmp.path}/$finalRel').readAsBytes(), [1, 2, 3]);
+    await store.discard(tempRel); // 幂等：文件已不存在也不抛
+  });
+
+  test('manifest write/read roundtrip', () async {
+    await store.writeManifest('{"app":"舞记","version":1,"records":[]}');
+    expect(await store.readManifest(), contains('舞记'));
+  });
+
+  test('orphan sweep removes unreferenced media but keeps referenced', () async {
+    final keep = 'media/2026-10/keep.mp4';
+    final orphan = 'media/2026-10/orphan.mp4';
+    await store.fs.write(keep, Stream.value([1]));
+    await store.fs.write(orphan, Stream.value([1]));
+    await store.sweepOrphans(referencedRels: {keep});
+    expect(await store.fs.exists(keep), isTrue);
+    expect(await store.fs.exists(orphan), isFalse);
+  });
+
+  test('orphan sweep clears staging entirely', () async {
+    final s = await store.fs.write('media/.staging/x.part', Stream.value([9]));
+    await store.sweepOrphans(referencedRels: {});
+    expect(await store.fs.exists('media/.staging/x.part'), isFalse);
+  });
+
+  test('manifest roundtrip with real rows', () async {
+    final now = DateTime(2026, 9, 30, 12);
+    final r = ClassRecord(
+      id: 'r1',
+      date: '2026-09-30',
+      styleName: '爵士',
+      teacherName: '小鹿',
+      sessionCount: 2,
+      minutesEach: 90,
+      note: '今天很棒\n第二行',
+      createdAt: now,
+      updatedAt: now,
+    );
+    final m = MediaAsset(
+      id: 'm1',
+      classId: 'r1',
+      type: 'video',
+      fileName: 'media/2026-09/abc.mp4',
+      durationSec: 95,
+      sizeBytes: 12345,
+      createdAt: now,
+    );
+    final json = buildManifestJson([r], [m]);
+    await store.writeManifest(json);
+    final parsed = parseManifest(await store.readManifest() ?? '');
+    expect(parsed.errors, isEmpty);
+    expect(parsed.entries, hasLength(1));
+    final e = parsed.entries.single;
+    expect(e.id, 'r1');
+    expect(e.styleName, '爵士');
+    expect(e.sessionCount, 2);
+    expect(e.note, '今天很棒\n第二行');
+    expect(e.media.single.fileName, 'media/2026-09/abc.mp4');
+    expect(e.media.single.durationSec, 95);
+  });
+
+  test('parseManifest skips bad dates and collects errors', () {
+    const json = '{"app":"舞记","version":1,"records":['
+        '{"id":"ok1","date":"2026-09-30","sessionCount":1,"minutesEach":90,"media":[]},'
+        '{"id":"bad1","date":"2099-13-40","sessionCount":1,"minutesEach":90,"media":[]},'
+        '{"id":"bad2","date":"2026-01-01","sessionCount":99,"minutesEach":90,"media":[]}]}';
+    final parsed = parseManifest(json);
+    expect(parsed.entries, hasLength(1));
+    expect(parsed.entries.single.id, 'ok1');
+    expect(parsed.errors, hasLength(2));
+  });
+}
