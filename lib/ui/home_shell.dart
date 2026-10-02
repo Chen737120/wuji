@@ -32,7 +32,9 @@ class _HomeShellState extends State<HomeShell> {
         backgroundColor: accent,
         shape: const CircleBorder(),
         child: const Icon(Icons.add, size: 30, color: Colors.white),
-        onPressed: widget.onFabPressed,
+        onPressed: () {
+          widget.onFabPressed?.call();
+        },
       ),
       floatingActionButtonLocation: FloatingActionButtonLocation.centerDocked,
       bottomNavigationBar: BottomAppBar(

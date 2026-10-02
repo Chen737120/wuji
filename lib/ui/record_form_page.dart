@@ -100,7 +100,7 @@ class _RecordFormPageState extends State<RecordFormPage> {
     if (d != null) setState(() => _date = d);
   }
 
-  String get _durationLabel => '${_sessions}节×$_minutesEach分';
+  String get _durationLabel => '$_sessions节×$_minutesEach分';
 
   Future<void> _save() async {
     if (_saving) return;
@@ -285,7 +285,7 @@ class _RecordFormPageState extends State<RecordFormPage> {
             color: Colors.white,
             borderRadius: BorderRadius.circular(14),
             border: Border.all(
-                color: Theme.of(context).colorScheme.primary.withOpacity(.4),
+                color: Theme.of(context).colorScheme.primary.withValues(alpha: .4),
                 width: 1.5),
           ),
           child: Column(

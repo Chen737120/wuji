@@ -4,7 +4,6 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:provider/provider.dart';
 import 'package:wuji/data/app_repository.dart';
 import 'package:wuji/data/db.dart';
-import 'package:wuji/data/taxonomy_repo.dart';
 import 'package:wuji/services/media_importer.dart';
 import 'package:wuji/ui/record_form_page.dart';
 

@@ -3,7 +3,6 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:wuji/data/app_repository.dart';
 import 'package:wuji/data/db.dart';
 import 'package:wuji/data/taxonomy_repo.dart';
-import 'package:wuji/models/models.dart';
 import 'package:wuji/services/archive_fs.dart';
 import 'package:wuji/services/archive_store.dart';
 import 'package:wuji/services/manifest.dart';

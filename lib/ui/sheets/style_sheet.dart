@@ -113,14 +113,14 @@ class _StyleSheetState extends State<_StyleSheet> {
         final name = await _askCustomName(context);
         if (name == null || name.trim().isEmpty) return;
         final item = await widget.repo.touchByName(TaxonomyKind.style, name);
-        if (context.mounted) Navigator.pop(context, item);
+        if (mounted) Navigator.pop(context, item);
       },
       child: Container(
         alignment: Alignment.center,
         decoration: BoxDecoration(
           color: AppColors.bg,
           borderRadius: BorderRadius.circular(10),
-          border: Border.all(color: accent.withOpacity(.4), width: 1.2),
+          border: Border.all(color: accent.withValues(alpha: .4), width: 1.2),
         ),
         child: Text('自定义',
             style: TextStyle(fontSize: 12, color: accent)),

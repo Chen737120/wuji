@@ -1,6 +1,7 @@
+import 'dart:io';
 import 'package:drift/drift.dart';
 import 'package:drift/native.dart';
-import '../models/models.dart';
+import 'package:path_provider/path_provider.dart';
 
 part 'db.g.dart';
 
@@ -85,5 +86,8 @@ class AppDatabase extends _$AppDatabase {
 AppDatabase appDatabaseForTest() =>
     AppDatabase.forTesting(NativeDatabase.memory());
 
-QueryExecutor _open() => throw UnimplementedError(
-    'device executor wired in Task 8 (LazyDatabase + path_provider)');
+QueryExecutor _open() => LazyDatabase(() async {
+      final dir = await getApplicationDocumentsDirectory();
+      final file = File('${dir.path}/wuji.db');
+      return NativeDatabase.createInBackground(file);
+    });

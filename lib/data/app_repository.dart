@@ -2,7 +2,6 @@ import 'package:drift/drift.dart';
 import 'db.dart';
 import 'taxonomy_repo.dart';
 import '../models/models.dart';
-import '../services/archive_fs.dart';
 import '../services/archive_store.dart';
 import '../services/manifest.dart';
 
@@ -53,17 +52,20 @@ class AppRepository implements ClassSaver {
   final TaxonomyRepo _taxonomy;
 
   /// 名单弹层需要同库仓库（表单页用）。
+  @override
   AppDatabase get db => _db;
 
   /// 视频缩略图生成器（设备端注入 video_thumbnail；宿主测试 null）。
-  /// 返回缩略图在存档内的相对路径（如 thumbs/<uuid>.jpg），失败返回 null。
+  /// 返回缩略图在存档内的相对路径（如 thumbs/uuid.jpg），失败返回 null。
   final Future<String?> Function(String sourcePath)? thumbMaker;
 
+  @override
   Future<List<ClassRecord>> allRecords() =>
       (_db.select(_db.classRecords)
             ..orderBy([(t) => OrderingTerm.desc(t.date)]))
           .get();
 
+  @override
   Future<List<MediaAsset>> mediaOf(String classId) =>
       (_db.select(_db.mediaAssets)..where((t) => t.classId.equals(classId)))
           .get();
@@ -73,6 +75,7 @@ class AppRepository implements ClassSaver {
   /// 全或无保存（规格 §5.2）：
   /// staging→commit 文件 → 事务登记（upsert 课 + 新附件 + 删旧附件行）→ 删旧文件 → 刷 manifest。
   /// 任一步失败：反向删除本次已落盘文件并上抛，不留半截。
+  @override
   Future<void> saveDraft(ClassDraft d) async {
     // 表单内同一文件去重（键=sourcePath+sizeBytes）
     final seen = <String>{};
@@ -186,6 +189,7 @@ class AppRepository implements ClassSaver {
   }
 
   /// 删除课：确认弹窗在前（UI 层），此处事务删行→删文件→刷 manifest。
+  @override
   Future<void> deleteRecord(String id) async {
     final rows = await mediaOf(id);
     await _db.transaction(() async {

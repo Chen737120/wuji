@@ -50,7 +50,7 @@ void main() {
   });
 
   test('orphan sweep clears staging entirely', () async {
-    final s = await store.fs.write('media/.staging/x.part', Stream.value([9]));
+    await store.fs.write('media/.staging/x.part', Stream.value([9]));
     await store.sweepOrphans(referencedRels: {});
     expect(await store.fs.exists('media/.staging/x.part'), isFalse);
   });

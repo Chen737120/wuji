@@ -1,10 +1,12 @@
-import 'dart:ui' show FontFeature;
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import '../data/app_repository.dart' show ClassSaver;
 import '../data/db.dart';
+import '../reload_bus.dart';
 import '../services/stats.dart';
 import '../theme.dart';
+import 'my_page.dart';
+import 'record_form_page.dart';
 import 'widgets/charts.dart';
 
 /// 首页统计面板（规格 §3.2）。
@@ -30,6 +32,13 @@ class _StatsPageState extends State<StatsPage> {
   void initState() {
     super.initState();
     _load();
+    ReloadBus.instance.addListener(_load);
+  }
+
+  @override
+  void dispose() {
+    ReloadBus.instance.removeListener(_load);
+    super.dispose();
   }
 
   Future<void> _load() async {
@@ -68,6 +77,7 @@ class _StatsPageState extends State<StatsPage> {
       helpText: '选择开始日期',
     );
     if (first == null) return;
+    if (!mounted) return;
     final last = await showDatePicker(
       context: context,
       initialDate: _customEnd ?? initial,
@@ -76,6 +86,7 @@ class _StatsPageState extends State<StatsPage> {
       helpText: '选择结束日期',
     );
     if (last == null) return;
+    if (!mounted) return;
     setState(() {
       _customStart = first;
       _customEnd = last;
@@ -187,8 +198,8 @@ class _StatsPageState extends State<StatsPage> {
         IconButton(
           icon: const Icon(Icons.settings_outlined,
               size: 20, color: AppColors.faint),
-          onPressed: () => ScaffoldMessenger.of(context).showSnackBar(
-              const SnackBar(content: Text('「我的」页在下一步接入'))),
+          onPressed: () => Navigator.push(
+              context, MaterialPageRoute(builder: (_) => const MyPage())),
         ),
       ],
     );
@@ -304,7 +315,11 @@ class _StatsPageState extends State<StatsPage> {
               padding:
                   const EdgeInsets.symmetric(horizontal: 24, vertical: 10),
             ),
-            onPressed: () {},
+            onPressed: () async {
+              await Navigator.push(
+                  context, MaterialPageRoute(builder: (_) => RecordFormPage()));
+              _load();
+            },
             child: const Text('去记录第一节课',
                 style: TextStyle(fontSize: 13, fontWeight: FontWeight.w600)),
           ),

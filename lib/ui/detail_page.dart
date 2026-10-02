@@ -1,5 +1,4 @@
 import 'package:flutter/material.dart';
-import 'package:intl/intl.dart';
 import 'package:provider/provider.dart';
 import '../data/app_repository.dart' show ClassSaver;
 import '../data/db.dart' show ClassRecord, MediaAsset, ClassRecordRowX;
@@ -195,7 +194,7 @@ class _DetailPageState extends State<DetailPage> {
                       Expanded(
                         child: OutlinedButton(
                           style: OutlinedButton.styleFrom(
-                            side: BorderSide(color: accent.withOpacity(.5)),
+                            side: BorderSide(color: accent.withValues(alpha: .5)),
                             shape: const StadiumBorder(),
                             padding: const EdgeInsets.symmetric(vertical: 10),
                           ),
@@ -266,7 +265,7 @@ class _DetailPageState extends State<DetailPage> {
                   child: missing
                       ? Text('文件已丢失（可从云盘备份导入）',
                           style: TextStyle(
-                              fontSize: 11, color: Colors.white.withOpacity(.7)))
+                              fontSize: 11, color: Colors.white.withValues(alpha: .7)))
                       : Icon(m.type == 'video' ? Icons.play_arrow : Icons.image,
                           color: AppColors.bg, size: 40),
                 ),

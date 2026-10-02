@@ -1,5 +1,4 @@
 import 'package:flutter/material.dart';
-import 'package:photo_manager/photo_manager.dart';
 import 'package:wechat_assets_picker/wechat_assets_picker.dart';
 
 /// 相册选择抽象：设备端 wechat_assets_picker（photo_manager 底座），测试用 fake 注入。
@@ -34,6 +33,7 @@ class PluginMediaImporter implements MediaImporter {
   @override
   Future<List<PickedMedia>> pick(BuildContext context, {int max = 30}) async {
     if (!await requestPermission()) return const [];
+    if (!context.mounted) return const [];
     final assets = await AssetPicker.pickAssets(
       context,
       pickerConfig: AssetPickerConfig(

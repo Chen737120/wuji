@@ -20,7 +20,7 @@ class ArchiveStore implements MediaLocator {
   /// 存档清单文件名（规格固定）。
   final String manifestRel;
 
-  /// media/YYYY-MM/<uuid>.<ext>
+  /// media/YYYY-MM 日期目录uuid.ext
   String mediaRel(DateTime d, String uuid, String ext) {
     final mm = '${d.year}-${d.month.toString().padLeft(2, '0')}';
     return 'media/$mm/$uuid.${ext.toLowerCase()}';
@@ -34,7 +34,7 @@ class ArchiveStore implements MediaLocator {
     return tempRel;
   }
 
-  /// 把 staging 文件转正到 media/YYYY-MM/，返回正式相对路径。
+  /// 把 staging 文件转正到 media/YYYY-MM 日期目录，返回正式相对路径。
   Future<String> commit(
       String tempRel, DateTime date, String uuid, String ext) async {
     final finalRel = mediaRel(date, uuid, ext);

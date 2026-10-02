@@ -1,38 +1,159 @@
+import 'dart:io';
 import 'package:flutter/material.dart';
+import 'package:path_provider/path_provider.dart';
 import 'package:provider/provider.dart';
+import 'package:shared_preferences/shared_preferences.dart';
+import 'data/app_repository.dart';
+import 'data/db.dart';
+import 'data/taxonomy_repo.dart';
+import 'reload_bus.dart';
+import 'services/archive_fs.dart';
+import 'services/archive_store.dart';
+import 'services/saf_archive.dart';
+import 'services/thumb_service.dart';
 import 'theme.dart';
 import 'ui/home_shell.dart';
+import 'ui/record_form_page.dart';
+import 'ui/records_page.dart';
+import 'ui/stats_page.dart';
 
-void main() {
-  runApp(const AppRoot());
+Future<void> main() async {
+  WidgetsFlutterBinding.ensureInitialized();
+  final db = AppDatabase();
+  final theme = ThemeController();
+  await theme.load();
+  final sp = await SharedPreferences.getInstance();
+  final treeUri = sp.getString('archiveTreeUri');
+  final store = ArchiveStore(await _archiveFs(treeUri));
+  final repo = AppRepository(
+    db,
+    store,
+    TaxonomyRepo(db),
+    thumbMaker: Platform.isAndroid ? deviceThumbMaker(store) : null,
+  );
+  await repo.reconcileOnStartup();
+  runApp(AppRoot(repo: repo, store: store, theme: theme, hasSaf: treeUri != null));
+}
+
+/// 已授权 SAF → SAF 存档；否则暂用应用私有目录（首启引导后切换）。
+Future<ArchiveFs> _archiveFs(String? treeUri) async {
+  if (treeUri != null && treeUri.isNotEmpty) {
+    return SafArchiveFs(treeUri: treeUri);
+  }
+  final docs = await getApplicationDocumentsDirectory();
+  return LocalArchiveFs('${docs.path}${Platform.pathSeparator}wuji-archive');
 }
 
 class AppRoot extends StatefulWidget {
-  const AppRoot({super.key});
+  const AppRoot({
+    super.key,
+    required this.repo,
+    required this.store,
+    required this.theme,
+    required this.hasSaf,
+  });
+
+  final AppRepository repo;
+  final ArchiveStore store;
+  final ThemeController theme;
+  final bool hasSaf;
+
   @override
   State<AppRoot> createState() => _AppRootState();
 }
 
 class _AppRootState extends State<AppRoot> {
-  final _theme = ThemeController();
+  late AppRepository _repo;
+  late ArchiveStore _store;
+  late bool _hasSaf;
+  bool _onboardingShown = false;
 
   @override
   void initState() {
     super.initState();
-    _theme.load();
+    _repo = widget.repo;
+    _store = widget.store;
+    _hasSaf = widget.hasSaf;
+    WidgetsBinding.instance.addPostFrameCallback((_) => _maybeOnboard());
+  }
+
+  Future<void> _maybeOnboard() async {
+    if (_hasSaf || _onboardingShown || !mounted) return;
+    _onboardingShown = true;
+    final sp = await SharedPreferences.getInstance();
+    if (sp.getBool('archiveOnboardSkipped') == true) return;
+    if (!mounted) return;
+    final accent = Theme.of(context).colorScheme.primary;
+    final picked = await showDialog<bool>(
+      context: context,
+      barrierDismissible: false,
+      builder: (ctx) => AlertDialog(
+        backgroundColor: Colors.white,
+        title: const Text('选择存档文件夹',
+            style: TextStyle(fontSize: 16, fontWeight: FontWeight.w700)),
+        content: const Text(
+            '舞记会把课堂视频和记录保存在一个专门的文件夹里。\n\n推荐放在「下载」中的「舞记」文件夹：卸载应用后视频和感受也不会丢，重装后可一键恢复。',
+            style: TextStyle(fontSize: 13, height: 1.7)),
+        actions: [
+          TextButton(
+            onPressed: () async {
+              await sp.setBool('archiveOnboardSkipped', true);
+              if (ctx.mounted) Navigator.pop(ctx, false);
+            },
+            child: const Text('稍后再说'),
+          ),
+          FilledButton(
+            style: FilledButton.styleFrom(
+              backgroundColor: accent,
+              shape: const StadiumBorder(),
+            ),
+            onPressed: () => Navigator.pop(ctx, true),
+            child: const Text('使用“下载”中的舞记文件夹'),
+          ),
+        ],
+      ),
+    );
+    if (picked != true) return;
+    final uri = await pickAndEnsureWujiArchive();
+    if (uri == null || !mounted) return;
+    final sp2 = await SharedPreferences.getInstance();
+    await sp2.setString('archiveTreeUri', uri);
+    final newStore = ArchiveStore(SafArchiveFs(treeUri: uri));
+    final newRepo = AppRepository(_repo.db, newStore,
+        TaxonomyRepo(_repo.db),
+        thumbMaker: deviceThumbMaker(newStore));
+    await newRepo.reconcileOnStartup();
+    setState(() {
+      _store = newStore;
+      _repo = newRepo;
+      _hasSaf = true;
+    });
   }
 
   @override
   Widget build(BuildContext context) {
-    return ChangeNotifierProvider.value(
-      value: _theme,
+    return MultiProvider(
+      providers: [
+        ChangeNotifierProvider<ThemeController>.value(value: widget.theme),
+        Provider<ClassSaver>.value(value: _repo),
+        Provider<MediaLocator>.value(value: _store),
+        if (_store.fs is MediaPathResolver)
+          Provider<MediaPathResolver>.value(
+              value: _store.fs as MediaPathResolver),
+      ],
       child: Consumer<ThemeController>(
-        builder: (_, t, __) => MaterialApp(
+        builder: (_, t, _) => MaterialApp(
           title: '舞记',
           theme: AppTheme.light(t.accentPreset),
           home: HomeShell(
-            pages: const [Placeholder(), Placeholder()],
-            onFabPressed: () {}, // T8 接表单
+            pages: const [StatsPage(), RecordsPage()],
+            onFabPressed: () {
+              Navigator.push(
+                context,
+                MaterialPageRoute(builder: (_) => const RecordFormPage()),
+              ).then((_) => ReloadBus.instance.bump());
+              // 保存/取消都可能改变数据；回来后让两个页面自行刷新
+            },
           ),
         ),
       ),

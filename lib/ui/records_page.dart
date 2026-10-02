@@ -4,6 +4,7 @@ import 'package:provider/provider.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import '../data/app_repository.dart' show ClassSaver;
 import '../data/db.dart' show ClassRecord, ClassRecordRowX, MediaAsset;
+import '../reload_bus.dart';
 import '../theme.dart';
 import 'detail_page.dart';
 
@@ -57,6 +58,13 @@ class _RecordsPageState extends State<RecordsPage> {
     _calendarMonth = DateTime.now();
     _restoreExpanded();
     _load();
+    ReloadBus.instance.addListener(_load);
+  }
+
+  @override
+  void dispose() {
+    ReloadBus.instance.removeListener(_load);
+    super.dispose();
   }
 
   Future<void> _restoreExpanded() async {
@@ -302,7 +310,7 @@ class _Calendar extends StatelessWidget {
                             shape: BoxShape.circle,
                             color: isSelected
                                 ? accent
-                                : (isToday ? accent.withOpacity(.15) : null),
+                                : (isToday ? accent.withValues(alpha: .15) : null),
                           ),
                           child: Text('$day',
                               style: TextStyle(
