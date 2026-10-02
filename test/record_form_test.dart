@@ -11,8 +11,8 @@ class FakeImporter implements MediaImporter {
   FakeImporter(this.files);
   final List<PickedMedia> files;
   @override
-  Future<List<PickedMedia>> pick(BuildContext context, {int max = 30}) async =>
-      files;
+  Future<PickResult> pick(BuildContext context, {int max = 30}) async =>
+      PickResult(picked: files);
 }
 
 /// 无 IO 的表单测试假仓库：widget 测试跑在 FakeAsync 区，
@@ -38,6 +38,9 @@ class FakeFormRepo implements ClassSaver {
 
   @override
   Future<List<ClassRecord>> allRecords() async => const [];
+
+  @override
+  Future<bool> needsSpaceWarningFor(inputs) async => false;
 
   @override
   Future<void> deleteRecord(String id) async {}

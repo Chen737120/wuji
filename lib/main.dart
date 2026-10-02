@@ -4,6 +4,7 @@ import 'package:path_provider/path_provider.dart';
 import 'package:provider/provider.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'data/app_repository.dart';
+import 'app_services.dart';
 import 'data/db.dart';
 import 'data/taxonomy_repo.dart';
 import 'reload_bus.dart';
@@ -24,7 +25,14 @@ Future<void> main() async {
   await theme.load();
   final sp = await SharedPreferences.getInstance();
   final treeUri = sp.getString('archiveTreeUri');
-  final store = ArchiveStore(await _archiveFs(treeUri));
+  ArchiveStore store;
+  try {
+    store = ArchiveStore(await _archiveFs(treeUri));
+  } catch (_) {
+    // 终审 I9：存档卷不可用时回退私有目录，App 照常打开
+    final docs = await getApplicationDocumentsDirectory();
+    store = ArchiveStore(LocalArchiveFs('${docs.path}/wuji-archive'));
+  }
   final repo = AppRepository(
     db,
     store,
@@ -75,6 +83,27 @@ class _AppRootState extends State<AppRoot> {
     _store = widget.store;
     _hasSaf = widget.hasSaf;
     WidgetsBinding.instance.addPostFrameCallback((_) => _maybeOnboard());
+  }
+
+  /// 存档位置切换（规格 §5.1）：重选文件夹 → 重建仓库 → 从新存档恢复。
+  Future<void> _switchArchive() async {
+    final uri = await pickAndEnsureWujiArchive();
+    if (uri == null || !mounted) return;
+    final sp = await SharedPreferences.getInstance();
+    await sp.setString('archiveTreeUri', uri);
+    final newStore = ArchiveStore(SafArchiveFs(treeUri: uri));
+    final newRepo = AppRepository(_repo.db, newStore, TaxonomyRepo(_repo.db),
+        thumbMaker: deviceThumbMaker(newStore));
+    await newRepo.reconcileOnStartup();
+    setState(() {
+      _store = newStore;
+      _repo = newRepo;
+      _hasSaf = true;
+    });
+    if (mounted) {
+      ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('存档位置已更新')));
+    }
   }
 
   Future<void> _maybeOnboard() async {
@@ -136,6 +165,9 @@ class _AppRootState extends State<AppRoot> {
       providers: [
         ChangeNotifierProvider<ThemeController>.value(value: widget.theme),
         Provider<ClassSaver>.value(value: _repo),
+        Provider<TaxonomyRepo>.value(value: TaxonomyRepo(_repo.db)),
+        Provider<ArchiveSwitcher>.value(
+            value: ArchiveSwitcher(_switchArchive)),
         Provider<MediaLocator>.value(value: _store),
         if (_store.fs is MediaPathResolver)
           Provider<MediaPathResolver>.value(

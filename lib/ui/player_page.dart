@@ -55,6 +55,7 @@ class _PlayerPageState extends State<PlayerPage> {
 
   @override
   Widget build(BuildContext context) {
+    final accent = Theme.of(context).colorScheme.primary;
     final c = _controller;
     return Scaffold(
       backgroundColor: Colors.black,
@@ -129,9 +130,7 @@ class _PlayerPageState extends State<PlayerPage> {
                             child: VideoProgressIndicator(
                               c,
                               allowScrubbing: true,
-                              colors: const VideoProgressColors(
-                                playedColor: Color(0xFF3FA26F),
-                              ),
+                              colors: VideoProgressColors(playedColor: accent),
                             ),
                           ),
                           Text(

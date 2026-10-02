@@ -143,12 +143,12 @@ class _ImportPageState extends State<ImportPage> {
       _status = '导入中…';
     });
     try {
-      await executeImport(_plan!,
+      final report = await executeImport(_plan!,
           sourceFs: _pendingSourceFs!, archive: _store, repo: _repo, taxonomy: _taxonomy);
       ReloadBus.instance.bump();
       if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('导入完成')));
+      ScaffoldMessenger.of(context)
+          .showSnackBar(SnackBar(content: Text(report.toString())));
       Navigator.pop(context);
     } catch (e) {
       setState(() {

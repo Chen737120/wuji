@@ -127,7 +127,7 @@ void main() {
     expect(await store.fs.exists(after.first.fileName), isTrue);
   });
 
-  test('reconcileOnStartup removes orphan files, keeps referenced', () async {
+  test('reconcileOnStartup keeps unreferenced media (C3: never delete user data)', () async {
     final src = File('${tmp.path}/c.mp4')..writeAsBytesSync([3]);
     await repo.saveDraft(ClassDraft(
       record: ClassRecord(
@@ -141,7 +141,7 @@ void main() {
     await store.fs.write('media/2026-10/orphan.mp4', Stream.value([9]));
     await repo.reconcileOnStartup();
     expect(await store.fs.exists(media.fileName), isTrue);
-    expect(await store.fs.exists('media/2026-10/orphan.mp4'), isFalse);
+    expect(await store.fs.exists('media/2026-10/orphan.mp4'), isTrue);
   });
 
   test('reconcile rebuilds records from manifest when db is empty', () async {

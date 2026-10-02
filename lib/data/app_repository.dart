@@ -43,6 +43,9 @@ abstract class ClassSaver {
   Future<List<MediaAsset>> mediaOf(String classId);
   Future<List<ClassRecord>> allRecords();
   Future<void> deleteRecord(String id);
+
+  /// 空间预检（规格 §8）：freeBytes 不可用时恒 false。
+  Future<bool> needsSpaceWarningFor(List<MediaInput> inputs);
 }
 
 /// 应用仓库：保存（全或无）、删除（级联文件）、启动对账、统计取数。
@@ -63,6 +66,10 @@ class AppRepository implements ClassSaver {
     return space_check.needsSpaceWarning(
         free, space_check.incomingBytesOf(inputs));
   }
+
+  @override
+  Future<bool> needsSpaceWarningFor(List<MediaInput> inputs) =>
+      needsSpaceWarning(inputs);
 
   /// 视频缩略图生成器（设备端注入 video_thumbnail；宿主测试 null）。
   /// 返回缩略图在存档内的相对路径（如 thumbs/uuid.jpg），失败返回 null。
@@ -179,15 +186,18 @@ class AppRepository implements ClassSaver {
         }
       });
 
-      // 事务后删被移除附件的文件
+      // 事务已提交：删被移除附件的文件是 best-effort（终审 I2 —— 不在补偿
+      // 范围内，删除失败只留一个已无行引用的孤儿文件，绝不能反删已入库的新文件）
       for (final (file, thumb) in removedFiles) {
-        await _archive.deleteRel(file);
-        if (thumb != null) await _archive.deleteRel(thumb);
+        try {
+          await _archive.deleteRel(file);
+          if (thumb != null) await _archive.deleteRel(thumb);
+        } catch (_) {}
       }
 
       await _writeManifestQuietly();
     } catch (e) {
-      // 补偿：删本次落盘的所有文件
+      // 补偿（仅限事务提交前失败）：删本次落盘的所有文件
       for (final rel in [...committed, ...staged, ...thumbs]) {
         try {
           await _archive.deleteRel(rel);
@@ -211,74 +221,89 @@ class AppRepository implements ClassSaver {
     await _writeManifestQuietly();
   }
 
-  /// 启动对账（规格 §5.2 第 3 条，安全顺序）：
-  /// 1) 空库＋存档有 manifest → 先导入登记（manifest 是权威，先建引用再清扫）；
-  /// 2) 空库＋无 manifest → 不清扫（存档内容未知，绝不销毁无法核对的数据）；
-  /// 3) 非空库 → 清理无主媒体（上次保存失败的残留）。
+  /// 启动对账（规格 §5.2，终审 C2/C3 收窄后的安全版）：
+  /// 1) 空库＋存档有 manifest → 导入重建（幂等，事务化）；
+  /// 2) 清扫只清 `media/.staging/`（保存流程的确定残留），绝不碰正式命名文件；
+  /// 3) manifest 解析/导入任何异常都被吞掉记日志 —— 启动路径绝不因存档问题崩溃。
   Future<void> reconcileOnStartup() async {
-    final records = await allRecords();
-    if (records.isEmpty) {
-      final manifestJson = await _archive.readManifest();
-      if (manifestJson == null) return;
-      final parsed = parseManifest(manifestJson);
-      if (parsed.entries.isEmpty) return;
-      await _importFromManifest(parsed.entries);
+    try {
+      final records = await allRecords();
+      if (records.isEmpty) {
+        final manifestJson = await _archive.readManifest();
+        if (manifestJson != null) {
+          final parsed = parseManifest(manifestJson);
+          if (parsed.entries.isNotEmpty) {
+            await _importInTransaction(parsed.entries);
+          }
+        }
+      }
+      await _archive.sweepOrphans(referencedRels: const {});
+    } catch (_) {
+      // 启动对账永不致命（终审 I9）：存档不可用时 App 照常打开
     }
-    final refs = (await allMedia()).map((m) => m.fileName).toSet();
-    await _archive.sweepOrphans(referencedRels: refs);
   }
 
-  /// manifest → 库重建（幂等：已存在 id 跳过）。T14 导入复用。
-  Future<void> _importFromManifest(List<ManifestEntry> entries) async {
+  /// manifest → 库重建，单事务（全或无；中断重跑幂等）。
+  Future<void> _importInTransaction(List<ManifestEntry> entries) async {
+    // 先把媒体文件从存档自身「按基名」解析拷贝是重连场景（源=本存档）——
+    // 此时文件已在位，无需复制；只登记缺的行。
     await _taxonomy.ensureBuiltins();
-    for (final e in entries) {
-      final exists = await (_db.select(_db.classRecords)
-            ..where((t) => t.id.equals(e.id)))
-          .getSingleOrNull();
-      if (exists != null) continue;
-      String? sid, tid, stid;
-      if ((e.styleName ?? '').isNotEmpty) {
-        sid = (await _taxonomy.touchByName(TaxonomyKind.style, e.styleName!)).id;
-      }
-      if ((e.teacherName ?? '').isNotEmpty) {
-        tid = (await _taxonomy.touchByName(TaxonomyKind.teacher, e.teacherName!)).id;
-      }
-      if ((e.studioName ?? '').isNotEmpty) {
-        stid = (await _taxonomy.touchByName(TaxonomyKind.studio, e.studioName!)).id;
-      }
-      await _db.into(_db.classRecords).insert(ClassRecordsCompanion.insert(
-            id: e.id,
-            date: e.date,
-            styleId: Value(sid),
-            teacherId: Value(tid),
-            studioId: Value(stid),
-            styleName: Value(e.styleName),
-            teacherName: Value(e.teacherName),
-            studioName: Value(e.studioName),
-            sessionCount: Value(e.sessionCount),
-            minutesEach: Value(e.minutesEach),
-            note: Value(e.note),
-            createdAt: e.createdAt ?? DateTime.now(),
-            updatedAt: e.updatedAt ?? DateTime.now(),
-          ));
-      for (final m in e.media) {
-        // 只登记存档里确实存在的文件；缺失的记为丢文件态（详情页显示丢失）
-        final present = await _archive.fs.exists(m.fileName);
-        if (!present) continue;
-        await _db.into(_db.mediaAssets).insert(MediaAssetsCompanion.insert(
-              id: _archive.newId(),
-              classId: e.id,
-              type: m.type,
-              fileName: m.fileName,
-              thumbName: Value(m.thumbName),
-              durationSec: Value(m.durationSec),
-              sizeBytes: Value(m.sizeBytes),
-              createdAt: DateTime.now(),
+    await repoDbTransaction(() async {
+      for (final e in entries) {
+        final exists = await (_db.select(_db.classRecords)
+              ..where((t) => t.id.equals(e.id)))
+            .getSingleOrNull();
+        if (exists != null) continue;
+        String? sid, tid, stid;
+        if ((e.styleName ?? '').isNotEmpty) {
+          sid =
+              (await _taxonomy.touchByName(TaxonomyKind.style, e.styleName!)).id;
+        }
+        if ((e.teacherName ?? '').isNotEmpty) {
+          tid = (await _taxonomy
+                  .touchByName(TaxonomyKind.teacher, e.teacherName!))
+              .id;
+        }
+        if ((e.studioName ?? '').isNotEmpty) {
+          stid = (await _taxonomy
+                  .touchByName(TaxonomyKind.studio, e.studioName!))
+              .id;
+        }
+        await _db.into(_db.classRecords).insert(ClassRecordsCompanion.insert(
+              id: e.id,
+              date: e.date,
+              styleId: Value(sid),
+              teacherId: Value(tid),
+              studioId: Value(stid),
+              styleName: Value(e.styleName),
+              teacherName: Value(e.teacherName),
+              studioName: Value(e.studioName),
+              sessionCount: Value(e.sessionCount),
+              minutesEach: Value(e.minutesEach),
+              note: Value(e.note),
+              createdAt: e.createdAt ?? DateTime.now(),
+              updatedAt: DateTime.now(),
             ));
+        for (final m in e.media) {
+          final present = await _archive.fs.exists(m.fileName);
+          if (!present) continue;
+          await _db.into(_db.mediaAssets).insert(MediaAssetsCompanion.insert(
+                id: _archive.newId(),
+                classId: e.id,
+                type: m.type,
+                fileName: m.fileName,
+                thumbName: Value(m.thumbName),
+                durationSec: Value(m.durationSec),
+                sizeBytes: Value(m.sizeBytes),
+                createdAt: DateTime.now(),
+              ));
+        }
       }
-    }
-    await _writeManifestQuietly();
+    });
   }
+
+  Future<void> repoDbTransaction(Future<void> Function() body) =>
+      _db.transaction(body);
 
   /// manifest 写失败不回滚保存（可由下次对账重建），只静默。
   Future<void> _writeManifestQuietly() async {

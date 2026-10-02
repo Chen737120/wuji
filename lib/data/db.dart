@@ -35,6 +35,8 @@ class MediaAssets extends Table {
   TextColumn get thumbName => text().nullable()();
   IntColumn get durationSec => integer().nullable()();
   IntColumn get sizeBytes => integer().withDefault(const Constant(0))();
+  /// 导入时留存的源文件基名（幂等补回的依据；本机保存为 null）
+  TextColumn get sourceName => text().nullable()();
   DateTimeColumn get createdAt => dateTime()();
 
   @override
@@ -70,10 +72,15 @@ class AppDatabase extends _$AppDatabase {
   AppDatabase.forTesting(super.db);
 
   @override
-  int get schemaVersion => 1;
+  int get schemaVersion => 2;
 
   @override
   MigrationStrategy get migration => MigrationStrategy(
+        onUpgrade: (m, from, to) async {
+          if (from < 2) {
+            await m.addColumn(mediaAssets, mediaAssets.sourceName);
+          }
+        },
         beforeOpen: (details) async {
           await customStatement('PRAGMA foreign_keys = ON');
         },

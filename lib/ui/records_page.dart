@@ -2,9 +2,11 @@ import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
 import 'package:provider/provider.dart';
 import 'package:shared_preferences/shared_preferences.dart';
+import 'dart:io';
 import '../data/app_repository.dart' show ClassSaver;
 import '../data/db.dart' show ClassRecord, ClassRecordRowX, MediaAsset;
 import '../reload_bus.dart';
+import '../services/archive_fs.dart' show MediaPathResolver;
 import '../theme.dart';
 import 'detail_page.dart';
 
@@ -47,6 +49,7 @@ class _RecordsPageState extends State<RecordsPage> {
   Map<String, List<MediaAsset>> _mediaByClass = {};
   bool _expanded = true;
   bool _loaded = false;
+  bool _calendarMonthInitialized = false;
   DateTime? _selectedDay;
   late DateTime _calendarMonth;
 
@@ -90,9 +93,10 @@ class _RecordsPageState extends State<RecordsPage> {
       _records = records;
       _mediaByClass = media;
       _loaded = true;
-      if (records.isNotEmpty) {
+      if (!_calendarMonthInitialized && records.isNotEmpty) {
         final latest = DateTime.parse(records.first.date); // 已按日期倒序
         _calendarMonth = DateTime(latest.year, latest.month);
+        _calendarMonthInitialized = true; // 终审 M7：用户翻页后不被拉回
       }
     });
   }
@@ -339,6 +343,76 @@ class _Calendar extends StatelessWidget {
   }
 }
 
+/// 封面缩略图（规格 §3.3）：有缩略图文件则渲染，否则回退图标；右下角 ×N 角标。
+class _CoverThumb extends StatelessWidget {
+  const _CoverThumb({required this.cover, required this.resolver});
+
+  final MediaAsset? cover;
+  final MediaPathResolver? resolver;
+
+  @override
+  Widget build(BuildContext context) {
+    final thumb = cover?.thumbName;
+    return SizedBox(
+      width: 56,
+      height: 56,
+      child: Stack(
+        children: [
+          ClipRRect(
+            borderRadius: BorderRadius.circular(8),
+            child: SizedBox(
+              width: 56,
+              height: 56,
+              child: (thumb != null && resolver != null)
+                  ? FutureBuilder<String?>(
+                      future: resolver?.toAbsolutePath(thumb),
+                      builder: (context, snap) {
+                        final path = snap.data;
+                        if (path == null || !File(path).existsSync()) {
+                          return _fallback();
+                        }
+                        return Image.file(File(path),
+                            fit: BoxFit.cover,
+                            errorBuilder: (_, _, _) => _fallback());
+                      },
+                    )
+                  : _fallback(),
+            ),
+          ),
+          if (cover != null)
+            Positioned(
+              right: 4,
+              bottom: 4,
+              child: Container(
+                padding:
+                    const EdgeInsets.symmetric(horizontal: 5, vertical: 1),
+                decoration: BoxDecoration(
+                  color: Colors.black54,
+                  borderRadius: BorderRadius.circular(6),
+                ),
+                child: Text('▶',
+                    style: TextStyle(
+                        fontSize: 8, color: AppColors.bg)),
+              ),
+            ),
+        ],
+      ),
+    );
+  }
+
+  Widget _fallback() => Container(
+        color: AppColors.ink,
+        alignment: Alignment.center,
+        child: Icon(
+          cover == null || cover!.type == 'video'
+              ? Icons.play_arrow
+              : Icons.image,
+          color: AppColors.bg,
+          size: 22,
+        ),
+      );
+}
+
 class RecordCard extends StatelessWidget {
   const RecordCard({
     super.key,
@@ -361,7 +435,6 @@ class RecordCard extends StatelessWidget {
     ].join(' · ');
     final cover = media.isNotEmpty ? media.first : null;
     final d = record.dateAsDateTime;
-    final isVideoCover = cover != null && cover.type == 'video';
 
     return GestureDetector(
       onTap: onTap,
@@ -408,20 +481,7 @@ class RecordCard extends StatelessWidget {
               ),
             ),
             const SizedBox(width: 10),
-            Container(
-              width: 56,
-              height: 56,
-              decoration: BoxDecoration(
-                color: AppColors.ink,
-                borderRadius: BorderRadius.circular(8),
-              ),
-              alignment: Alignment.center,
-              child: Icon(
-                cover == null || isVideoCover ? Icons.play_arrow : Icons.image,
-                color: AppColors.bg,
-                size: 22,
-              ),
-            ),
+            _CoverThumb(cover: cover, resolver: context.read<MediaPathResolver?>()),
           ],
         ),
       ),

@@ -4,6 +4,9 @@ import '../data/app_repository.dart' show ClassSaver;
 import '../theme.dart';
 import 'export_preview_page.dart';
 import 'import_page.dart';
+import 'manage_pages.dart';
+import '../app_services.dart';
+import '../models/models.dart';
 
 /// 字节人性化：B / KB / MB / GB（带「约」前缀，非最小单位）。
 String humanBytes(num bytes) {
@@ -39,7 +42,7 @@ class MyPage extends StatelessWidget {
                 Text(
                   usage == null
                       ? '统计中…'
-                      : '${usage.records} 节课 · ${usage.media} 个附件 · ${usage.bytesText}',
+                      : '${usage.records} 节课 · ${usage.media} 个附件 · ${usage.bytesText}（视频占大头）',
                   style: TextStyle(fontSize: 11, color: AppColors.secondary),
                 ),
                 const SizedBox(height: 6),
@@ -60,19 +63,35 @@ class MyPage extends StatelessWidget {
                           MaterialPageRoute(builder: (_) => const ImportPage()))),
                   _navRow(context, '存档位置',
                       sub: '查看或更换存档文件夹（卸载不清空）',
-                      onTap: () => _todo(context, '存档位置')),
+                      onTap: () async {
+                        ArchiveSwitcher? switcher;
+                        try {
+                          switcher = context.read<ArchiveSwitcher>();
+                        } catch (_) {}
+                        if (switcher == null) {
+                          ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
+                              content: Text('当前版本暂不支持切换，请重装后选择存档文件夹')));
+                          return;
+                        }
+                        await switcher.run();
+                      }),
                 ]),
                 _section('管理', [
-                  _navRow(context, '舞种管理', onTap: () => _todo(context, '舞种管理')),
-                  _navRow(context, '老师管理', onTap: () => _todo(context, '老师管理')),
-                  _navRow(context, '舞室管理', onTap: () => _todo(context, '舞室管理')),
+                  _navRow(context, '舞种管理', onTap: () => _openManage(context, TaxonomyKind.style, '舞种管理')),
+                  _navRow(context, '老师管理', onTap: () => _openManage(context, TaxonomyKind.teacher, '老师管理')),
+                  _navRow(context, '舞室管理', onTap: () => _openManage(context, TaxonomyKind.studio, '舞室管理')),
                 ]),
                 _section('外观', [
                   const _AccentPicker(),
                 ]),
                 _section('其他', [
                   _navRow(context, '关于舞记',
-                      sub: null, onTap: () => _todo(context, '关于')),
+                      sub: null, onTap: () => showDialog(context: context, builder: (ctx) => AlertDialog(
+                        backgroundColor: Colors.white,
+                        title: const Text('舞记', style: TextStyle(fontSize: 16)),
+                        content: const Text('v1.0.0\n\n一个纯个人的舞蹈课记录本。\n数据全部保存在你的手机上，没有账号，没有云端。', style: TextStyle(fontSize: 13, height: 1.7)),
+                        actions: [TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('好的'))],
+                      ))),
                 ]),
                 const SizedBox(height: 10),
                 Center(
@@ -99,9 +118,9 @@ class MyPage extends StatelessWidget {
     return _Usage(records.length, mediaCount, humanBytes(bytes));
   }
 
-  void _todo(BuildContext context, String what) {
-    ScaffoldMessenger.of(context)
-        .showSnackBar(SnackBar(content: Text('「$what」在后续步骤接入')));
+  void _openManage(BuildContext context, TaxonomyKind kind, String title) {
+    Navigator.push(context,
+        MaterialPageRoute(builder: (_) => ManagePage(kind: kind, title: title)));
   }
 
   Widget _section(String title, List<Widget> rows) {

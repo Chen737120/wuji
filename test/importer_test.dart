@@ -124,6 +124,47 @@ void main() {
     expect(await repo.mediaOf('y1'), hasLength(1));
   });
 
+  test('ROUND-TRIP: export zip layout -> import restores media (C1)', () async {
+    final srcDir = Directory('${tmp.path}/zipx/2026-09-30_爵士')
+      ..createSync(recursive: true);
+    File('${srcDir.path}/abc.mp4').writeAsBytesSync([5, 6, 7]);
+    final sourceFs = LocalArchiveFs('${tmp.path}/zipx');
+    const entries = [
+      ManifestEntry(
+          id: 'z1', date: '2026-09-30', styleName: '爵士', teacherName: '小鹿',
+          sessionCount: 1, minutesEach: 90, note: 'round-trip',
+          media: [ManifestMedia(fileName: 'media/2026-09/abc.mp4', type: 'video', sizeBytes: 3)]),
+    ];
+    final plan = planImport(entries, await repo.allRecords());
+    final report = await executeImport(plan,
+        sourceFs: sourceFs, archive: store, repo: repo, taxonomy: taxonomy);
+    expect(report.created, 1);
+    final media = await repo.mediaOf('z1');
+    expect(media, hasLength(1));
+    expect(await store.fs.exists(media.first.fileName), isTrue);
+    expect(media.first.sizeBytes, 3);
+  });
+
+  test('重复导入同一备份不翻倍附件 (I1)', () async {
+    final srcDir = Directory('${tmp.path}/dup/media/2026-09')
+      ..createSync(recursive: true);
+    File('${srcDir.path}/a.mp4').writeAsBytesSync([1, 1, 1]);
+    final sourceFs = LocalArchiveFs('${tmp.path}/dup');
+    const entries = [
+      ManifestEntry(
+          id: 'd1', date: '2026-09-24', styleName: '韩舞',
+          sessionCount: 1, minutesEach: 60,
+          media: [ManifestMedia(fileName: 'media/2026-09/a.mp4', type: 'video', sizeBytes: 3)]),
+    ];
+    await executeImport(planImport(entries, await repo.allRecords()),
+        sourceFs: sourceFs, archive: store, repo: repo, taxonomy: taxonomy);
+    expect(await repo.mediaOf('d1'), hasLength(1));
+    final plan2 = planImport(entries, await repo.allRecords());
+    final report2 = await executeImport(plan2,
+        sourceFs: sourceFs, archive: store, repo: repo, taxonomy: taxonomy);
+    expect(report2.mediaCopied, 0);
+    expect(await repo.mediaOf('d1'), hasLength(1));
+  });
   test('planImport describe text', () {
     final entries = [
       ManifestEntry(id: 'a', date: '2026-09-30', styleName: '爵士',

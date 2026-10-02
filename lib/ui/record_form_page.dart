@@ -3,7 +3,7 @@ import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
 import 'package:provider/provider.dart';
 import 'package:uuid/uuid.dart';
-import '../data/app_repository.dart' show ClassDraft, ClassSaver, MediaInput;
+import '../data/app_repository.dart' show ClassDraft, ClassSaver;
 import '../data/db.dart' show ClassRecord, TaxonomyItem, ClassRecordRowX;
 import '../data/taxonomy_repo.dart';
 import '../models/models.dart';
@@ -85,9 +85,19 @@ class _RecordFormPageState extends State<RecordFormPage> {
   }
 
   Future<void> _pickMedia() async {
-    final picked = await _importer.pick(context);
-    if (picked.isEmpty) return;
-    setState(() => _picked.addAll(picked));
+    final result = await _importer.pick(context);
+    if (result.picked.isEmpty) {
+      if (result.failedNames.isNotEmpty && mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+            content: Text('${result.failedNames.length} 个文件读取失败：${result.failedNames.join('、')}')));
+      }
+      return;
+    }
+    setState(() => _picked.addAll(result.picked));
+    if (result.failedNames.isNotEmpty && mounted) {
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+          content: Text('${result.failedNames.length} 个文件读取失败，已跳过')));
+    }
   }
 
   Future<void> _pickDate() async {
@@ -104,6 +114,27 @@ class _RecordFormPageState extends State<RecordFormPage> {
 
   Future<void> _save() async {
     if (_saving) return;
+    // 空间预检（规格 §8）：SAF 不可查询时恒 false 自动跳过
+    final willWarn = await _repo.needsSpaceWarningFor(
+        _picked.map((p) => p.toInput()).toList());
+    if (willWarn && mounted) {
+      final goOn = await showDialog<bool>(
+        context: context,
+        builder: (ctx) => AlertDialog(
+          backgroundColor: Colors.white,
+          title: const Text('手机空间可能不够', style: TextStyle(fontSize: 15)),
+          content: const Text('剩余空间小于所选视频/图片的总大小，保存可能失败。仍要保存吗？',
+              style: TextStyle(fontSize: 13)),
+          actions: [
+            TextButton(onPressed: () => Navigator.pop(ctx, false), child: const Text('取消')),
+            TextButton(
+                onPressed: () => Navigator.pop(ctx, true),
+                child: Text('仍要保存', style: TextStyle(color: Theme.of(context).colorScheme.primary))),
+          ],
+        ),
+      );
+      if (goOn != true) return;
+    }
     setState(() => _saving = true);
     try {
       final id = widget.existing?.id ?? _newUuid();
@@ -121,16 +152,7 @@ class _RecordFormPageState extends State<RecordFormPage> {
       );
       await _repo.saveDraft(ClassDraft(
         record: record,
-        newMedia: [
-          for (final p in _picked)
-            MediaInput(
-              sourcePath: p.path,
-              ext: p.ext,
-              isVideo: p.isVideo,
-              durationSec: p.durationSec,
-              sizeBytes: p.sizeBytes,
-            ),
-        ],
+        newMedia: [for (final p in _picked) p.toInput()],
         removeMediaIds: _removedIds,
       ));
       if (mounted) Navigator.pop(context, id);

@@ -39,14 +39,16 @@ void main() {
     expect(await store.readManifest(), contains('舞记'));
   });
 
-  test('orphan sweep removes unreferenced media but keeps referenced', () async {
+  test('orphan sweep keeps formal-named files (user data), clears staging only', () async {
     final keep = 'media/2026-10/keep.mp4';
-    final orphan = 'media/2026-10/orphan.mp4';
+    final userRenamed = 'media/2026-10/orphan.mp4';
     await store.fs.write(keep, Stream.value([1]));
-    await store.fs.write(orphan, Stream.value([1]));
+    await store.fs.write(userRenamed, Stream.value([1]));
+    await store.fs.write('media/.staging/x.part', Stream.value([2]));
     await store.sweepOrphans(referencedRels: {keep});
     expect(await store.fs.exists(keep), isTrue);
-    expect(await store.fs.exists(orphan), isFalse);
+    expect(await store.fs.exists(userRenamed), isTrue);
+    expect(await store.fs.exists('media/.staging/x.part'), isFalse);
   });
 
   test('orphan sweep clears staging entirely', () async {

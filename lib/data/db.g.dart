@@ -852,6 +852,17 @@ class $MediaAssetsTable extends MediaAssets
     requiredDuringInsert: false,
     defaultValue: const Constant(0),
   );
+  static const VerificationMeta _sourceNameMeta = const VerificationMeta(
+    'sourceName',
+  );
+  @override
+  late final GeneratedColumn<String> sourceName = GeneratedColumn<String>(
+    'source_name',
+    aliasedName,
+    true,
+    type: DriftSqlType.string,
+    requiredDuringInsert: false,
+  );
   static const VerificationMeta _createdAtMeta = const VerificationMeta(
     'createdAt',
   );
@@ -872,6 +883,7 @@ class $MediaAssetsTable extends MediaAssets
     thumbName,
     durationSec,
     sizeBytes,
+    sourceName,
     createdAt,
   ];
   @override
@@ -936,6 +948,12 @@ class $MediaAssetsTable extends MediaAssets
         sizeBytes.isAcceptableOrUnknown(data['size_bytes']!, _sizeBytesMeta),
       );
     }
+    if (data.containsKey('source_name')) {
+      context.handle(
+        _sourceNameMeta,
+        sourceName.isAcceptableOrUnknown(data['source_name']!, _sourceNameMeta),
+      );
+    }
     if (data.containsKey('created_at')) {
       context.handle(
         _createdAtMeta,
@@ -981,6 +999,10 @@ class $MediaAssetsTable extends MediaAssets
         DriftSqlType.int,
         data['${effectivePrefix}size_bytes'],
       )!,
+      sourceName: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}source_name'],
+      ),
       createdAt: attachedDatabase.typeMapping.read(
         DriftSqlType.dateTime,
         data['${effectivePrefix}created_at'],
@@ -1002,6 +1024,9 @@ class MediaAsset extends DataClass implements Insertable<MediaAsset> {
   final String? thumbName;
   final int? durationSec;
   final int sizeBytes;
+
+  /// 导入时留存的源文件基名（幂等补回的依据；本机保存为 null）
+  final String? sourceName;
   final DateTime createdAt;
   const MediaAsset({
     required this.id,
@@ -1011,6 +1036,7 @@ class MediaAsset extends DataClass implements Insertable<MediaAsset> {
     this.thumbName,
     this.durationSec,
     required this.sizeBytes,
+    this.sourceName,
     required this.createdAt,
   });
   @override
@@ -1027,6 +1053,9 @@ class MediaAsset extends DataClass implements Insertable<MediaAsset> {
       map['duration_sec'] = Variable<int>(durationSec);
     }
     map['size_bytes'] = Variable<int>(sizeBytes);
+    if (!nullToAbsent || sourceName != null) {
+      map['source_name'] = Variable<String>(sourceName);
+    }
     map['created_at'] = Variable<DateTime>(createdAt);
     return map;
   }
@@ -1044,6 +1073,9 @@ class MediaAsset extends DataClass implements Insertable<MediaAsset> {
           ? const Value.absent()
           : Value(durationSec),
       sizeBytes: Value(sizeBytes),
+      sourceName: sourceName == null && nullToAbsent
+          ? const Value.absent()
+          : Value(sourceName),
       createdAt: Value(createdAt),
     );
   }
@@ -1061,6 +1093,7 @@ class MediaAsset extends DataClass implements Insertable<MediaAsset> {
       thumbName: serializer.fromJson<String?>(json['thumbName']),
       durationSec: serializer.fromJson<int?>(json['durationSec']),
       sizeBytes: serializer.fromJson<int>(json['sizeBytes']),
+      sourceName: serializer.fromJson<String?>(json['sourceName']),
       createdAt: serializer.fromJson<DateTime>(json['createdAt']),
     );
   }
@@ -1075,6 +1108,7 @@ class MediaAsset extends DataClass implements Insertable<MediaAsset> {
       'thumbName': serializer.toJson<String?>(thumbName),
       'durationSec': serializer.toJson<int?>(durationSec),
       'sizeBytes': serializer.toJson<int>(sizeBytes),
+      'sourceName': serializer.toJson<String?>(sourceName),
       'createdAt': serializer.toJson<DateTime>(createdAt),
     };
   }
@@ -1087,6 +1121,7 @@ class MediaAsset extends DataClass implements Insertable<MediaAsset> {
     Value<String?> thumbName = const Value.absent(),
     Value<int?> durationSec = const Value.absent(),
     int? sizeBytes,
+    Value<String?> sourceName = const Value.absent(),
     DateTime? createdAt,
   }) => MediaAsset(
     id: id ?? this.id,
@@ -1096,6 +1131,7 @@ class MediaAsset extends DataClass implements Insertable<MediaAsset> {
     thumbName: thumbName.present ? thumbName.value : this.thumbName,
     durationSec: durationSec.present ? durationSec.value : this.durationSec,
     sizeBytes: sizeBytes ?? this.sizeBytes,
+    sourceName: sourceName.present ? sourceName.value : this.sourceName,
     createdAt: createdAt ?? this.createdAt,
   );
   MediaAsset copyWithCompanion(MediaAssetsCompanion data) {
@@ -1109,6 +1145,9 @@ class MediaAsset extends DataClass implements Insertable<MediaAsset> {
           ? data.durationSec.value
           : this.durationSec,
       sizeBytes: data.sizeBytes.present ? data.sizeBytes.value : this.sizeBytes,
+      sourceName: data.sourceName.present
+          ? data.sourceName.value
+          : this.sourceName,
       createdAt: data.createdAt.present ? data.createdAt.value : this.createdAt,
     );
   }
@@ -1123,6 +1162,7 @@ class MediaAsset extends DataClass implements Insertable<MediaAsset> {
           ..write('thumbName: $thumbName, ')
           ..write('durationSec: $durationSec, ')
           ..write('sizeBytes: $sizeBytes, ')
+          ..write('sourceName: $sourceName, ')
           ..write('createdAt: $createdAt')
           ..write(')'))
         .toString();
@@ -1137,6 +1177,7 @@ class MediaAsset extends DataClass implements Insertable<MediaAsset> {
     thumbName,
     durationSec,
     sizeBytes,
+    sourceName,
     createdAt,
   );
   @override
@@ -1150,6 +1191,7 @@ class MediaAsset extends DataClass implements Insertable<MediaAsset> {
           other.thumbName == this.thumbName &&
           other.durationSec == this.durationSec &&
           other.sizeBytes == this.sizeBytes &&
+          other.sourceName == this.sourceName &&
           other.createdAt == this.createdAt);
 }
 
@@ -1161,6 +1203,7 @@ class MediaAssetsCompanion extends UpdateCompanion<MediaAsset> {
   final Value<String?> thumbName;
   final Value<int?> durationSec;
   final Value<int> sizeBytes;
+  final Value<String?> sourceName;
   final Value<DateTime> createdAt;
   final Value<int> rowid;
   const MediaAssetsCompanion({
@@ -1171,6 +1214,7 @@ class MediaAssetsCompanion extends UpdateCompanion<MediaAsset> {
     this.thumbName = const Value.absent(),
     this.durationSec = const Value.absent(),
     this.sizeBytes = const Value.absent(),
+    this.sourceName = const Value.absent(),
     this.createdAt = const Value.absent(),
     this.rowid = const Value.absent(),
   });
@@ -1182,6 +1226,7 @@ class MediaAssetsCompanion extends UpdateCompanion<MediaAsset> {
     this.thumbName = const Value.absent(),
     this.durationSec = const Value.absent(),
     this.sizeBytes = const Value.absent(),
+    this.sourceName = const Value.absent(),
     required DateTime createdAt,
     this.rowid = const Value.absent(),
   }) : id = Value(id),
@@ -1197,6 +1242,7 @@ class MediaAssetsCompanion extends UpdateCompanion<MediaAsset> {
     Expression<String>? thumbName,
     Expression<int>? durationSec,
     Expression<int>? sizeBytes,
+    Expression<String>? sourceName,
     Expression<DateTime>? createdAt,
     Expression<int>? rowid,
   }) {
@@ -1208,6 +1254,7 @@ class MediaAssetsCompanion extends UpdateCompanion<MediaAsset> {
       if (thumbName != null) 'thumb_name': thumbName,
       if (durationSec != null) 'duration_sec': durationSec,
       if (sizeBytes != null) 'size_bytes': sizeBytes,
+      if (sourceName != null) 'source_name': sourceName,
       if (createdAt != null) 'created_at': createdAt,
       if (rowid != null) 'rowid': rowid,
     });
@@ -1221,6 +1268,7 @@ class MediaAssetsCompanion extends UpdateCompanion<MediaAsset> {
     Value<String?>? thumbName,
     Value<int?>? durationSec,
     Value<int>? sizeBytes,
+    Value<String?>? sourceName,
     Value<DateTime>? createdAt,
     Value<int>? rowid,
   }) {
@@ -1232,6 +1280,7 @@ class MediaAssetsCompanion extends UpdateCompanion<MediaAsset> {
       thumbName: thumbName ?? this.thumbName,
       durationSec: durationSec ?? this.durationSec,
       sizeBytes: sizeBytes ?? this.sizeBytes,
+      sourceName: sourceName ?? this.sourceName,
       createdAt: createdAt ?? this.createdAt,
       rowid: rowid ?? this.rowid,
     );
@@ -1261,6 +1310,9 @@ class MediaAssetsCompanion extends UpdateCompanion<MediaAsset> {
     if (sizeBytes.present) {
       map['size_bytes'] = Variable<int>(sizeBytes.value);
     }
+    if (sourceName.present) {
+      map['source_name'] = Variable<String>(sourceName.value);
+    }
     if (createdAt.present) {
       map['created_at'] = Variable<DateTime>(createdAt.value);
     }
@@ -1280,6 +1332,7 @@ class MediaAssetsCompanion extends UpdateCompanion<MediaAsset> {
           ..write('thumbName: $thumbName, ')
           ..write('durationSec: $durationSec, ')
           ..write('sizeBytes: $sizeBytes, ')
+          ..write('sourceName: $sourceName, ')
           ..write('createdAt: $createdAt, ')
           ..write('rowid: $rowid')
           ..write(')'))
@@ -2247,6 +2300,7 @@ typedef $$MediaAssetsTableCreateCompanionBuilder =
       Value<String?> thumbName,
       Value<int?> durationSec,
       Value<int> sizeBytes,
+      Value<String?> sourceName,
       required DateTime createdAt,
       Value<int> rowid,
     });
@@ -2259,6 +2313,7 @@ typedef $$MediaAssetsTableUpdateCompanionBuilder =
       Value<String?> thumbName,
       Value<int?> durationSec,
       Value<int> sizeBytes,
+      Value<String?> sourceName,
       Value<DateTime> createdAt,
       Value<int> rowid,
     });
@@ -2321,6 +2376,11 @@ class $$MediaAssetsTableFilterComposer
 
   ColumnFilters<int> get sizeBytes => $composableBuilder(
     column: $table.sizeBytes,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get sourceName => $composableBuilder(
+    column: $table.sourceName,
     builder: (column) => ColumnFilters(column),
   );
 
@@ -2392,6 +2452,11 @@ class $$MediaAssetsTableOrderingComposer
     builder: (column) => ColumnOrderings(column),
   );
 
+  ColumnOrderings<String> get sourceName => $composableBuilder(
+    column: $table.sourceName,
+    builder: (column) => ColumnOrderings(column),
+  );
+
   ColumnOrderings<DateTime> get createdAt => $composableBuilder(
     column: $table.createdAt,
     builder: (column) => ColumnOrderings(column),
@@ -2449,6 +2514,11 @@ class $$MediaAssetsTableAnnotationComposer
 
   GeneratedColumn<int> get sizeBytes =>
       $composableBuilder(column: $table.sizeBytes, builder: (column) => column);
+
+  GeneratedColumn<String> get sourceName => $composableBuilder(
+    column: $table.sourceName,
+    builder: (column) => column,
+  );
 
   GeneratedColumn<DateTime> get createdAt =>
       $composableBuilder(column: $table.createdAt, builder: (column) => column);
@@ -2512,6 +2582,7 @@ class $$MediaAssetsTableTableManager
                 Value<String?> thumbName = const Value.absent(),
                 Value<int?> durationSec = const Value.absent(),
                 Value<int> sizeBytes = const Value.absent(),
+                Value<String?> sourceName = const Value.absent(),
                 Value<DateTime> createdAt = const Value.absent(),
                 Value<int> rowid = const Value.absent(),
               }) => MediaAssetsCompanion(
@@ -2522,6 +2593,7 @@ class $$MediaAssetsTableTableManager
                 thumbName: thumbName,
                 durationSec: durationSec,
                 sizeBytes: sizeBytes,
+                sourceName: sourceName,
                 createdAt: createdAt,
                 rowid: rowid,
               ),
@@ -2534,6 +2606,7 @@ class $$MediaAssetsTableTableManager
                 Value<String?> thumbName = const Value.absent(),
                 Value<int?> durationSec = const Value.absent(),
                 Value<int> sizeBytes = const Value.absent(),
+                Value<String?> sourceName = const Value.absent(),
                 required DateTime createdAt,
                 Value<int> rowid = const Value.absent(),
               }) => MediaAssetsCompanion.insert(
@@ -2544,6 +2617,7 @@ class $$MediaAssetsTableTableManager
                 thumbName: thumbName,
                 durationSec: durationSec,
                 sizeBytes: sizeBytes,
+                sourceName: sourceName,
                 createdAt: createdAt,
                 rowid: rowid,
               ),

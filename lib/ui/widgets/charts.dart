@@ -65,14 +65,18 @@ class TrendBars extends StatelessWidget {
           ),
         ),
         const SizedBox(height: 4),
+        // 终审 C4：按月只有 6 个点，skip(length-7) 会抛 RangeError；≤7 全显
         Row(
           mainAxisAlignment: MainAxisAlignment.spaceBetween,
           children: [
-            for (final p in points.skip(points.length - 7))
+            for (final p in (points.length > 7
+                ? points.sublist(points.length - 7)
+                : points))
               Expanded(
                 child: Center(
                     child: Text(p.label,
-                        style: TextStyle(fontSize: 9, color: AppColors.faint))),
+                        style:
+                            TextStyle(fontSize: 9, color: AppColors.faint))),
               ),
           ],
         ),

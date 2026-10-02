@@ -5,6 +5,7 @@ import '../data/db.dart' show ClassRecord, MediaAsset, ClassRecordRowX;
 import '../services/archive_fs.dart' show MediaLocator, MediaPathResolver;
 import '../services/archive_store.dart' show ArchiveStore;
 import 'dart:io';
+import 'package:archive/archive_io.dart';
 import 'package:path_provider/path_provider.dart';
 import 'package:share_plus/share_plus.dart';
 import '../services/export_naming.dart';
@@ -41,8 +42,10 @@ class _DetailPageState extends State<DetailPage> {
   }
 
   Future<void> _load() async {
-    final record =
-        await _saver.allRecords().then((rs) => rs.firstWhere((r) => r.id == widget.classId));
+    final matches = await _saver
+        .allRecords()
+        .then((rs) => rs.where((r) => r.id == widget.classId).toList());
+    final record = matches.isEmpty ? null : matches.single;
     final media = await _saver.mediaOf(widget.classId);
     final missing = <String>{};
     for (final m in media) {
@@ -92,7 +95,15 @@ class _DetailPageState extends State<DetailPage> {
       ),
     );
     if (ok != true) return;
-    await _saver.deleteRecord(widget.classId);
+    try {
+      await _saver.deleteRecord(widget.classId);
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(content: Text('删除失败：$e')));
+      }
+      return;
+    }
     if (mounted) Navigator.pop(context);
   }
 
@@ -233,8 +244,13 @@ class _DetailPageState extends State<DetailPage> {
           _record!, _media.where((m) => !_missing.contains(m.fileName)).toList(),
           targetDir: dir.path);
       final folderName = folderBaseName(_record!);
-      await SharePlus.instance.share(ShareParams(
-          files: [XFile('${dir.path}/$folderName')], text: folderName));
+      // 终审 I6：Android 分享不支持目录 —— 打成 zip 再分享
+      final zipPath = '${tmp.path}/$folderName.zip';
+      final enc = ZipFileEncoder()..create(zipPath);
+      await enc.addDirectory(Directory('${dir.path}/$folderName'));
+      await enc.close();
+      await SharePlus.instance
+          .share(ShareParams(files: [XFile(zipPath)], text: folderName));
     } catch (e) {
       messenger.showSnackBar(SnackBar(content: Text('导出失败：$e')));
     }

@@ -19,6 +19,9 @@ class FakeSaver implements ClassSaver {
   Future<void> deleteRecord(String id) async {}
 
   @override
+  Future<bool> needsSpaceWarningFor(inputs) async => false;
+
+  @override
   Future<List<ClassRecord>> allRecords() async => records;
 
   @override

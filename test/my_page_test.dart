@@ -40,7 +40,7 @@ void main() {
     await tester.pumpAndSettle();
 
     expect(find.text('我的'), findsOneWidget);
-    expect(find.text('2 节课 · 3 个附件 · 约 4 KB'), findsOneWidget);
+    expect(find.text('2 节课 · 3 个附件 · 约 4 KB（视频占大头）'), findsOneWidget);
     expect(find.text('导出全部记录'), findsOneWidget);
     expect(find.text('按时间段导出'), findsOneWidget);
     expect(find.text('导入备份'), findsOneWidget);

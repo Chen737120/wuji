@@ -28,6 +28,7 @@ class _ExportPreviewPageState extends State<ExportPreviewPage> {
   DateTime? _customEnd;
   bool _loaded = false;
   bool _exporting = false;
+  bool _cancelRequested = false;
   String _progress = '';
 
   ClassSaver get _saver => context.read<ClassSaver>();
@@ -128,10 +129,11 @@ class _ExportPreviewPageState extends State<ExportPreviewPage> {
       final tmp = await getTemporaryDirectory();
       final localZip =
           '${tmp.path}/舞记备份-${DateTime.now().toIso8601String().substring(0, 10)}.zip';
+      _cancelRequested = false;
       await exporter.exportZip(records, media, targetPath: localZip,
           onProgress: (done, total) {
         if (mounted) setState(() => _progress = '打包中 $done/$total');
-      });
+      }, cancelled: () => _cancelRequested);
       // 优先：让用户选目标文件夹（SAF），复制进去；取消则走系统分享
       String? doneMsg;
       try {
@@ -160,7 +162,11 @@ class _ExportPreviewPageState extends State<ExportPreviewPage> {
         Navigator.pop(context);
       }
     } on ExportCancelled {
-      if (mounted) setState(() => _exporting = false);
+      if (mounted) {
+        ScaffoldMessenger.of(context)
+            .showSnackBar(const SnackBar(content: Text('已取消导出')));
+        setState(() => _exporting = false);
+      }
     } catch (e) {
       if (mounted) {
         ScaffoldMessenger.of(context)
@@ -308,6 +314,15 @@ class _ExportPreviewPageState extends State<ExportPreviewPage> {
                             style: TextStyle(
                                 fontSize: 11, color: AppColors.secondary)),
                         const SizedBox(width: 12),
+                        if (_exporting)
+                          GestureDetector(
+                            onTap: () => _cancelRequested = true,
+                            child: Padding(
+                              padding: const EdgeInsets.only(right: 10),
+                              child: Text('取消', style: TextStyle(
+                                  fontSize: 12, color: AppColors.secondary)),
+                            ),
+                          ),
                         Expanded(
                           child: FilledButton(
                             style: FilledButton.styleFrom(
@@ -318,7 +333,7 @@ class _ExportPreviewPageState extends State<ExportPreviewPage> {
                             ),
                             onPressed:
                                 (_exporting || records.isEmpty) ? null : _export,
-                            child: Text(_exporting ? _progress : '导出',
+                            child: Text(_exporting ? '$_progress　点此取消' : '导出',
                                 style: const TextStyle(
                                     fontSize: 13, fontWeight: FontWeight.w600)),
                           ),
