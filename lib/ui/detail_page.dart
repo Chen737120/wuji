@@ -3,6 +3,12 @@ import 'package:provider/provider.dart';
 import '../data/app_repository.dart' show ClassSaver;
 import '../data/db.dart' show ClassRecord, MediaAsset, ClassRecordRowX;
 import '../services/archive_fs.dart' show MediaLocator, MediaPathResolver;
+import '../services/archive_store.dart' show ArchiveStore;
+import 'dart:io';
+import 'package:path_provider/path_provider.dart';
+import 'package:share_plus/share_plus.dart';
+import '../services/export_naming.dart';
+import '../services/exporter.dart';
 import '../services/photo_bridge.dart';
 import '../theme.dart';
 import 'player_page.dart';
@@ -217,8 +223,21 @@ class _DetailPageState extends State<DetailPage> {
   }
 
   Future<void> _exportThis() async {
-    ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('单课导出将在下一步接入')));
+    final messenger = ScaffoldMessenger.of(context);
+    try {
+      final exporter = Exporter(context.read<ArchiveStore>());
+      final tmp = await getTemporaryDirectory();
+      final dir = Directory('${tmp.path}/wuji-export');
+      if (dir.existsSync()) dir.deleteSync(recursive: true);
+      await exporter.exportSingleFolder(
+          _record!, _media.where((m) => !_missing.contains(m.fileName)).toList(),
+          targetDir: dir.path);
+      final folderName = folderBaseName(_record!);
+      await SharePlus.instance.share(ShareParams(
+          files: [XFile('${dir.path}/$folderName')], text: folderName));
+    } catch (e) {
+      messenger.showSnackBar(SnackBar(content: Text('导出失败：$e')));
+    }
   }
 
   Widget _mediaArea(Color accent) {

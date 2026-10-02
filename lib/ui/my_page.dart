@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import '../data/app_repository.dart' show ClassSaver;
 import '../theme.dart';
+import 'export_preview_page.dart';
 
 /// 字节人性化：B / KB / MB / GB（带「约」前缀，非最小单位）。
 String humanBytes(num bytes) {
@@ -44,10 +45,12 @@ class MyPage extends StatelessWidget {
                 _section('导出', [
                   _navRow(context, '导出全部记录',
                       sub: '一键打包 zip：视频按「日期_舞种_老师」建文件夹\n＋ 每课感受 txt ＋ Excel 总表',
-                      onTap: () => _todo(context, '导出')),
+                      onTap: () => Navigator.push(context,
+                          MaterialPageRoute(builder: (_) => const ExportPreviewPage()))),
                   _navRow(context, '按时间段导出',
                       sub: '选起止日期，先预览再导出，格式相同',
-                      onTap: () => _todo(context, '导出')),
+                      onTap: () => Navigator.push(context,
+                          MaterialPageRoute(builder: (_) => const ExportPreviewPage()))),
                 ]),
                 _section('备份', [
                   _navRow(context, '导入备份',
