@@ -1,0 +1,24 @@
+import 'package:wuji/data/app_repository.dart';
+import 'package:wuji/data/db.dart';
+
+/// 无 IO 的 ClassSaver 假实现（widget 测试用，见台账 T8 裁定）。
+class FakeSaver implements ClassSaver {
+  FakeSaver({this.records = const [], this.media = const []});
+
+  @override
+  AppDatabase get db => throw UnimplementedError('fake saver has no db');
+
+  List<ClassRecord> records;
+  List<MediaAsset> media;
+
+  @override
+  Future<void> saveDraft(ClassDraft d) =>
+      throw UnimplementedError('not needed in these tests');
+
+  @override
+  Future<List<ClassRecord>> allRecords() async => records;
+
+  @override
+  Future<List<MediaAsset>> mediaOf(String classId) async =>
+      media.where((m) => m.classId == classId).toList();
+}
