@@ -3,6 +3,7 @@ import 'package:provider/provider.dart';
 import '../data/app_repository.dart' show ClassSaver;
 import '../theme.dart';
 import 'export_preview_page.dart';
+import 'import_page.dart';
 
 /// 字节人性化：B / KB / MB / GB（带「约」前缀，非最小单位）。
 String humanBytes(num bytes) {
@@ -55,7 +56,8 @@ class MyPage extends StatelessWidget {
                 _section('备份', [
                   _navRow(context, '导入备份',
                       sub: '选择导出包或存档文件夹，恢复/补回课程',
-                      onTap: () => _todo(context, '导入')),
+                      onTap: () => Navigator.push(context,
+                          MaterialPageRoute(builder: (_) => const ImportPage()))),
                   _navRow(context, '存档位置',
                       sub: '查看或更换存档文件夹（卸载不清空）',
                       onTap: () => _todo(context, '存档位置')),
