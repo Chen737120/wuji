@@ -18,6 +18,12 @@ publish_to: 'none' # Remove this line if you wish to publish to pub.dev
 # of the product and file versions while build-number is used as the build suffix.
 version: 1.0.0+1
 
+# sqlite3 构建钩子的下载镜像（GitHub 直连超时；ghproxy 代理 release 资产）
+hooks:
+  user_defines:
+    sqlite3:
+      url_pattern: https://ghproxy.net/https://github.com/simolus3/sqlite3.dart/releases/download/$RELEASE_TAG/$FILENAME
+
 environment:
   sdk: ^3.13.5
 

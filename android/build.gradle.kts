@@ -1,5 +1,8 @@
 allprojects {
     repositories {
+        // 国内镜像优先（google/central 直连超时）
+        maven("https://maven.aliyun.com/repository/google")
+        maven("https://maven.aliyun.com/repository/central")
         google()
         mavenCentral()
     }
