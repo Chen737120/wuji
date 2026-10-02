@@ -35,13 +35,23 @@ class ClassDraft {
   final List<String> removeMediaIds; // 编辑时被 ✕ 的旧附件
 }
 
+/// 表单页依赖的窄接口：widget 测试可注入无 IO 的假实现。
+abstract class ClassSaver {
+  AppDatabase get db;
+  Future<void> saveDraft(ClassDraft d);
+  Future<List<MediaAsset>> mediaOf(String classId);
+}
+
 /// 应用仓库：保存（全或无）、删除（级联文件）、启动对账、统计取数。
-class AppRepository {
+class AppRepository implements ClassSaver {
   AppRepository(this._db, this._archive, this._taxonomy, {this.thumbMaker});
 
   final AppDatabase _db;
   final ArchiveStore _archive;
   final TaxonomyRepo _taxonomy;
+
+  /// 名单弹层需要同库仓库（表单页用）。
+  AppDatabase get db => _db;
 
   /// 视频缩略图生成器（设备端注入 video_thumbnail；宿主测试 null）。
   /// 返回缩略图在存档内的相对路径（如 thumbs/<uuid>.jpg），失败返回 null。
@@ -129,7 +139,7 @@ class AppRepository {
 
       await _db.transaction(() async {
         await _db.into(_db.classRecords).insertOnConflictUpdate(
-              ClassRecordsCompanion.insert(
+                ClassRecordsCompanion.insert(
                 id: d.record.id,
                 date: d.record.date,
                 styleId: Value(sid),
