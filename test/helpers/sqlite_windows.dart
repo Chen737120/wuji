@@ -1,10 +1,4 @@
-import 'dart:ffi';
-import 'dart:io';
-import 'package:sqlite3/sqlite3.dart';
-
-/// Loads the sqlite3.dll vendored under test/ so host tests can run
-/// NativeDatabase without a system-wide sqlite installation.
-void configSqliteForWindowsTest() {
-  final dll = File('test/sqlite3.dll').absolute.path;
-  open.overrideFor(OperatingSystem.windows, () => DynamicLibrary.open(dll));
-}
+/// sqlite3 3.x loads its native library through Dart build hooks (native
+/// assets), so no manual dll override is needed on the host. Kept as a no-op
+/// so tests keep calling it at setUpAll.
+void configSqliteForWindowsTest() {}
