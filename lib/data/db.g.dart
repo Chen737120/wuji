@@ -1288,7 +1288,7 @@ class MediaAssetsCompanion extends UpdateCompanion<MediaAsset> {
 }
 
 class $TaxonomyTable extends Taxonomy
-    with TableInfo<$TaxonomyTable, TaxonomyData> {
+    with TableInfo<$TaxonomyTable, TaxonomyItem> {
   @override
   final GeneratedDatabase attachedDatabase;
   final String? _alias;
@@ -1390,7 +1390,7 @@ class $TaxonomyTable extends Taxonomy
   static const String $name = 'taxonomy';
   @override
   VerificationContext validateIntegrity(
-    Insertable<TaxonomyData> instance, {
+    Insertable<TaxonomyItem> instance, {
     bool isInserting = false,
   }) {
     final context = VerificationContext();
@@ -1453,9 +1453,9 @@ class $TaxonomyTable extends Taxonomy
     {kind, name},
   ];
   @override
-  TaxonomyData map(Map<String, dynamic> data, {String? tablePrefix}) {
+  TaxonomyItem map(Map<String, dynamic> data, {String? tablePrefix}) {
     final effectivePrefix = tablePrefix != null ? '$tablePrefix.' : '';
-    return TaxonomyData(
+    return TaxonomyItem(
       id: attachedDatabase.typeMapping.read(
         DriftSqlType.string,
         data['${effectivePrefix}id'],
@@ -1493,7 +1493,7 @@ class $TaxonomyTable extends Taxonomy
   }
 }
 
-class TaxonomyData extends DataClass implements Insertable<TaxonomyData> {
+class TaxonomyItem extends DataClass implements Insertable<TaxonomyItem> {
   final String id;
   final String kind;
   final String name;
@@ -1501,7 +1501,7 @@ class TaxonomyData extends DataClass implements Insertable<TaxonomyData> {
   final int sortOrder;
   final DateTime? lastUsedAt;
   final bool isActive;
-  const TaxonomyData({
+  const TaxonomyItem({
     required this.id,
     required this.kind,
     required this.name,
@@ -1539,12 +1539,12 @@ class TaxonomyData extends DataClass implements Insertable<TaxonomyData> {
     );
   }
 
-  factory TaxonomyData.fromJson(
+  factory TaxonomyItem.fromJson(
     Map<String, dynamic> json, {
     ValueSerializer? serializer,
   }) {
     serializer ??= driftRuntimeOptions.defaultSerializer;
-    return TaxonomyData(
+    return TaxonomyItem(
       id: serializer.fromJson<String>(json['id']),
       kind: serializer.fromJson<String>(json['kind']),
       name: serializer.fromJson<String>(json['name']),
@@ -1568,7 +1568,7 @@ class TaxonomyData extends DataClass implements Insertable<TaxonomyData> {
     };
   }
 
-  TaxonomyData copyWith({
+  TaxonomyItem copyWith({
     String? id,
     String? kind,
     String? name,
@@ -1576,7 +1576,7 @@ class TaxonomyData extends DataClass implements Insertable<TaxonomyData> {
     int? sortOrder,
     Value<DateTime?> lastUsedAt = const Value.absent(),
     bool? isActive,
-  }) => TaxonomyData(
+  }) => TaxonomyItem(
     id: id ?? this.id,
     kind: kind ?? this.kind,
     name: name ?? this.name,
@@ -1585,8 +1585,8 @@ class TaxonomyData extends DataClass implements Insertable<TaxonomyData> {
     lastUsedAt: lastUsedAt.present ? lastUsedAt.value : this.lastUsedAt,
     isActive: isActive ?? this.isActive,
   );
-  TaxonomyData copyWithCompanion(TaxonomyCompanion data) {
-    return TaxonomyData(
+  TaxonomyItem copyWithCompanion(TaxonomyCompanion data) {
+    return TaxonomyItem(
       id: data.id.present ? data.id.value : this.id,
       kind: data.kind.present ? data.kind.value : this.kind,
       name: data.name.present ? data.name.value : this.name,
@@ -1601,7 +1601,7 @@ class TaxonomyData extends DataClass implements Insertable<TaxonomyData> {
 
   @override
   String toString() {
-    return (StringBuffer('TaxonomyData(')
+    return (StringBuffer('TaxonomyItem(')
           ..write('id: $id, ')
           ..write('kind: $kind, ')
           ..write('name: $name, ')
@@ -1619,7 +1619,7 @@ class TaxonomyData extends DataClass implements Insertable<TaxonomyData> {
   @override
   bool operator ==(Object other) =>
       identical(this, other) ||
-      (other is TaxonomyData &&
+      (other is TaxonomyItem &&
           other.id == this.id &&
           other.kind == this.kind &&
           other.name == this.name &&
@@ -1629,7 +1629,7 @@ class TaxonomyData extends DataClass implements Insertable<TaxonomyData> {
           other.isActive == this.isActive);
 }
 
-class TaxonomyCompanion extends UpdateCompanion<TaxonomyData> {
+class TaxonomyCompanion extends UpdateCompanion<TaxonomyItem> {
   final Value<String> id;
   final Value<String> kind;
   final Value<String> name;
@@ -1660,7 +1660,7 @@ class TaxonomyCompanion extends UpdateCompanion<TaxonomyData> {
   }) : id = Value(id),
        kind = Value(kind),
        name = Value(name);
-  static Insertable<TaxonomyData> custom({
+  static Insertable<TaxonomyItem> custom({
     Expression<String>? id,
     Expression<String>? kind,
     Expression<String>? name,
@@ -2761,17 +2761,17 @@ class $$TaxonomyTableTableManager
         RootTableManager<
           _$AppDatabase,
           $TaxonomyTable,
-          TaxonomyData,
+          TaxonomyItem,
           $$TaxonomyTableFilterComposer,
           $$TaxonomyTableOrderingComposer,
           $$TaxonomyTableAnnotationComposer,
           $$TaxonomyTableCreateCompanionBuilder,
           $$TaxonomyTableUpdateCompanionBuilder,
           (
-            TaxonomyData,
-            BaseReferences<_$AppDatabase, $TaxonomyTable, TaxonomyData>,
+            TaxonomyItem,
+            BaseReferences<_$AppDatabase, $TaxonomyTable, TaxonomyItem>,
           ),
-          TaxonomyData,
+          TaxonomyItem,
           PrefetchHooks Function()
         > {
   $$TaxonomyTableTableManager(_$AppDatabase db, $TaxonomyTable table)
@@ -2828,8 +2828,8 @@ class $$TaxonomyTableTableManager
           withReferenceMapper: (p0) => p0
               .map(
                 (e) => (
-                  e.readTable<$TaxonomyTable, TaxonomyData>(table),
-                  BaseReferences<_$AppDatabase, $TaxonomyTable, TaxonomyData>(
+                  e.readTable<$TaxonomyTable, TaxonomyItem>(table),
+                  BaseReferences<_$AppDatabase, $TaxonomyTable, TaxonomyItem>(
                     db,
                     table,
                     e,
@@ -2846,17 +2846,17 @@ typedef $$TaxonomyTableProcessedTableManager =
     ProcessedTableManager<
       _$AppDatabase,
       $TaxonomyTable,
-      TaxonomyData,
+      TaxonomyItem,
       $$TaxonomyTableFilterComposer,
       $$TaxonomyTableOrderingComposer,
       $$TaxonomyTableAnnotationComposer,
       $$TaxonomyTableCreateCompanionBuilder,
       $$TaxonomyTableUpdateCompanionBuilder,
       (
-        TaxonomyData,
-        BaseReferences<_$AppDatabase, $TaxonomyTable, TaxonomyData>,
+        TaxonomyItem,
+        BaseReferences<_$AppDatabase, $TaxonomyTable, TaxonomyItem>,
       ),
-      TaxonomyData,
+      TaxonomyItem,
       PrefetchHooks Function()
     >;
 

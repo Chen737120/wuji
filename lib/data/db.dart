@@ -41,6 +41,7 @@ class MediaAssets extends Table {
 }
 
 /// 名单：舞种/老师/舞室共用。停用（isActive=false）不在新增弹层出现，历史不受影响。
+@DataClassName('TaxonomyItem')
 class Taxonomy extends Table {
   TextColumn get id => text()(); // uuid v4
   TextColumn get kind => text()(); // style | teacher | studio
