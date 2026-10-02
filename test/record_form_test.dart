@@ -39,6 +39,9 @@ class FakeFormRepo implements ClassSaver {
 
   @override
   Future<List<ClassRecord>> allRecords() async => const [];
+
+  @override
+  Future<void> deleteRecord(String id) async {}
 }
 
 void main() {

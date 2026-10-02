@@ -5,7 +5,7 @@ import 'package:uuid/uuid.dart';
 import 'archive_fs.dart';
 
 /// 存档层门面：media 路径规则、staging 生命周期、manifest 读写、孤儿清扫。
-class ArchiveStore {
+class ArchiveStore implements MediaLocator {
   ArchiveStore(this.fs, {String? manifestRel})
       : manifestRel = manifestRel ?? '舞记数据.json';
 
@@ -13,6 +13,9 @@ class ArchiveStore {
   String newId() => _uuid.v4();
 
   final ArchiveFs fs;
+
+  @override
+  Future<bool> exists(String rel) => fs.exists(rel);
 
   /// 存档清单文件名（规格固定）。
   final String manifestRel;

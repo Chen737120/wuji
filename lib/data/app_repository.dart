@@ -41,6 +41,7 @@ abstract class ClassSaver {
   Future<void> saveDraft(ClassDraft d);
   Future<List<MediaAsset>> mediaOf(String classId);
   Future<List<ClassRecord>> allRecords();
+  Future<void> deleteRecord(String id);
 }
 
 /// 应用仓库：保存（全或无）、删除（级联文件）、启动对账、统计取数。

@@ -1,5 +1,16 @@
 import 'dart:io';
 
+/// 附件文件是否存在于存档（详情页"文件已丢失"态用；widget 测试可注入假实现）。
+abstract class MediaLocator {
+  Future<bool> exists(String rel);
+}
+
+/// 存档相对路径 → 可被系统分享/存相册的绝对文件路径。
+/// LocalFs 直接映射；SAF 模式由设备端先复制到临时文件再返回（T12 接线）。
+abstract class MediaPathResolver {
+  Future<String?> toAbsolutePath(String rel);
+}
+
 /// 存档文件夹的文件系统抽象。
 /// 测试/降级用 [LocalArchiveFs]（dart:io），设备端用 SafArchiveFs（SAF，T12 接线）。
 /// 所有路径均为存档文件夹内的相对路径（正斜杠），如 `media/2026-09/uuid.mp4`。
@@ -13,7 +24,7 @@ abstract class ArchiveFs {
   Future<int?> freeBytes();
 }
 
-class LocalArchiveFs implements ArchiveFs {
+class LocalArchiveFs implements ArchiveFs, MediaPathResolver {
   LocalArchiveFs(this.root);
 
   final String root; // 绝对路径
@@ -69,4 +80,8 @@ class LocalArchiveFs implements ArchiveFs {
 
   @override
   Future<int?> freeBytes() async => null; // Local 实现不提供；设备端由 SAF 查询
+
+  @override
+  Future<String?> toAbsolutePath(String rel) async =>
+      '$root/${rel.replaceAll('/', Platform.pathSeparator)}';
 }

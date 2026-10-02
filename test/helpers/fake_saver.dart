@@ -16,6 +16,9 @@ class FakeSaver implements ClassSaver {
       throw UnimplementedError('not needed in these tests');
 
   @override
+  Future<void> deleteRecord(String id) async {}
+
+  @override
   Future<List<ClassRecord>> allRecords() async => records;
 
   @override
