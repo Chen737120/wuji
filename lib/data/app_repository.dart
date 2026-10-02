@@ -4,6 +4,8 @@ import 'taxonomy_repo.dart';
 import '../models/models.dart';
 import '../services/archive_store.dart';
 import '../services/manifest.dart';
+import '../services/save_flow.dart' as space_check
+    show incomingBytesOf, needsSpaceWarning;
 
 /// 表单→存档的输入载体。
 class MediaInput {
@@ -54,6 +56,13 @@ class AppRepository implements ClassSaver {
   /// 名单弹层需要同库仓库（表单页用）。
   @override
   AppDatabase get db => _db;
+
+  /// 保存前空间预检：剩余空间不足新附件总量时返回 true（SAF 查询不可用则恒 false）。
+  Future<bool> needsSpaceWarning(List<MediaInput> inputs) async {
+    final free = await _archive.fs.freeBytes();
+    return space_check.needsSpaceWarning(
+        free, space_check.incomingBytesOf(inputs));
+  }
 
   /// 视频缩略图生成器（设备端注入 video_thumbnail；宿主测试 null）。
   /// 返回缩略图在存档内的相对路径（如 thumbs/uuid.jpg），失败返回 null。
