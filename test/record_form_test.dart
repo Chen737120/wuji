@@ -89,7 +89,7 @@ void main() {
     expect(d.record.note, '今天很棒');
     expect(d.newMedia, hasLength(2));
     expect(d.record.sessionCount, 1);
-    expect(d.record.minutesEach, 90);
+    expect(d.record.minutesEach, 60);
   });
 
   testWidgets('edit mode prefills existing values and media', (tester) async {

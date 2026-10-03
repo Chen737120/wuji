@@ -77,15 +77,19 @@ void main() {
     expect(find.text('按月'), findsOneWidget);
   });
 
-  testWidgets('empty state offers first record CTA', (tester) async {
-    tester.view.physicalSize = const Size(400, 1200);
+  testWidgets('empty state still shows zero charts with a hint',
+      (tester) async {
+    tester.view.physicalSize = const Size(400, 2400);
     tester.view.devicePixelRatio = 1.0;
     addTearDown(tester.view.reset);
     await tester.pumpWidget(host(FakeSaver()));
     await tester.pumpAndSettle();
 
-    expect(find.text('还没有课堂记录'), findsOneWidget);
-    expect(find.text('去记录第一节课'), findsOneWidget);
+    expect(find.text('还没有课堂记录，点下方 ＋ 记录第一节课'), findsOneWidget);
+    expect(find.text('跳舞趋势'), findsOneWidget);
+    expect(find.text('舞种分布'), findsOneWidget);
+    expect(find.text('老师统计'), findsOneWidget);
+    expect(find.text('舞室统计'), findsOneWidget);
   });
 
   testWidgets('last-30-days chip excludes older records', (tester) async {

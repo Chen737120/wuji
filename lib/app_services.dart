@@ -51,23 +51,53 @@ class PickResultEmpty implements PickResult {
 class PluginMediaImporter implements MediaImporter {
   const PluginMediaImporter();
 
-  static Future<bool> requestPermission() async {
-    final state = await PhotoManager.requestPermissionExtend();
-    return state.isAuth;
-  }
-
   @override
   Future<PickResult> pick(BuildContext context, {int max = 30}) async {
-    if (!await requestPermission()) return const PickResultEmpty();
+    final state = await PhotoManager.requestPermissionExtend();
+    if (!state.isAuth) {
+      // 权限被拒（历史拒绝/仅部分授权被收回）：弹窗引导，而不是静默返回空
+      if (!context.mounted) return const PickResultEmpty();
+      final open = await showDialog<bool>(
+        context: context,
+        builder: (ctx) => AlertDialog(
+          backgroundColor: Colors.white,
+          title: const Text('需要「照片和视频」权限',
+              style: TextStyle(fontSize: 16, fontWeight: FontWeight.w700)),
+          content: const Text(
+              '选择课堂视频/图片需要访问相册。\n点击「去开启」后在系统设置中允许，或重选可访问的照片范围。',
+              style: TextStyle(fontSize: 13, height: 1.7)),
+          actions: [
+            TextButton(
+                onPressed: () => Navigator.pop(ctx, false),
+                child: const Text('取消')),
+            TextButton(
+                onPressed: () => Navigator.pop(ctx, true),
+                child: const Text('去开启')),
+          ],
+        ),
+      );
+      if (open == true) await PhotoManager.openSetting();
+      return const PickResultEmpty();
+    }
     if (!context.mounted) return const PickResultEmpty();
-    final assets = await AssetPicker.pickAssets(
-      context,
-      pickerConfig: AssetPickerConfig(
-        maxAssets: max,
-        requestType: RequestType.common, // 视频＋图片
-        themeColor: const Color(0xFF3FA26F),
-      ),
-    );
+    final List<AssetEntity>? assets;
+    try {
+      assets = await AssetPicker.pickAssets(
+        context,
+        pickerConfig: AssetPickerConfig(
+          maxAssets: max,
+          requestType: RequestType.common, // 视频＋图片
+          themeColor: const Color(0xFF3FA26F),
+        ),
+      );
+    } catch (e) {
+      debugPrint('打开相册失败: $e');
+      if (context.mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(content: Text('打开相册失败，请重试')));
+      }
+      return const PickResultEmpty();
+    }
     if (assets == null) return const PickResultEmpty();
     final picked = <PickedMedia>[];
     final failed = <String>[];

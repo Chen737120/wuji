@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import '../data/app_repository.dart' show ClassSaver;
 import '../data/db.dart' show ClassRecord, MediaAsset, ClassRecordRowX;
+import '../reload_bus.dart';
 import '../services/archive_fs.dart' show MediaLocator, MediaPathResolver;
 import '../services/archive_store.dart' show ArchiveStore;
 import 'dart:io';
@@ -97,6 +98,7 @@ class _DetailPageState extends State<DetailPage> {
     if (ok != true) return;
     try {
       await _saver.deleteRecord(widget.classId);
+      ReloadBus.instance.bump(); // 统计/记录两页立即反映删除结果
     } catch (e) {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(

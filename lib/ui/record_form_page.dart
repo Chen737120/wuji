@@ -7,6 +7,7 @@ import '../data/app_repository.dart' show ClassDraft, ClassSaver;
 import '../data/db.dart' show ClassRecord, TaxonomyItem, ClassRecordRowX;
 import '../data/taxonomy_repo.dart';
 import '../models/models.dart';
+import '../reload_bus.dart';
 import '../services/media_importer.dart';
 import '../theme.dart';
 import 'sheets/duration_sheet.dart';
@@ -31,7 +32,7 @@ class _RecordFormPageState extends State<RecordFormPage> {
   TaxonomyItem? _teacher;
   TaxonomyItem? _studio;
   int _sessions = 1;
-  int _minutesEach = 90;
+  int _minutesEach = 60;
 
   final _picked = <PickedMedia>[]; // 本次新选
   final _existingMedia = <ExistingMedia>[]; // 编辑模式的旧附件
@@ -155,6 +156,7 @@ class _RecordFormPageState extends State<RecordFormPage> {
         newMedia: [for (final p in _picked) p.toInput()],
         removeMediaIds: _removedIds,
       ));
+      ReloadBus.instance.bump(); // 统计/记录两页常驻 IndexedStack，广播刷新
       if (mounted) Navigator.pop(context, id);
     } catch (e) {
       debugPrint('保存失败: $e');

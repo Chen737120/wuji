@@ -6,7 +6,6 @@ import '../reload_bus.dart';
 import '../services/stats.dart';
 import '../theme.dart';
 import 'my_page.dart';
-import 'record_form_page.dart';
 import 'widgets/charts.dart';
 
 /// 首页统计面板（规格 §3.2）。
@@ -96,75 +95,76 @@ class _StatsPageState extends State<StatsPage> {
 
   @override
   Widget build(BuildContext context) {
-    final accent = Theme.of(context).colorScheme.primary;
     return Scaffold(
       backgroundColor: AppColors.bg,
       body: SafeArea(
-        child: _loaded && _records.isEmpty
-            ? _emptyState(accent)
-            : RefreshIndicator(
-                onRefresh: _load,
-                child: ListView(
-                  padding: const EdgeInsets.fromLTRB(16, 8, 16, 90),
+        child: RefreshIndicator(
+          onRefresh: _load,
+          child: ListView(
+            padding: const EdgeInsets.fromLTRB(16, 8, 16, 90),
+            children: [
+              _header(context),
+              const SizedBox(height: 10),
+              _filterChips(),
+              if (_loaded && _records.isEmpty) ...[
+                const SizedBox(height: 12),
+                _emptyHint(),
+              ],
+              const SizedBox(height: 12),
+              _statCards(),
+              const SizedBox(height: 16),
+              Container(
+                padding: const EdgeInsets.all(14),
+                decoration: _cardDecoration(),
+                child: TrendBars(
+                  points: _stats.trend,
+                  mode: _trendMode,
+                  onModeChanged: (m) => setState(() => _trendMode = m),
+                ),
+              ),
+              const SizedBox(height: 10),
+              Container(
+                padding: const EdgeInsets.all(14),
+                decoration: _cardDecoration(),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    _header(context),
+                    const Text('舞种分布',
+                        style: TextStyle(
+                            fontSize: 11,
+                            letterSpacing: 2,
+                            color: AppColors.secondary)),
                     const SizedBox(height: 10),
-                    _filterChips(),
-                    const SizedBox(height: 12),
-                    _statCards(),
-                    const SizedBox(height: 16),
-                    Container(
-                      padding: const EdgeInsets.all(14),
-                      decoration: _cardDecoration(),
-                      child: TrendBars(
-                        points: _stats.trend,
-                        mode: _trendMode,
-                        onModeChanged: (m) => setState(() => _trendMode = m),
-                      ),
-                    ),
-                    const SizedBox(height: 10),
-                    Container(
-                      padding: const EdgeInsets.all(14),
-                      decoration: _cardDecoration(),
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          const Text('舞种分布',
-                              style: TextStyle(
-                                  fontSize: 11,
-                                  letterSpacing: 2,
-                                  color: AppColors.secondary)),
-                          const SizedBox(height: 10),
-                          StyleDonut(
-                            slices: _stats.styleSlices,
-                            totalSessions: _stats.sessionCount,
-                          ),
-                        ],
-                      ),
-                    ),
-                    const SizedBox(height: 10),
-                    Container(
-                      padding: const EdgeInsets.all(14),
-                      decoration: _cardDecoration(),
-                      child: NameBars(
-                        title: '老师统计',
-                        items: _stats.teacherStats,
-                        totalSessions: _stats.sessionCount,
-                      ),
-                    ),
-                    const SizedBox(height: 10),
-                    Container(
-                      padding: const EdgeInsets.all(14),
-                      decoration: _cardDecoration(),
-                      child: NameBars(
-                        title: '舞室统计',
-                        items: _stats.studioStats,
-                        totalSessions: _stats.sessionCount,
-                      ),
+                    StyleDonut(
+                      slices: _stats.styleSlices,
+                      totalSessions: _stats.sessionCount,
                     ),
                   ],
                 ),
               ),
+              const SizedBox(height: 10),
+              Container(
+                padding: const EdgeInsets.all(14),
+                decoration: _cardDecoration(),
+                child: NameBars(
+                  title: '老师统计',
+                  items: _stats.teacherStats,
+                  totalSessions: _stats.sessionCount,
+                ),
+              ),
+              const SizedBox(height: 10),
+              Container(
+                padding: const EdgeInsets.all(14),
+                decoration: _cardDecoration(),
+                child: NameBars(
+                  title: '舞室统计',
+                  items: _stats.studioStats,
+                  totalSessions: _stats.sessionCount,
+                ),
+              ),
+            ],
+          ),
+        ),
       ),
     );
   }
@@ -294,37 +294,15 @@ class _StatsPageState extends State<StatsPage> {
     );
   }
 
-  Widget _emptyState(Color accent) {
-    return Center(
-      child: Column(
-        mainAxisAlignment: MainAxisAlignment.center,
-        children: [
-          SizedBox(
-            width: 60,
-            height: 28,
-            child: CustomPaint(painter: _LogoPainter(accent)),
-          ),
-          const SizedBox(height: 16),
-          const Text('还没有课堂记录',
-              style: TextStyle(fontSize: 13, color: AppColors.secondary)),
-          const SizedBox(height: 14),
-          FilledButton(
-            style: FilledButton.styleFrom(
-              backgroundColor: accent,
-              shape: const StadiumBorder(),
-              padding:
-                  const EdgeInsets.symmetric(horizontal: 24, vertical: 10),
-            ),
-            onPressed: () async {
-              await Navigator.push(
-                  context, MaterialPageRoute(builder: (_) => RecordFormPage()));
-              _load();
-            },
-            child: const Text('去记录第一节课',
-                style: TextStyle(fontSize: 13, fontWeight: FontWeight.w600)),
-          ),
-        ],
-      ),
+  /// 无记录时图表照常展示（全零），仅加一条引导。
+  Widget _emptyHint() {
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.symmetric(vertical: 14),
+      decoration: _cardDecoration(),
+      alignment: Alignment.center,
+      child: const Text('还没有课堂记录，点下方 ＋ 记录第一节课',
+          style: TextStyle(fontSize: 12, color: AppColors.secondary)),
     );
   }
 }

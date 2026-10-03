@@ -71,6 +71,9 @@ class AppRoot extends StatefulWidget {
 }
 
 class _AppRootState extends State<AppRoot> {
+  /// FAB 等根层回调推路由必须走这个 key：本 State 的 context 在
+  /// MaterialApp/Navigator 之上，Navigator.of(context) 会直接抛异常。
+  final GlobalKey<NavigatorState> _navigatorKey = GlobalKey<NavigatorState>();
   late AppRepository _repo;
   late ArchiveStore _store;
   late bool _hasSaf;
@@ -101,20 +104,31 @@ class _AppRootState extends State<AppRoot> {
       _hasSaf = true;
     });
     if (mounted) {
-      ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('存档位置已更新')));
+      final nav = _navigatorKey.currentState;
+      if (nav != null) {
+        ScaffoldMessenger.of(nav.context).showSnackBar(
+            const SnackBar(content: Text('存档位置已更新')));
+      }
     }
   }
 
   Future<void> _maybeOnboard() async {
     if (_hasSaf || _onboardingShown || !mounted) return;
-    _onboardingShown = true;
     final sp = await SharedPreferences.getInstance();
     if (sp.getBool('archiveOnboardSkipped') == true) return;
     if (!mounted) return;
-    final accent = Theme.of(context).colorScheme.primary;
-    final picked = await showDialog<bool>(
-      context: context,
+    _showOnboardDialog();
+  }
+
+  /// 根 State 的 context 在 MaterialApp 之上（Navigator/Theme/ScaffoldMessenger
+  /// 的下游），弹窗必须取 Navigator 的 context，否则 Navigator.of 直接抛。
+  void _showOnboardDialog() {
+    final nav = _navigatorKey.currentState;
+    if (nav == null) return;
+    _onboardingShown = true;
+    final accent = Theme.of(nav.context).colorScheme.primary;
+    showDialog<bool>(
+      context: nav.context,
       barrierDismissible: false,
       builder: (ctx) => AlertDialog(
         backgroundColor: Colors.white,
@@ -126,6 +140,7 @@ class _AppRootState extends State<AppRoot> {
         actions: [
           TextButton(
             onPressed: () async {
+              final sp = await SharedPreferences.getInstance();
               await sp.setBool('archiveOnboardSkipped', true);
               if (ctx.mounted) Navigator.pop(ctx, false);
             },
@@ -141,21 +156,22 @@ class _AppRootState extends State<AppRoot> {
           ),
         ],
       ),
-    );
-    if (picked != true) return;
-    final uri = await pickAndEnsureWujiArchive();
-    if (uri == null || !mounted) return;
-    final sp2 = await SharedPreferences.getInstance();
-    await sp2.setString('archiveTreeUri', uri);
-    final newStore = ArchiveStore(SafArchiveFs(treeUri: uri));
-    final newRepo = AppRepository(_repo.db, newStore,
-        TaxonomyRepo(_repo.db),
-        thumbMaker: deviceThumbMaker(newStore));
-    await newRepo.reconcileOnStartup();
-    setState(() {
-      _store = newStore;
-      _repo = newRepo;
-      _hasSaf = true;
+    ).then((picked) async {
+      if (picked != true) return;
+      final uri = await pickAndEnsureWujiArchive();
+      if (uri == null || !mounted) return;
+      final sp2 = await SharedPreferences.getInstance();
+      await sp2.setString('archiveTreeUri', uri);
+      final newStore = ArchiveStore(SafArchiveFs(treeUri: uri));
+      final newRepo = AppRepository(_repo.db, newStore,
+          TaxonomyRepo(_repo.db),
+          thumbMaker: deviceThumbMaker(newStore));
+      await newRepo.reconcileOnStartup();
+      setState(() {
+        _store = newStore;
+        _repo = newRepo;
+        _hasSaf = true;
+      });
     });
   }
 
@@ -169,6 +185,7 @@ class _AppRootState extends State<AppRoot> {
         Provider<ArchiveSwitcher>.value(
             value: ArchiveSwitcher(_switchArchive)),
         Provider<MediaLocator>.value(value: _store),
+        Provider<ArchiveStore>.value(value: _store),
         if (_store.fs is MediaPathResolver)
           Provider<MediaPathResolver>.value(
               value: _store.fs as MediaPathResolver),
@@ -176,12 +193,12 @@ class _AppRootState extends State<AppRoot> {
       child: Consumer<ThemeController>(
         builder: (_, t, _) => MaterialApp(
           title: '舞记',
+          navigatorKey: _navigatorKey,
           theme: AppTheme.light(t.accentPreset),
           home: HomeShell(
             pages: const [StatsPage(), RecordsPage()],
             onFabPressed: () {
-              Navigator.push(
-                context,
+              _navigatorKey.currentState?.push(
                 MaterialPageRoute(builder: (_) => const RecordFormPage()),
               ).then((_) => ReloadBus.instance.bump());
               // 保存/取消都可能改变数据；回来后让两个页面自行刷新
