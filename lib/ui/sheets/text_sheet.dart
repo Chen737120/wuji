@@ -84,6 +84,8 @@ class _TextSheetState extends State<_TextSheet> {
                           color: AppColors.secondary), // 输入文字用浅灰
                       decoration: InputDecoration(
                         hintText: widget.hint.isEmpty ? widget.title : widget.hint,
+                        hintStyle: const TextStyle(
+                            color: AppColors.faint), // 提示词浅灰
                         filled: true,
                         fillColor: Colors.white,
                         contentPadding:

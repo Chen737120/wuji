@@ -68,7 +68,10 @@ void main() {
     expect(find.text('跳舞天数'), findsOneWidget);
     expect(find.text('视频·图片'), findsOneWidget);
     expect(find.text('3'), findsWidgets); // 节数（趋势柱上无文字，卡片区 1 处）
-    expect(find.text('240'), findsOneWidget); // 120+120 分钟
+    final hoursCard = find.byWidgetPredicate(
+        (w) => w is Text && w.data == '4' && w.style?.fontSize == 20.0);
+    expect(hoursCard, findsOneWidget); // 120+120 分钟 = 4 小时
+    expect(find.text('小时'), findsOneWidget);
     expect(find.text('2'), findsWidgets); // 天数
     expect(find.text('跳舞趋势（分钟）'), findsOneWidget);
     expect(find.text('舞种分布'), findsOneWidget);
@@ -106,20 +109,21 @@ void main() {
     await tester.pumpWidget(host(saver));
     await tester.pumpAndSettle();
 
-    // 默认近1月：只剩 1 节、60 分钟（时长卡字号 20；与 y 轴刻度 8 号区分）
-    final minutesCard = find.byWidgetPredicate(
-        (w) => w is Text && w.data == '60' && w.style?.fontSize == 20.0);
-    expect(minutesCard, findsOneWidget);
+    // 默认近1月：只剩 1 节、60 分钟 = 1 小时（节数/天数/时长卡均为 1）
+    expect(find.text('小时'), findsOneWidget);
+    expect(find.text('节'), findsOneWidget);
+    expect(find.text('天'), findsOneWidget);
+    expect(find.text('个'), findsOneWidget);
     // 切到全部：3 节
     await tester.tap(find.text('全部'));
     await tester.pumpAndSettle();
     expect(find.text('3'), findsWidgets);
     final totalCard = find.byWidgetPredicate(
-        (w) => w is Text && w.data == '240' && w.style?.fontSize == 20.0);
-    expect(totalCard, findsOneWidget); // 时长 60 + 2节×90
+        (w) => w is Text && w.data == '4' && w.style?.fontSize == 20.0);
+    expect(totalCard, findsOneWidget); // 时长 60 + 2节×90 = 4 小时
     // 切回近1月
     await tester.tap(find.text('近1月'));
     await tester.pumpAndSettle();
-    expect(minutesCard, findsOneWidget);
+    expect(find.text('小时'), findsOneWidget);
   });
 }

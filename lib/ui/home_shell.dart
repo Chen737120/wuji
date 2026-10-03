@@ -40,12 +40,13 @@ class _HomeShellState extends State<HomeShell> {
       bottomNavigationBar: BottomAppBar(
         color: AppColors.bg,
         elevation: 0,
+        height: 64,
+        padding: EdgeInsets.zero,
         child: Row(
-          mainAxisAlignment: MainAxisAlignment.spaceAround,
           children: [
-            _tabBtn('首页', 0),
-            const SizedBox(width: 56),
-            _tabBtn('记录', 1),
+            Expanded(child: Center(child: _tabBtn('首页', 0))),
+            const SizedBox(width: 72), // 给中央 + 号让位
+            Expanded(child: Center(child: _tabBtn('记录', 1))),
           ],
         ),
       ),

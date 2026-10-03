@@ -239,13 +239,21 @@ class _StatsPageState extends State<StatsPage> {
     );
   }
 
+  /// 时长分钟 → 小时显示（整除不带小数，否则保留 1 位）
+  String _hours(int minutes) {
+    final v = minutes / 60;
+    return v == v.roundToDouble()
+        ? v.round().toString()
+        : v.toStringAsFixed(1);
+  }
+
   Widget _statCards() {
     final s = _stats;
     final cards = [
-      ('跳舞节数', '${s.sessionCount}'),
-      ('跳舞时长', '${s.totalMinutes}'),
-      ('跳舞天数', '${s.activeDays}'),
-      ('视频·图片', '${s.mediaCount}'),
+      ('跳舞节数', '${s.sessionCount}', '节'),
+      ('跳舞时长', _hours(s.totalMinutes), '小时'),
+      ('跳舞天数', '${s.activeDays}', '天'),
+      ('视频·图片', '${s.mediaCount}', '个'),
     ];
     return Container(
       padding: const EdgeInsets.symmetric(vertical: 12),
@@ -262,11 +270,22 @@ class _StatsPageState extends State<StatsPage> {
             Expanded(
               child: Column(
                 children: [
-                  Text(cards[i].$2,
-                      style: const TextStyle(
-                          fontSize: 20,
-                          fontWeight: FontWeight.w700,
-                          fontFeatures: [FontFeature.tabularFigures()])),
+                  Row(
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    crossAxisAlignment: CrossAxisAlignment.baseline,
+                    textBaseline: TextBaseline.alphabetic,
+                    children: [
+                      Text(cards[i].$2,
+                          style: const TextStyle(
+                              fontSize: 20,
+                              fontWeight: FontWeight.w700,
+                              fontFeatures: [FontFeature.tabularFigures()])),
+                      const SizedBox(width: 2),
+                      Text(cards[i].$3,
+                          style: TextStyle(
+                              fontSize: 10, color: AppColors.faint)),
+                    ],
+                  ),
                   const SizedBox(height: 2),
                   Text(cards[i].$1,
                       style: TextStyle(

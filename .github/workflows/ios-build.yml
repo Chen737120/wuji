@@ -1,0 +1,31 @@
+# 舞记 iOS 云构建：GitHub 的 macOS 机器上产出未签名的 IPA 归档。
+# 使用方式：把本仓库推到 GitHub → 仓库页 Actions → 手动运行 ios-build →
+# 完成后在 Artifacts 下载 wuji-ios → 解包得到 Runner.xcarchive。
+# 出正式安装包还需要 Apple 开发者账号签名（Xcode 打开归档 Distribute，
+# 或在苹果开发者后台做 Ad Hoc/TestFlight 签名后导出 IPA）。
+name: iOS build
+
+on:
+  workflow_dispatch: {}
+
+jobs:
+  build:
+    runs-on: macos-14
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: subosito/flutter-action@v2
+        with:
+          channel: stable
+          cache: true
+
+      - run: flutter pub get
+
+      - name: Build IPA (no codesign)
+        run: flutter build ipa --release --no-codesign
+
+      - name: Upload archive
+        uses: actions/upload-artifact@v4
+        with:
+          name: wuji-ios
+          path: build/ios/archive/Runner.xcarchive
