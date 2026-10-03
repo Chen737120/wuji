@@ -1,3 +1,4 @@
+import 'dart:io';
 import 'dart:typed_data';
 import 'package:path_provider/path_provider.dart';
 import 'package:saf_stream/saf_stream.dart';
@@ -156,13 +157,23 @@ class SafArchiveFs implements ArchiveFs, MediaPathResolver {
 
   @override
   Future<String?> toAbsolutePath(String rel) async {
-    // SAF 没有真实路径：复制到临时文件，供分享/播放/存相册使用
+    // SAF 没有真实路径：复制到临时文件，供分享/播放/存相册使用。
+    // 不用 saf_stream 的 copyToLocalFile——对 tree-document uri 会挂起；
+    // 走 read()（readFileStream，导出/manifest 同款原语，已验证可靠）。
     final uri = await _fileUri(rel);
     if (uri == null) return null;
     final tmp = await getTemporaryDirectory();
     final name = _segments(rel).last;
     final dest = '${tmp.path}/share/${_uuid.v4()}-$name';
-    await _stream.copyToLocalFile(uri, dest);
+    final f = File(dest);
+    await f.parent.create(recursive: true);
+    final sink = f.openWrite();
+    try {
+      await sink.addStream(read(rel));
+      await sink.flush();
+    } finally {
+      await sink.close();
+    }
     return dest;
   }
 }

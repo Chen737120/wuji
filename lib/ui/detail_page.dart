@@ -112,20 +112,31 @@ class _DetailPageState extends State<DetailPage> {
   Future<void> _saveToAlbum() async {
     final messenger = ScaffoldMessenger.of(context);
     var saved = 0;
+    var failed = 0;
+    Object? lastErr;
     for (final m in _media) {
       if (_missing.contains(m.fileName)) continue;
-      final path = await _absolutePath(m.fileName);
-      if (path == null) continue;
       try {
+        final path = await _absolutePath(m.fileName);
+        if (path == null) {
+          failed++;
+          continue;
+        }
         if (m.type == 'video') {
           await PhotoManagerBridge.saveVideo(path);
         } else {
           await PhotoManagerBridge.saveImage(path);
         }
         saved++;
-      } catch (_) {}
+      } catch (e) {
+        failed++;
+        lastErr = e;
+      }
     }
-    messenger.showSnackBar(SnackBar(content: Text('已保存 $saved 个到相册')));
+    messenger.showSnackBar(SnackBar(
+        content: Text(failed == 0
+            ? '已保存 $saved 个到相册'
+            : '已保存 $saved 个到相册，$failed 个失败${lastErr == null ? '' : '：$lastErr'}')));
   }
 
   Future<String?> _absolutePath(String rel) async {
@@ -285,12 +296,39 @@ class _DetailPageState extends State<DetailPage> {
               return GestureDetector(
                 onTap: (m.type == 'video' && !missing)
                     ? () async {
-                        final path =
-                            await context.read<MediaPathResolver?>()?.toAbsolutePath(m.fileName) ??
-                                m.fileName;
-                        if (!context.mounted) return;
-                        await Navigator.push(context,
-                            MaterialPageRoute(builder: (_) => PlayerPage(fileName: path)));
+                        final nav = Navigator.of(context);
+                        final messenger = ScaffoldMessenger.of(context);
+                        showDialog(
+                          context: context,
+                          barrierDismissible: false,
+                          builder: (ctx) => const AlertDialog(
+                            backgroundColor: Colors.white,
+                            content: Row(
+                              children: [
+                                CircularProgressIndicator(strokeWidth: 2),
+                                SizedBox(width: 16),
+                                Expanded(
+                                  child: Text('正在打开视频…\n大文件首次打开需要一点时间',
+                                      style: TextStyle(
+                                          fontSize: 12, height: 1.6)),
+                                ),
+                              ],
+                            ),
+                          ),
+                        );
+                        try {
+                          final path =
+                              await context.read<MediaPathResolver?>()?.toAbsolutePath(m.fileName) ??
+                                  m.fileName;
+                          nav.pop();
+                          if (!context.mounted) return;
+                          await Navigator.push(context,
+                              MaterialPageRoute(builder: (_) => PlayerPage(fileName: path)));
+                        } catch (e) {
+                          nav.pop();
+                          messenger.showSnackBar(SnackBar(
+                              content: Text('视频打开失败：$e')));
+                        }
                       }
                     : null,
                 child: Container(

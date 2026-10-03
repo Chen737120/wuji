@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import '../data/app_repository.dart' show ClassSaver;
+import '../reload_bus.dart';
 import '../theme.dart';
 import 'export_preview_page.dart';
 import 'import_page.dart';
@@ -19,8 +20,31 @@ String humanBytes(num bytes) {
 }
 
 /// 「我的」页（规格 §3.6）：用量、导出/导入、存档位置、管理、外观、关于。
-class MyPage extends StatelessWidget {
+class MyPage extends StatefulWidget {
   const MyPage({super.key});
+
+  @override
+  State<MyPage> createState() => _MyPageState();
+}
+
+class _MyPageState extends State<MyPage> {
+  int _rev = 0; // ReloadBus 变更后重建用量 FutureBuilder
+
+  @override
+  void initState() {
+    super.initState();
+    ReloadBus.instance.addListener(_bump);
+  }
+
+  @override
+  void dispose() {
+    ReloadBus.instance.removeListener(_bump);
+    super.dispose();
+  }
+
+  void _bump() {
+    if (mounted) setState(() => _rev++);
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -29,6 +53,7 @@ class MyPage extends StatelessWidget {
       backgroundColor: AppColors.bg,
       body: SafeArea(
         child: FutureBuilder<_Usage>(
+          key: ValueKey(_rev),
           future: _usage(saver),
           builder: (context, snap) {
             final usage = snap.data;

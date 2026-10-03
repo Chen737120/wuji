@@ -8,8 +8,12 @@ import '../data/db.dart' show ClassRecord, TaxonomyItem, ClassRecordRowX;
 import '../data/taxonomy_repo.dart';
 import '../models/models.dart';
 import '../reload_bus.dart';
+import '../services/archive_fs.dart' show MediaPathResolver;
 import '../services/media_importer.dart';
 import '../theme.dart';
+import 'media_viewer_page.dart';
+import 'player_page.dart';
+import 'sheets/date_sheet.dart';
 import 'sheets/duration_sheet.dart';
 import 'sheets/style_sheet.dart';
 import 'sheets/text_sheet.dart';
@@ -102,13 +106,32 @@ class _RecordFormPageState extends State<RecordFormPage> {
   }
 
   Future<void> _pickDate() async {
-    final d = await showDatePicker(
-      context: context,
-      initialDate: _date,
-      firstDate: DateTime(2000),
-      lastDate: DateTime(2100),
-    );
+    final d = await showDateSheet(context, initial: _date);
     if (d != null) setState(() => _date = d);
+  }
+
+  Future<void> _previewPicked(PickedMedia p) async {
+    if (p.isVideo) {
+      await Navigator.push(context,
+          MaterialPageRoute(builder: (_) => PlayerPage(fileName: p.path)));
+    } else {
+      await Navigator.push(context,
+          MaterialPageRoute(builder: (_) => ImageViewerPage(path: p.path)));
+    }
+  }
+
+  Future<void> _previewExisting(ExistingMedia em) async {
+    final path =
+        await context.read<MediaPathResolver?>()?.toAbsolutePath(em.fileName) ??
+            em.fileName;
+    if (!mounted) return;
+    if (em.isVideo) {
+      await Navigator.push(context,
+          MaterialPageRoute(builder: (_) => PlayerPage(fileName: path)));
+    } else {
+      await Navigator.push(context,
+          MaterialPageRoute(builder: (_) => ImageViewerPage(path: path)));
+    }
   }
 
   String get _durationLabel => '$_sessions节×$_minutesEach分';
@@ -259,6 +282,7 @@ class _RecordFormPageState extends State<RecordFormPage> {
             minLines: 3,
             decoration: InputDecoration(
               hintText: '这节课的感觉、突破、想记下来的瞬间…',
+              hintStyle: const TextStyle(color: AppColors.faint),
               filled: true,
               fillColor: Colors.white,
               border: OutlineInputBorder(
@@ -339,11 +363,11 @@ class _RecordFormPageState extends State<RecordFormPage> {
               _existingMedia.remove(em);
               _removedIds.add(em.id);
             });
-          }),
+          }, onPreview: () => _previewExisting(em)),
         for (final p in _picked)
           _mediaTile(p.path, null, p.isVideo, () {
             setState(() => _picked.remove(p));
-          }),
+          }, onPreview: () => _previewPicked(p)),
         const SizedBox(height: 6),
         Align(
           alignment: Alignment.centerLeft,
@@ -358,10 +382,14 @@ class _RecordFormPageState extends State<RecordFormPage> {
   }
 
   Widget _mediaTile(String pathOrRel, String? thumb, bool isVideo,
-      VoidCallback onRemove) {
+      VoidCallback onRemove,
+      {VoidCallback? onPreview}) {
     return Padding(
       padding: const EdgeInsets.only(bottom: 6),
-      child: Row(
+      child: GestureDetector(
+        behavior: HitTestBehavior.opaque,
+        onTap: onPreview,
+        child: Row(
         children: [
           Container(
             width: 56,
@@ -386,6 +414,7 @@ class _RecordFormPageState extends State<RecordFormPage> {
             onPressed: onRemove,
           ),
         ],
+        ),
       ),
     );
   }

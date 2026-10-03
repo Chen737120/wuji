@@ -48,7 +48,14 @@ class _ImportPageState extends State<ImportPage> {
       final tmp = await getTemporaryDirectory();
       final localZip =
           '${tmp.path}/wuji-import-${DateTime.now().millisecondsSinceEpoch}.zip';
-      await SafStream().copyToLocalFile(doc.uri, localZip);
+      // 不用 saf_stream 的 copyToLocalFile（部分 uri 形态会挂起），流式自拷
+      final zipSink = File(localZip).openWrite();
+      try {
+        await zipSink.addStream(await SafStream().readFileStream(doc.uri));
+        await zipSink.flush();
+      } finally {
+        await zipSink.close();
+      }
       final extractDir = Directory('${tmp.path}/wuji-import-extract');
       if (extractDir.existsSync()) extractDir.deleteSync(recursive: true);
       await extractArchiveToDisk(

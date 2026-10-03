@@ -65,14 +65,27 @@ class _PlayerPageState extends State<PlayerPage> {
                   style: const TextStyle(fontSize: 12, color: Colors.white70)))
           : c == null || !c.value.isInitialized
               ? const Center(
-                  child: CircularProgressIndicator(color: Colors.white))
+                  child: Column(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      CircularProgressIndicator(color: Colors.white),
+                      SizedBox(height: 12),
+                      Text('正在加载视频，大文件首次打开需要一点时间…',
+                          style: TextStyle(
+                              fontSize: 11, color: Colors.white70)),
+                    ],
+                  ),
+                )
               : Stack(
                   alignment: Alignment.bottomCenter,
                   children: [
                     Center(
-                      child: AspectRatio(
-                        aspectRatio: c.value.aspectRatio,
-                        child: VideoPlayer(c),
+                      child: InteractiveViewer(
+                        maxScale: 5,
+                        child: AspectRatio(
+                          aspectRatio: c.value.aspectRatio,
+                          child: VideoPlayer(c),
+                        ),
                       ),
                     ),
                     GestureDetector(

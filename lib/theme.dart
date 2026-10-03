@@ -2,11 +2,12 @@ import 'package:flutter/material.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 /// 全 App 唯一的彩色：点缀色预设（规格 §9/§3.6）。
+/// 黛蓝/琥珀橘取自配色方案评审定稿；旧值 matcha/pine 用户回退默认翠芽。
 enum AccentPreset {
   jade(0xFF3FA26F, '翠芽'),
-  matcha(0xFF52B788, '抹茶'),
-  mint(0xFF6FCF9F, '薄荷'),
-  pine(0xFF2F5D50, '松绿');
+  indigo(0xFF3E5AA8, '黛蓝'),
+  amber(0xFFE8842E, '琥珀橘'),
+  mint(0xFF6FCF9F, '薄荷');
 
   const AccentPreset(this.value, this.label);
   final int value;

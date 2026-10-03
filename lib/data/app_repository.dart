@@ -238,6 +238,12 @@ class AppRepository implements ClassSaver {
         }
       }
       await _archive.sweepOrphans(referencedRels: const {});
+      // 存档文件夹对系统媒体库遮蔽：课堂视频/图片只归 App 管，
+      // 不出现在系统相册（「保存到相册」才是显式导出）。已有索引项
+      // 会在系统下次媒体扫描（通常重启）后消失。
+      if (!await _archive.fs.exists('.nomedia')) {
+        await _archive.fs.write('.nomedia', const Stream.empty());
+      }
     } catch (_) {
       // 启动对账永不致命（终审 I9）：存档不可用时 App 照常打开
     }

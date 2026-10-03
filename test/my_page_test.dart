@@ -62,9 +62,9 @@ void main() {
     ], child: const MaterialApp(home: MyPage())));
     await tester.pumpAndSettle();
 
-    await tester.tap(find.text('抹茶'));
+    await tester.tap(find.text('黛蓝'));
     await tester.pumpAndSettle();
-    expect(theme.accentPreset, AccentPreset.matcha);
+    expect(theme.accentPreset, AccentPreset.indigo);
   });
 
   test('humanBytes formats KB/MB/GB', () {

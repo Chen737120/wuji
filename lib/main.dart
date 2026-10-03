@@ -1,5 +1,6 @@
 import 'dart:io';
 import 'package:flutter/material.dart';
+import 'package:flutter_localizations/flutter_localizations.dart';
 import 'package:path_provider/path_provider.dart';
 import 'package:provider/provider.dart';
 import 'package:shared_preferences/shared_preferences.dart';
@@ -181,6 +182,7 @@ class _AppRootState extends State<AppRoot> {
       providers: [
         ChangeNotifierProvider<ThemeController>.value(value: widget.theme),
         Provider<ClassSaver>.value(value: _repo),
+        Provider<AppRepository>.value(value: _repo),
         Provider<TaxonomyRepo>.value(value: TaxonomyRepo(_repo.db)),
         Provider<ArchiveSwitcher>.value(
             value: ArchiveSwitcher(_switchArchive)),
@@ -194,6 +196,13 @@ class _AppRootState extends State<AppRoot> {
         builder: (_, t, _) => MaterialApp(
           title: '舞记',
           navigatorKey: _navigatorKey,
+          locale: const Locale('zh'),
+          localizationsDelegates: const [
+            GlobalMaterialLocalizations.delegate,
+            GlobalWidgetsLocalizations.delegate,
+            GlobalCupertinoLocalizations.delegate,
+          ],
+          supportedLocales: const [Locale('zh')],
           theme: AppTheme.light(t.accentPreset),
           home: HomeShell(
             pages: const [StatsPage(), RecordsPage()],
