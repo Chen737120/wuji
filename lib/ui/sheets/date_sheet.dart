@@ -43,6 +43,11 @@ class _DateSheetState extends State<_DateSheet> {
   DateTime? _selected;
 
   DateTime get initial => widget.initial;
+  bool _pickingYear = false;
+
+  List<int> get _years => [
+        for (var y = 2000; y <= DateTime.now().year + 2; y++) y,
+      ];
 
   void _shift(int delta) {
     setState(() {
@@ -82,25 +87,90 @@ class _DateSheetState extends State<_DateSheet> {
               children: [
                 IconButton(
                   icon: const Icon(Icons.chevron_left, size: 22),
-                  onPressed: canPrev ? () => _shift(-1) : null,
+                  onPressed:
+                      !_pickingYear && canPrev ? () => _shift(-1) : null,
                 ),
                 GestureDetector(
-                  onTap: () => setState(() {
-                    _month = DateTime(today.year, today.month);
-                  }),
-                  child: Text('${_month.year}年${_month.month}月',
-                      style: const TextStyle(
-                          fontSize: 14,
-                          fontWeight: FontWeight.w700,
-                          letterSpacing: 1)),
+                  onTap: () =>
+                      setState(() => _pickingYear = !_pickingYear),
+                  child: Container(
+                    padding: const EdgeInsets.symmetric(
+                        horizontal: 10, vertical: 3),
+                    decoration: BoxDecoration(
+                      color: Colors.white,
+                      borderRadius: BorderRadius.circular(10),
+                      border: Border.all(color: AppColors.hairline),
+                    ),
+                    child: Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        Text('${_month.year}年${_month.month}月',
+                            style: const TextStyle(
+                                fontSize: 14,
+                                fontWeight: FontWeight.w700,
+                                letterSpacing: 1)),
+                        const SizedBox(width: 4),
+                        Icon(Icons.expand_more,
+                            size: 15, color: AppColors.secondary),
+                      ],
+                    ),
+                  ),
                 ),
                 IconButton(
                   icon: const Icon(Icons.chevron_right, size: 22),
-                  onPressed: canNext ? () => _shift(1) : null,
+                  onPressed:
+                      !_pickingYear && canNext ? () => _shift(1) : null,
                 ),
               ],
             ),
             const SizedBox(height: 4),
+            if (_pickingYear)
+              SizedBox(
+                height: 264,
+                child: SingleChildScrollView(
+                  child: Align(
+                    alignment: Alignment.topCenter,
+                    child: Wrap(
+                      spacing: 10,
+                      runSpacing: 10,
+                      children: [
+                        for (final y in _years)
+                          GestureDetector(
+                            onTap: () => setState(() {
+                              _month = DateTime(y, _month.month);
+                              _pickingYear = false;
+                            }),
+                            child: Container(
+                              width: 72,
+                              height: 40,
+                              alignment: Alignment.center,
+                              decoration: BoxDecoration(
+                                color: y == _month.year
+                                    ? accent
+                                    : Colors.white,
+                                borderRadius: BorderRadius.circular(10),
+                                border: Border.all(
+                                    color: y == _month.year
+                                        ? accent
+                                        : AppColors.hairline),
+                              ),
+                              child: Text('$y',
+                                  style: TextStyle(
+                                      fontSize: 14,
+                                      color: y == _month.year
+                                          ? Colors.white
+                                          : AppColors.ink,
+                                      fontWeight: y == _month.year
+                                          ? FontWeight.w700
+                                          : FontWeight.w400)),
+                            ),
+                          ),
+                      ],
+                    ),
+                  ),
+                ),
+              )
+            else ...[
             Row(
               children: [
                 for (final w in ['一', '二', '三', '四', '五', '六', '日'])
@@ -164,6 +234,7 @@ class _DateSheetState extends State<_DateSheet> {
                   }),
               ],
             ),
+            ],
             const SizedBox(height: 6),
             Row(
               children: [

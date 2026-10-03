@@ -10,6 +10,7 @@ import '../data/db.dart';
 import '../services/archive_store.dart';
 import '../services/exporter.dart';
 import '../services/stats.dart' show StatRange;
+import 'sheets/date_range_sheet.dart';
 import '../theme.dart';
 
 /// 按时间段导出预览页（规格 §3.7）：筛选 → 封面预览列表 → 合计 → 导出。
@@ -93,24 +94,16 @@ class _ExportPreviewPageState extends State<ExportPreviewPage> {
   }
 
   Future<void> _pickCustomRange() async {
-    final initial = DateTime.now();
-    final first = await showDatePicker(
-        context: context,
-        initialDate: initial.subtract(const Duration(days: 30)),
-        firstDate: DateTime(2000),
-        lastDate: DateTime(2100),
-        helpText: '选择开始日期');
-    if (first == null || !mounted) return;
-    final last = await showDatePicker(
-        context: context,
-        initialDate: initial,
-        firstDate: first,
-        lastDate: DateTime(2100),
-        helpText: '选择结束日期');
-    if (last == null || !mounted) return;
+    // 与首页统计相同的起止一体化日历组件
+    final r = await showDateRangeSheet(
+      context,
+      initialStart: _customStart,
+      initialEnd: _customEnd,
+    );
+    if (r == null || !mounted) return;
     setState(() {
-      _customStart = first;
-      _customEnd = last;
+      _customStart = r.$1;
+      _customEnd = r.$2;
       _range = StatRange.custom;
     });
   }

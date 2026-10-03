@@ -89,8 +89,8 @@ void main() {
     expect(find.text('标题一'), findsOneWidget);
     expect(find.text('标题二'), findsOneWidget);
 
-    // 点日历上的 30 号（2026年9月30日是周三）
-    await tester.tap(find.text('30'));
+    // 点日历上的 30 号（2026年9月30日是周三）；按 key 精确命中 9 月页
+    await tester.tap(find.byKey(const ValueKey('day-2026-9-30')));
     await tester.pumpAndSettle();
 
     expect(find.text('9月30日 · 1 节课'), findsOneWidget);

@@ -131,9 +131,9 @@ class _RecordsPageState extends State<RecordsPage> {
             ),
             if (_expanded)
               _Calendar(
-                month: _calendarMonth,
-                markedDays: _markedDays(),
-                covers: _calendarCovers(),
+                initialMonth: _calendarMonth,
+                markedDaysFor: _markedDaysIn,
+                coversFor: _coversIn,
                 resolver: context.read<MediaPathResolver?>(),
                 selectedDay: _selectedDay,
                 onMonthChanged: (m) => setState(() {
@@ -145,6 +145,15 @@ class _RecordsPageState extends State<RecordsPage> {
                   _selectedDay = _selectedDay == d ? null : d;
                   CalendarSelection.selectedDay = _selectedDay;
                 }),
+              )
+            else
+              _WeekStrip(
+                selectedDay: _selectedDay,
+                onDayTap: (d) => setState(() {
+                  _selectedDay = d;
+                  CalendarSelection.selectedDay = d;
+                }),
+                onExpand: () => setState(() => _expanded = true),
               ),
             if (_selectedDay != null) _filterBar(),
             Expanded(child: _stream()),
@@ -154,25 +163,23 @@ class _RecordsPageState extends State<RecordsPage> {
     );
   }
 
-  Set<int> _markedDays() {
+  Set<int> _markedDaysIn(DateTime month) {
     final days = <int>{};
     for (final r in _records) {
       final d = r.dateAsDateTime;
-      if (d.year == _calendarMonth.year && d.month == _calendarMonth.month) {
+      if (d.year == month.year && d.month == month.month) {
         days.add(d.day);
       }
     }
     return days;
   }
 
-  /// 当月有课的日期 → 第一个视频的封面（无视频退图片），供日历做底图。
-  Map<int, String> _calendarCovers() {
+  /// 指定月份有课的日期 → 第一个视频的封面（无视频退图片），供日历做底图。
+  Map<int, String> _coversIn(DateTime month) {
     final covers = <int, String>{};
     for (final r in _records) {
       final d = r.dateAsDateTime;
-      if (d.year != _calendarMonth.year || d.month != _calendarMonth.month) {
-        continue;
-      }
+      if (d.year != month.year || d.month != month.month) continue;
       if (covers.containsKey(d.day)) continue; // 同天取第一条记录
       final media = _mediaByClass[r.id];
       if (media == null || media.isEmpty) continue;
@@ -268,20 +275,21 @@ class CalendarSelection {
 
 /// 记录页日历：左右滑动切月、点顶部年月跳转；有课的日期用第一个视频
 /// 封面做底图（缩小居中不重叠），背景衬当月份数字水印。
+/// 显示中的月份由本组件自持（父层只给初始值），避免双向同步互跳。
 class _Calendar extends StatefulWidget {
   const _Calendar({
-    required this.month,
-    required this.markedDays,
-    required this.covers,
+    required this.initialMonth,
+    required this.markedDaysFor,
+    required this.coversFor,
     required this.resolver,
     required this.selectedDay,
     required this.onMonthChanged,
     required this.onDayTap,
   });
 
-  final DateTime month;
-  final Set<int> markedDays;
-  final Map<int, String> covers;
+  final DateTime initialMonth;
+  final Set<int> Function(DateTime month) markedDaysFor;
+  final Map<int, String> Function(DateTime month) coversFor;
   final MediaPathResolver? resolver;
   final DateTime? selectedDay;
   final ValueChanged<DateTime> onMonthChanged;
@@ -301,15 +309,17 @@ class _CalendarState extends State<_Calendar> {
   @override
   void initState() {
     super.initState();
-    _shown = widget.month;
+    _shown = widget.initialMonth;
     _pc = PageController(initialPage: _indexOf(_shown));
   }
 
   @override
   void didUpdateWidget(covariant _Calendar old) {
     super.didUpdateWidget(old);
-    if (widget.month != _shown) {
-      _shown = widget.month;
+    // 仅父层主动变月（如首次加载定位到最新记录月）时跟随；
+    // 日历内部的滑月/跳月经 onMonthChanged 已同步父层，不会走到这里
+    if (widget.initialMonth != _shown) {
+      _shown = widget.initialMonth;
       _pc.jumpToPage(_indexOf(_shown));
     }
   }
@@ -396,7 +406,7 @@ class _CalendarState extends State<_Calendar> {
           ),
           const SizedBox(height: 2),
           LayoutBuilder(builder: (context, constraints) {
-            final cellH = constraints.maxWidth / 7 / 0.95; // 近正方形格子
+            final cellH = constraints.maxWidth / 7 / 1.15; // 压扁一点，给记录流留空间
             return SizedBox(
               height: cellH * 6,
               child: PageView.builder(
@@ -424,6 +434,8 @@ class _CalendarState extends State<_Calendar> {
     final daysInMonth = DateTime(month.year, month.month + 1, 0).day;
     // 周一首列：Mon=1..Sun=7
     final leadingBlanks = (first.weekday + 6) % 7;
+    final markedDays = widget.markedDaysFor(month);
+    final covers = widget.coversFor(month);
 
     return Stack(
       children: [
@@ -439,7 +451,7 @@ class _CalendarState extends State<_Calendar> {
           crossAxisCount: 7,
           shrinkWrap: true,
           physics: const NeverScrollableScrollPhysics(),
-          childAspectRatio: 0.95,
+          childAspectRatio: 1.15,
           padding: EdgeInsets.zero,
           children: [
             for (var i = 0; i < leadingBlanks; i++) const SizedBox(),
@@ -450,9 +462,10 @@ class _CalendarState extends State<_Calendar> {
                     today.month == d.month &&
                     today.day == d.day;
                 final isSelected = widget.selectedDay == d;
-                final hasClass = widget.markedDays.contains(day);
-                final cover = widget.covers[day];
+                final hasClass = markedDays.contains(day);
+                final cover = covers[day];
                 return GestureDetector(
+                  key: ValueKey('day-${month.year}-${month.month}-$day'),
                   behavior: HitTestBehavior.opaque,
                   onTap: () => widget.onDayTap(d),
                   child: cover == null
@@ -550,6 +563,83 @@ class _CalendarState extends State<_Calendar> {
             ),
           ),
         ],
+      ),
+    );
+  }
+}
+
+/// 收起状态的周条（参考舞动时光）：本周 7 天（周一起），今天高亮，
+/// 点某天即筛选；右侧日历图标展开整月日历。
+class _WeekStrip extends StatelessWidget {
+  const _WeekStrip({
+    required this.selectedDay,
+    required this.onDayTap,
+    required this.onExpand,
+  });
+
+  final DateTime? selectedDay;
+  final ValueChanged<DateTime> onDayTap;
+  final VoidCallback onExpand;
+
+  @override
+  Widget build(BuildContext context) {
+    final accent = Theme.of(context).colorScheme.primary;
+    final today = DateTime.now();
+    final today0 = DateTime(today.year, today.month, today.day);
+    final weekStart =
+        today0.subtract(Duration(days: (today0.weekday + 6) % 7));
+    final days = [
+      for (var i = 0; i < 7; i++) weekStart.add(Duration(days: i)),
+    ];
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(16, 4, 16, 8),
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 4),
+        decoration: BoxDecoration(
+          color: Colors.white,
+          borderRadius: BorderRadius.circular(12),
+          border: Border.all(color: AppColors.hairline),
+        ),
+        child: Row(
+          children: [
+            for (final d in days)
+              Expanded(
+                child: GestureDetector(
+                  behavior: HitTestBehavior.opaque,
+                  onTap: () => onDayTap(d),
+                  child: Center(
+                    child: Container(
+                      width: 32,
+                      height: 32,
+                      alignment: Alignment.center,
+                      decoration: BoxDecoration(
+                        shape: BoxShape.circle,
+                        color: d == today0 ? accent : null,
+                        border: (selectedDay == d && d != today0)
+                            ? Border.all(color: accent, width: 1.5)
+                            : null,
+                      ),
+                      child: Text('${d.day}',
+                          style: TextStyle(
+                              fontSize: 12,
+                              color: d == today0
+                                  ? Colors.white
+                                  : AppColors.ink,
+                              fontWeight: d == today0
+                                  ? FontWeight.w700
+                                  : FontWeight.w400)),
+                    ),
+                  ),
+                ),
+              ),
+            IconButton(
+              icon: Icon(Icons.calendar_month,
+                  size: 20, color: AppColors.secondary),
+              tooltip: '展开日历',
+              onPressed: onExpand,
+            ),
+          ],
+        ),
       ),
     );
   }
