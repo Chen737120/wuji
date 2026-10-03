@@ -19,14 +19,14 @@ class TrendBars extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final accent = Theme.of(context).colorScheme.primary;
-    final peak = points.fold<int>(0, (a, b) => math.max(a, b.count));
+    final peak = points.fold<int>(0, (a, b) => math.max(a, b.minutes));
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         Row(
           mainAxisAlignment: MainAxisAlignment.spaceBetween,
           children: [
-            const Text('跳舞趋势',
+            const Text('跳舞趋势（分钟）',
                 style: TextStyle(fontSize: 11, letterSpacing: 2, color: AppColors.secondary)),
             Row(
               mainAxisSize: MainAxisSize.min,
@@ -39,31 +39,36 @@ class TrendBars extends StatelessWidget {
           ],
         ),
         const SizedBox(height: 10),
-        SizedBox(
-          height: 56,
-          child: Row(
-            crossAxisAlignment: CrossAxisAlignment.end,
-            children: [
-              for (final p in points)
-                Expanded(
-                  child: Padding(
-                    padding: const EdgeInsets.symmetric(horizontal: 1.5),
-                    child: Container(
-                      height: p.count == 0
-                          ? 2
-                          : (p.count / (peak == 0 ? 1 : peak)) * 56,
-                      decoration: BoxDecoration(
-                        color: p.count > 0 && p.count == peak
-                            ? accent
-                            : AppColors.hairline,
-                        borderRadius: BorderRadius.circular(2),
+        LayoutBuilder(builder: (context, constraints) {
+          // 柱区高度随卡片宽度自适应（有封面/大屏时更高，夹在 56~112 之间）
+          final barH =
+              (constraints.maxWidth * 0.32).clamp(56.0, 112.0).toDouble();
+          return SizedBox(
+            height: barH,
+            child: Row(
+              crossAxisAlignment: CrossAxisAlignment.end,
+              children: [
+                for (final p in points)
+                  Expanded(
+                    child: Padding(
+                      padding: const EdgeInsets.symmetric(horizontal: 1.5),
+                      child: Container(
+                        height: p.minutes == 0
+                            ? 2
+                            : (p.minutes / (peak == 0 ? 1 : peak)) * barH,
+                        decoration: BoxDecoration(
+                          color: p.minutes > 0 && p.minutes == peak
+                              ? accent
+                              : AppColors.hairline,
+                          borderRadius: BorderRadius.circular(2),
+                        ),
                       ),
                     ),
                   ),
-                ),
-            ],
-          ),
-        ),
+              ],
+            ),
+          );
+        }),
         const SizedBox(height: 4),
         // 终审 C4：按月只有 6 个点，skip(length-7) 会抛 RangeError；≤7 全显
         Row(
@@ -199,6 +204,13 @@ class NameBars extends StatefulWidget {
 class _NameBarsState extends State<NameBars> {
   bool _expanded = false;
 
+  /// 「2节（50%）」；总节数为 0 时只显示节数。
+  String _countLabel(int sessions, int total) {
+    if (total <= 0) return '$sessions节';
+    final pct = (sessions * 100 / total).round();
+    return '$sessions节（$pct%）';
+  }
+
   @override
   Widget build(BuildContext context) {
     final accent = Theme.of(context).colorScheme.primary;
@@ -256,8 +268,8 @@ class _NameBarsState extends State<NameBars> {
                   ),
                 ),
                 SizedBox(
-                    width: 34,
-                    child: Text('${item.sessions}节',
+                    width: 88,
+                    child: Text(_countLabel(item.sessions, totalSessions),
                         textAlign: TextAlign.right,
                         style: TextStyle(
                             fontSize: 11, color: AppColors.secondary))),

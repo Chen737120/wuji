@@ -70,7 +70,7 @@ void main() {
     expect(find.text('3'), findsWidgets); // 节数（趋势柱上无文字，卡片区 1 处）
     expect(find.text('240'), findsOneWidget); // 120+120 分钟
     expect(find.text('2'), findsWidgets); // 天数
-    expect(find.text('跳舞趋势'), findsOneWidget);
+    expect(find.text('跳舞趋势（分钟）'), findsOneWidget);
     expect(find.text('舞种分布'), findsOneWidget);
     expect(find.text('老师统计'), findsOneWidget);
     expect(find.text('按天'), findsOneWidget);
@@ -86,7 +86,7 @@ void main() {
     await tester.pumpAndSettle();
 
     expect(find.text('还没有课堂记录，点下方 ＋ 记录第一节课'), findsOneWidget);
-    expect(find.text('跳舞趋势'), findsOneWidget);
+    expect(find.text('跳舞趋势（分钟）'), findsOneWidget);
     expect(find.text('舞种分布'), findsOneWidget);
     expect(find.text('老师统计'), findsOneWidget);
     expect(find.text('舞室统计'), findsOneWidget);
@@ -106,12 +106,16 @@ void main() {
     await tester.pumpWidget(host(saver));
     await tester.pumpAndSettle();
 
-    // 全部：3 节
+    // 默认近1月：只剩 1 节、60 分钟
+    expect(find.text('60'), findsOneWidget);
+    // 切到全部：3 节
+    await tester.tap(find.text('全部'));
+    await tester.pumpAndSettle();
     expect(find.text('3'), findsWidgets);
+    expect(find.text('240'), findsOneWidget); // 时长 60 + 2节×90
+    // 切回近1月
     await tester.tap(find.text('近1月'));
     await tester.pumpAndSettle();
-    // 近1月：只剩 1 节、60 分钟
-    expect(find.text('1'), findsWidgets);
     expect(find.text('60'), findsOneWidget);
   });
 }

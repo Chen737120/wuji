@@ -64,8 +64,8 @@ void main() {
         StatFilter(range: StatRange.last30), now,
         mode: TrendMode.daily);
     expect(s.trend, hasLength(14));
-    expect(s.trend.last.count, 1); // 今天
-    expect(s.trend.any((b) => b.count == 3), isFalse);
+    expect(s.trend.last.minutes, 60); // 今天：1节×60分
+    expect(s.trend.any((b) => b.minutes == 180), isFalse); // 未来的3节×60不入桶
     expect(s.sessionCount, 4); // 统计总数仍含未来记录
   });
 
@@ -78,8 +78,8 @@ void main() {
         StatFilter(range: StatRange.last365), now,
         mode: TrendMode.monthly);
     expect(s.trend, hasLength(6));
-    expect(s.trend.last.count, 1);
-    expect(s.trend.any((b) => b.count == 2), isTrue);
+    expect(s.trend.last.minutes, 60); // 本月：1节×60分
+    expect(s.trend.any((b) => b.minutes == 120), isTrue); // 两个月前2节×60分
   });
 
   test('style distribution caps at 6 slices + 其他 by sessions', () {

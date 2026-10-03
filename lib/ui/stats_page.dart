@@ -6,6 +6,7 @@ import '../reload_bus.dart';
 import '../services/stats.dart';
 import '../theme.dart';
 import 'my_page.dart';
+import 'sheets/date_range_sheet.dart';
 import 'widgets/charts.dart';
 
 /// 首页统计面板（规格 §3.2）。
@@ -20,7 +21,7 @@ class _StatsPageState extends State<StatsPage> {
   List<ClassRecord> _records = [];
   List<MediaAsset> _media = [];
   bool _loaded = false;
-  StatRange _range = StatRange.all;
+  StatRange _range = StatRange.last30; // 默认看近 1 个月
   DateTime? _customStart;
   DateTime? _customEnd;
   TrendMode _trendMode = TrendMode.daily;
@@ -67,28 +68,15 @@ class _StatsPageState extends State<StatsPage> {
   }
 
   Future<void> _pickCustomRange() async {
-    final initial = DateTime.now();
-    final first = await showDatePicker(
-      context: context,
-      initialDate: _customStart ?? initial.subtract(const Duration(days: 30)),
-      firstDate: DateTime(2000),
-      lastDate: DateTime(2100),
-      helpText: '选择开始日期',
+    final r = await showDateRangeSheet(
+      context,
+      initialStart: _customStart,
+      initialEnd: _customEnd,
     );
-    if (first == null) return;
-    if (!mounted) return;
-    final last = await showDatePicker(
-      context: context,
-      initialDate: _customEnd ?? initial,
-      firstDate: first,
-      lastDate: DateTime(2100),
-      helpText: '选择结束日期',
-    );
-    if (last == null) return;
-    if (!mounted) return;
+    if (r == null || !mounted) return;
     setState(() {
-      _customStart = first;
-      _customEnd = last;
+      _customStart = r.$1;
+      _customEnd = r.$2;
       _range = StatRange.custom;
     });
   }

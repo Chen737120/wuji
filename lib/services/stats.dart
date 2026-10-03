@@ -17,9 +17,9 @@ class StatFilter {
 }
 
 class BarPoint {
-  const BarPoint(this.label, this.count);
+  const BarPoint(this.label, this.minutes);
   final String label;
-  final int count;
+  final int minutes; // 柱值=该桶内跳舞总时长（分钟）
 }
 
 class NameCount {
@@ -118,7 +118,7 @@ class StatsComputer {
     }
   }
 
-  /// 最近 14 天（含今天），未来日期不入桶（桶锚定 now）。
+  /// 最近 14 天（含今天），未来日期不入桶（桶锚定 now）。柱值=分钟。
   static List<BarPoint> _dailyTrend(List<ClassRecord> rs, DateTime now) {
     final today = DateTime(now.year, now.month, now.day);
     final buckets = List<int>.filled(14, 0);
@@ -126,7 +126,7 @@ class StatsComputer {
       final d = DateTime.parse(r.date);
       if (d.isAfter(today)) continue;
       final diff = today.difference(DateTime(d.year, d.month, d.day)).inDays;
-      if (diff >= 0 && diff < 14) buckets[13 - diff] += r.sessionCount;
+      if (diff >= 0 && diff < 14) buckets[13 - diff] += r.totalMinutes;
     }
     return List.generate(14, (i) {
       final day = today.subtract(Duration(days: 13 - i));
@@ -134,7 +134,7 @@ class StatsComputer {
     });
   }
 
-  /// 最近 6 个自然月（含本月），未来日期不入桶。
+  /// 最近 6 个自然月（含本月），未来日期不入桶。柱值=分钟。
   static List<BarPoint> _monthlyTrend(List<ClassRecord> rs, DateTime now) {
     final thisMonth = DateTime(now.year, now.month);
     final keys = <String>[];
@@ -148,7 +148,7 @@ class StatsComputer {
       final dm = DateTime(d.year, d.month);
       if (dm.isAfter(thisMonth)) continue;
       final idx = keys.indexOf('${d.year}-${d.month}');
-      if (idx >= 0) buckets[idx] += r.sessionCount;
+      if (idx >= 0) buckets[idx] += r.totalMinutes;
     }
     return List.generate(
         6, (i) => BarPoint('${keys[i].split('-')[1]}月', buckets[i]));

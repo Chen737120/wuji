@@ -16,7 +16,7 @@ publish_to: 'none' # Remove this line if you wish to publish to pub.dev
 # https://developer.apple.com/library/archive/documentation/General/Reference/InfoPlistKeyReference/Articles/CoreFoundationKeys.html
 # In Windows, build-name is used as the major, minor, and patch parts
 # of the product and file versions while build-number is used as the build suffix.
-version: 1.1.0+3
+version: 1.2.0+4
 
 # sqlite3 构建钩子的下载镜像（GitHub 直连超时；ghproxy 代理 release 资产）
 hooks:
@@ -62,6 +62,7 @@ dependencies:
 dev_dependencies:
   flutter_test:
     sdk: flutter
+  flutter_launcher_icons: ^0.14.3
 
   # The "flutter_lints" package below contains a set of recommended lints to
   # encourage good coding practices. The lint set provided by the package is
@@ -75,6 +76,13 @@ dev_dependencies:
 
 # For information on the generic Dart part of this file, see the
 # following page: https://dart.dev/tools/pub/pubspec
+
+# App 图标（v9 设计：翠芽绿圆角底 + 白色 breaking freeze 剪影）
+flutter_launcher_icons:
+  image_path: "assets/icon/icon.png"
+  adaptive_icon_background: "#3FA26F"
+  adaptive_icon_foreground: "assets/icon/icon_foreground.png"
+  android: true
 
 # The following section is specific to Flutter packages.
 flutter:

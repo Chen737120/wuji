@@ -3,6 +3,7 @@ import 'package:provider/provider.dart';
 import '../data/app_repository.dart' show ClassSaver;
 import '../data/db.dart' show ClassRecord, MediaAsset, ClassRecordRowX;
 import '../reload_bus.dart';
+import '../services/abs_path_cache.dart';
 import '../services/archive_fs.dart' show MediaLocator, MediaPathResolver;
 import '../services/archive_store.dart' show ArchiveStore;
 import 'dart:io';
@@ -269,6 +270,31 @@ class _DetailPageState extends State<DetailPage> {
     }
   }
 
+  /// 视频 → thumbs 封面、图片 → 原图；解析失败/无封面时回退图标。
+  Widget _coverImage(String? rel, IconData fallbackIcon) {
+    if (rel == null) {
+      return Icon(fallbackIcon, color: AppColors.bg, size: 40);
+    }
+    return FutureBuilder<String?>(
+      future: AbsPathCache.resolve(context.read<MediaPathResolver?>(), rel),
+      builder: (context, snap) {
+        final path = snap.data;
+        if (path == null) {
+          return Icon(fallbackIcon, color: AppColors.bg, size: 40);
+        }
+        return ClipRRect(
+          borderRadius: BorderRadius.circular(12),
+          child: Image.file(File(path),
+              fit: BoxFit.cover,
+              width: double.infinity,
+              height: double.infinity,
+              errorBuilder: (_, _, _) =>
+                  Icon(fallbackIcon, color: AppColors.bg, size: 40)),
+        );
+      },
+    );
+  }
+
   Widget _mediaArea(Color accent) {
     if (_media.isEmpty) {
       return Container(
@@ -341,8 +367,9 @@ class _DetailPageState extends State<DetailPage> {
                       ? Text('文件已丢失（可从云盘备份导入）',
                           style: TextStyle(
                               fontSize: 11, color: Colors.white.withValues(alpha: .7)))
-                      : Icon(m.type == 'video' ? Icons.play_arrow : Icons.image,
-                          color: AppColors.bg, size: 40),
+                      : m.type == 'video'
+                          ? _coverImage(m.thumbName, Icons.play_arrow)
+                          : _coverImage(m.fileName, Icons.image),
                 ),
               );
             },

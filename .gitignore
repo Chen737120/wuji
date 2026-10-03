@@ -55,3 +55,4 @@ testdata/*.jpg
 docs/
 dist/
 
+.iconwork/

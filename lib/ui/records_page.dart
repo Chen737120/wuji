@@ -6,6 +6,7 @@ import 'dart:io';
 import '../data/app_repository.dart' show ClassSaver;
 import '../data/db.dart' show ClassRecord, ClassRecordRowX, MediaAsset;
 import '../reload_bus.dart';
+import '../services/abs_path_cache.dart';
 import '../services/archive_fs.dart' show MediaPathResolver;
 import '../theme.dart';
 import 'detail_page.dart';
@@ -131,6 +132,8 @@ class _RecordsPageState extends State<RecordsPage> {
               _Calendar(
                 month: _calendarMonth,
                 markedDays: _markedDays(),
+                covers: _calendarCovers(),
+                resolver: context.read<MediaPathResolver?>(),
                 selectedDay: _selectedDay,
                 onPrev: () => setState(() {
                   _calendarMonth =
@@ -161,6 +164,32 @@ class _RecordsPageState extends State<RecordsPage> {
       }
     }
     return days;
+  }
+
+  /// 当月有课的日期 → 第一个视频的封面（无视频退图片），供日历做底图。
+  Map<int, String> _calendarCovers() {
+    final covers = <int, String>{};
+    for (final r in _records) {
+      final d = r.dateAsDateTime;
+      if (d.year != _calendarMonth.year || d.month != _calendarMonth.month) {
+        continue;
+      }
+      if (covers.containsKey(d.day)) continue; // 同天取第一条记录
+      final media = _mediaByClass[r.id];
+      if (media == null || media.isEmpty) continue;
+      MediaAsset? pick;
+      for (final m in media) {
+        if (m.type == 'video' && m.thumbName != null) {
+          pick = m;
+          break;
+        }
+      }
+      pick ??= media.first;
+      final rel =
+          pick.thumbName ?? (pick.type == 'image' ? pick.fileName : null);
+      if (rel != null) covers[d.day] = rel;
+    }
+    return covers;
   }
 
   Widget _filterBar() {
@@ -231,10 +260,14 @@ class _RecordsPageState extends State<RecordsPage> {
   }
 }
 
+/// 记录页日历：有课的日期用第一个视频封面做底图，
+/// 格子随宽度自适应（近正方形），日期角标叠在封面左下角。
 class _Calendar extends StatelessWidget {
   const _Calendar({
     required this.month,
     required this.markedDays,
+    required this.covers,
+    required this.resolver,
     required this.selectedDay,
     required this.onPrev,
     required this.onNext,
@@ -243,6 +276,8 @@ class _Calendar extends StatelessWidget {
 
   final DateTime month;
   final Set<int> markedDays;
+  final Map<int, String> covers;
+  final MediaPathResolver? resolver;
   final DateTime? selectedDay;
   final VoidCallback onPrev;
   final VoidCallback onNext;
@@ -290,7 +325,7 @@ class _Calendar extends StatelessWidget {
             crossAxisCount: 7,
             shrinkWrap: true,
             physics: const NeverScrollableScrollPhysics(),
-            childAspectRatio: 1.5,
+            childAspectRatio: 0.95, // 近正方形格子，封面可读
             children: [
               for (var i = 0; i < leadingBlanks; i++) const SizedBox(),
               for (var day = 1; day <= daysInMonth; day++)
@@ -301,44 +336,105 @@ class _Calendar extends StatelessWidget {
                       today.day == d.day;
                   final isSelected = selectedDay == d;
                   final hasClass = markedDays.contains(day);
+                  final cover = covers[day];
                   return GestureDetector(
                     onTap: () => onDayTap(d),
-                    child: Column(
-                      mainAxisAlignment: MainAxisAlignment.center,
-                      children: [
-                        Container(
-                          width: 24,
-                          height: 24,
-                          alignment: Alignment.center,
-                          decoration: BoxDecoration(
-                            shape: BoxShape.circle,
-                            color: isSelected
-                                ? accent
-                                : (isToday ? accent.withValues(alpha: .15) : null),
-                          ),
-                          child: Text('$day',
-                              style: TextStyle(
-                                  fontSize: 11,
-                                  color:
-                                      isSelected ? Colors.white : AppColors.ink,
-                                  fontWeight: isToday || isSelected
-                                      ? FontWeight.w700
-                                      : FontWeight.w400)),
-                        ),
-                        SizedBox(
-                          height: 4,
-                          child: hasClass
-                              ? CircleAvatar(radius: 2, backgroundColor: accent)
-                              : null,
-                        ),
-                      ],
-                    ),
+                    child: cover == null
+                        ? Column(
+                            mainAxisAlignment: MainAxisAlignment.center,
+                            children: [
+                              Container(
+                                width: 26,
+                                height: 26,
+                                alignment: Alignment.center,
+                                decoration: BoxDecoration(
+                                  shape: BoxShape.circle,
+                                  color: isSelected
+                                      ? accent
+                                      : (isToday
+                                          ? accent.withValues(alpha: .15)
+                                          : null),
+                                ),
+                                child: Text('$day',
+                                    style: TextStyle(
+                                        fontSize: 11,
+                                        color: isSelected
+                                            ? Colors.white
+                                            : AppColors.ink,
+                                        fontWeight: isToday || isSelected
+                                            ? FontWeight.w700
+                                            : FontWeight.w400)),
+                              ),
+                              SizedBox(
+                                height: 4,
+                                child: hasClass
+                                    ? CircleAvatar(
+                                        radius: 2, backgroundColor: accent)
+                                    : null,
+                              ),
+                            ],
+                          )
+                        : _coverCell(day, cover, isSelected, isToday, accent),
                   );
                 }),
             ],
           ),
         ],
       ),
+    );
+  }
+
+  /// 封面底图格子：图片铺满 + 日期角标 + 今天/选中描边。
+  Widget _coverCell(
+      int day, String rel, bool isSelected, bool isToday, Color accent) {
+    return Stack(
+      fit: StackFit.expand,
+      children: [
+        FutureBuilder<String?>(
+          future: AbsPathCache.resolve(resolver, rel),
+          builder: (context, snap) {
+            final path = snap.data;
+            return ClipRRect(
+              borderRadius: BorderRadius.circular(8),
+              child: Container(
+                color: AppColors.hairline,
+                child: path == null
+                    ? null
+                    : Image.file(File(path),
+                        fit: BoxFit.cover,
+                        errorBuilder: (_, _, _) => const SizedBox.shrink()),
+              ),
+            );
+          },
+        ),
+        if (isSelected || isToday)
+          Positioned.fill(
+            child: Container(
+              decoration: BoxDecoration(
+                borderRadius: BorderRadius.circular(8),
+                border: Border.all(
+                    color: isSelected ? accent : accent.withValues(alpha: .7),
+                    width: 2),
+              ),
+            ),
+          ),
+        Positioned(
+          left: 3,
+          bottom: 3,
+          child: Container(
+            padding: const EdgeInsets.symmetric(horizontal: 4),
+            decoration: BoxDecoration(
+              color: isSelected ? accent : Colors.black54,
+              borderRadius: BorderRadius.circular(6),
+            ),
+            child: Text('$day',
+                style: const TextStyle(
+                    fontSize: 10,
+                    fontWeight: FontWeight.w700,
+                    color: Colors.white)),
+          ),
+        ),
+      ],
     );
   }
 }
@@ -363,9 +459,9 @@ class _CoverThumb extends StatelessWidget {
             child: SizedBox(
               width: 56,
               height: 56,
-              child: (thumb != null && resolver != null)
+              child: (thumb != null)
                   ? FutureBuilder<String?>(
-                      future: resolver?.toAbsolutePath(thumb),
+                      future: AbsPathCache.resolve(resolver, thumb),
                       builder: (context, snap) {
                         final path = snap.data;
                         if (path == null || !File(path).existsSync()) {
