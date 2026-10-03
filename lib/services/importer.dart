@@ -140,13 +140,36 @@ Future<ImportReport> executeImport(
       final targetRel =
           archive.mediaRel(DateTime.parse(e.date), archive.newId(), _extOf(baseNameOf(m.fileName)));
       await archive.fs.write(targetRel, Stream<List<int>>.value(bytes));
+
+      // 封面：清单带 thumbName 且源里存在 → 复制进存档（导入后封面不丢）
+      String? thumbRel;
+      final tn = m.thumbName;
+      if (tn != null) {
+        String? thumbSrc;
+        if (await sourceFs.exists(tn)) {
+          thumbSrc = tn;
+        } else {
+          for (final candidate in byBasename[baseNameOf(tn)] ?? const <String>[]) {
+            if (await sourceFs.exists(candidate)) {
+              thumbSrc = candidate;
+              break;
+            }
+          }
+        }
+        if (thumbSrc != null) {
+          final tBytes = await _readAll(sourceFs, thumbSrc);
+          thumbRel = 'thumbs/${archive.newId()}.jpg';
+          await archive.fs.write(thumbRel, Stream<List<int>>.value(tBytes));
+        }
+      }
+
       newMediaRows.add(MediaAssetsCompanion.insert(
         id: archive.newId(),
         classId: e.id,
         type: m.type,
         fileName: targetRel,
         sourceName: Value(baseNameOf(m.fileName)),
-        thumbName: const Value(null),
+        thumbName: thumbRel == null ? const Value(null) : Value(thumbRel),
         durationSec: Value(m.durationSec),
         sizeBytes: Value(bytes.length),
         createdAt: DateTime.now(),

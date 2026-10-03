@@ -1,3 +1,4 @@
+import 'dart:convert';
 import 'dart:io';
 import 'package:archive/archive_io.dart';
 import 'package:flutter/material.dart';
@@ -132,7 +133,8 @@ class _ImportPageState extends State<ImportPage> {
 
   Future<String> _readAllText(ArchiveFs fs, String rel) async {
     final bytes = await _readAllBytes(fs, rel);
-    return String.fromCharCodes(bytes);
+    // 清单/感受均为 UTF-8；fromCharCodes 会把多字节中文拆成乱码
+    return utf8.decode(bytes, allowMalformed: true);
   }
 
   Future<List<int>> _readAllBytes(ArchiveFs fs, String rel) async {

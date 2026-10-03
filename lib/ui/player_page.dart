@@ -5,11 +5,12 @@ import 'package:video_player/video_player.dart';
 
 const _speeds = [0.5, 0.75, 1.0, 1.25, 1.5, 2.0];
 
-/// 全屏播放器（规格 §3.5）：点画面进入；播放/暂停＋倍速；退出恢复竖屏。
+/// 视频播放页（规格 §3.5）：默认竖屏播放，点画面显示/隐藏底部控制条；
+/// 控制条：播放暂停＋进度＋倍速＋全屏切换（全屏横屏沉浸）。支持捏合缩放。
 class PlayerPage extends StatefulWidget {
   const PlayerPage({super.key, required this.fileName});
 
-  final String fileName; // 存档相对路径
+  final String fileName; // 绝对路径（SAF 模式已复制到缓存）
 
   @override
   State<PlayerPage> createState() => _PlayerPageState();
@@ -18,16 +19,13 @@ class PlayerPage extends StatefulWidget {
 class _PlayerPageState extends State<PlayerPage> {
   VideoPlayerController? _controller;
   double _speed = 1.0;
+  bool _fullscreen = false;
+  bool _controls = true;
   String? _error;
 
   @override
   void initState() {
     super.initState();
-    SystemChrome.setEnabledSystemUIMode(SystemUiMode.immersiveSticky);
-    SystemChrome.setPreferredOrientations([
-      DeviceOrientation.landscapeLeft,
-      DeviceOrientation.landscapeRight,
-    ]);
     _init();
   }
 
@@ -45,12 +43,28 @@ class _PlayerPageState extends State<PlayerPage> {
     }
   }
 
+  void _setFullscreen(bool v) {
+    setState(() => _fullscreen = v);
+    SystemChrome.setEnabledSystemUIMode(
+        v ? SystemUiMode.immersiveSticky : SystemUiMode.edgeToEdge);
+    SystemChrome.setPreferredOrientations(v
+        ? [DeviceOrientation.landscapeLeft, DeviceOrientation.landscapeRight]
+        : [DeviceOrientation.portraitUp]);
+  }
+
   @override
   void dispose() {
     SystemChrome.setEnabledSystemUIMode(SystemUiMode.edgeToEdge);
     SystemChrome.setPreferredOrientations([DeviceOrientation.portraitUp]);
     _controller?.dispose();
     super.dispose();
+  }
+
+  void _togglePlay() {
+    final c = _controller;
+    if (c == null) return;
+    c.value.isPlaying ? c.pause() : c.play();
+    setState(() {});
   }
 
   @override
@@ -77,7 +91,7 @@ class _PlayerPageState extends State<PlayerPage> {
                   ),
                 )
               : Stack(
-                  alignment: Alignment.bottomCenter,
+                  alignment: Alignment.center,
                   children: [
                     Center(
                       child: InteractiveViewer(
@@ -88,11 +102,12 @@ class _PlayerPageState extends State<PlayerPage> {
                         ),
                       ),
                     ),
-                    GestureDetector(
-                      behavior: HitTestBehavior.opaque,
-                      onTap: () => setState(() {
-                        c.value.isPlaying ? c.pause() : c.play();
-                      }),
+                    // 手势层：点画面切换控制条
+                    Positioned.fill(
+                      child: GestureDetector(
+                        behavior: HitTestBehavior.opaque,
+                        onTap: () => setState(() => _controls = !_controls),
+                      ),
                     ),
                     Positioned(
                       top: 10,
@@ -103,55 +118,76 @@ class _PlayerPageState extends State<PlayerPage> {
                       ),
                     ),
                     Positioned(
-                      top: 10,
-                      right: 10,
-                      child: PopupMenuButton<double>(
-                        icon: Text('$_speed×',
-                            style: const TextStyle(
-                                color: Colors.white, fontSize: 13)),
-                        onSelected: (s) {
-                          setState(() => _speed = s);
-                          c.setPlaybackSpeed(s);
-                        },
-                        itemBuilder: (_) => [
-                          for (final s in _speeds)
-                            PopupMenuItem(
-                                value: s,
-                                child: Text('$s×',
-                                    style: const TextStyle(fontSize: 13))),
-                        ],
-                      ),
-                    ),
-                    Positioned(
-                      left: 16,
-                      right: 16,
-                      bottom: 12,
-                      child: Row(
-                        children: [
-                          IconButton(
-                            icon: Icon(
-                              c.value.isPlaying
-                                  ? Icons.pause
-                                  : Icons.play_arrow,
-                              color: Colors.white,
+                      left: 0,
+                      right: 0,
+                      bottom: 0,
+                      child: AnimatedOpacity(
+                        opacity: _controls ? 1 : 0,
+                        duration: const Duration(milliseconds: 150),
+                        child: IgnorePointer(
+                          ignoring: !_controls,
+                          child: Container(
+                            color: Colors.black54,
+                            padding: EdgeInsets.only(
+                                left: 4,
+                                right: 0,
+                                top: 4,
+                                bottom:
+                                    MediaQuery.paddingOf(context).bottom + 4),
+                            child: Row(
+                              children: [
+                                IconButton(
+                                  icon: Icon(
+                                      c.value.isPlaying
+                                          ? Icons.pause
+                                          : Icons.play_arrow,
+                                      color: Colors.white),
+                                  onPressed: _togglePlay,
+                                ),
+                                Expanded(
+                                  child: VideoProgressIndicator(
+                                    c,
+                                    allowScrubbing: true,
+                                    colors: VideoProgressColors(
+                                        playedColor: accent),
+                                  ),
+                                ),
+                                const SizedBox(width: 6),
+                                Text(
+                                  '${_fmt(c.value.position)} / ${_fmt(c.value.duration)}',
+                                  style: const TextStyle(
+                                      color: Colors.white70, fontSize: 10),
+                                ),
+                                PopupMenuButton<double>(
+                                  icon: Text('$_speed×',
+                                      style: const TextStyle(
+                                          color: Colors.white, fontSize: 12)),
+                                  onSelected: (s) {
+                                    setState(() => _speed = s);
+                                    c.setPlaybackSpeed(s);
+                                  },
+                                  itemBuilder: (_) => [
+                                    for (final s in _speeds)
+                                      PopupMenuItem(
+                                          value: s,
+                                          child: Text('$s×',
+                                              style: const TextStyle(
+                                                  fontSize: 13))),
+                                  ],
+                                ),
+                                IconButton(
+                                  icon: Icon(
+                                      _fullscreen
+                                          ? Icons.fullscreen_exit
+                                          : Icons.fullscreen,
+                                      color: Colors.white),
+                                  onPressed: () =>
+                                      _setFullscreen(!_fullscreen),
+                                ),
+                              ],
                             ),
-                            onPressed: () => setState(() {
-                              c.value.isPlaying ? c.pause() : c.play();
-                            }),
                           ),
-                          Expanded(
-                            child: VideoProgressIndicator(
-                              c,
-                              allowScrubbing: true,
-                              colors: VideoProgressColors(playedColor: accent),
-                            ),
-                          ),
-                          Text(
-                            '${_fmt(c.value.position)} / ${_fmt(c.value.duration)}',
-                            style: const TextStyle(
-                                color: Colors.white70, fontSize: 10),
-                          ),
-                        ],
+                        ),
                       ),
                     ),
                   ],

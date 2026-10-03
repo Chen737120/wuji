@@ -29,7 +29,8 @@ class _ManagePageState extends State<ManagePage> {
   }
 
   void _reload() {
-    _items = _repo.byKind(widget.kind, includeInactive: true);
+    // 用户反馈：删除后就不需要再看到（停用项不再列出；历史课快照不受影响）
+    _items = _repo.byKind(widget.kind, includeInactive: false);
   }
 
   Future<void> _rename(TaxonomyItem item) async {

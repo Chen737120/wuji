@@ -43,28 +43,79 @@ class TrendBars extends StatelessWidget {
           // 柱区高度随卡片宽度自适应（有封面/大屏时更高，夹在 56~112 之间）
           final barH =
               (constraints.maxWidth * 0.32).clamp(56.0, 112.0).toDouble();
+          // 纵轴刻度（分钟）：0 与峰值均分 4 段，左侧标签 + 横向网格线
+          final ticks = <int>[
+            0,
+            (peak * 0.25).round(),
+            (peak * 0.5).round(),
+            (peak * 0.75).round(),
+            peak,
+          ];
+          const labelW = 30.0;
           return SizedBox(
             height: barH,
             child: Row(
-              crossAxisAlignment: CrossAxisAlignment.end,
+              crossAxisAlignment: CrossAxisAlignment.stretch,
               children: [
-                for (final p in points)
-                  Expanded(
-                    child: Padding(
-                      padding: const EdgeInsets.symmetric(horizontal: 1.5),
-                      child: Container(
-                        height: p.minutes == 0
-                            ? 2
-                            : (p.minutes / (peak == 0 ? 1 : peak)) * barH,
-                        decoration: BoxDecoration(
-                          color: p.minutes > 0 && p.minutes == peak
-                              ? accent
-                              : AppColors.hairline,
-                          borderRadius: BorderRadius.circular(2),
-                        ),
-                      ),
-                    ),
+                SizedBox(
+                  width: labelW,
+                  child: Column(
+                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                    crossAxisAlignment: CrossAxisAlignment.end,
+                    children: [
+                      for (final t in ticks.reversed)
+                        Text('$t',
+                            style: TextStyle(
+                                fontSize: 8, color: AppColors.faint)),
+                    ],
                   ),
+                ),
+                const SizedBox(width: 6),
+                Expanded(
+                  child: Stack(
+                    children: [
+                      Column(
+                        children: [
+                          for (final _ in ticks)
+                            Expanded(
+                              child: Container(
+                                decoration: BoxDecoration(
+                                  border: Border(
+                                    bottom: BorderSide(
+                                        color: AppColors.hairline, width: 0.5),
+                                  ),
+                                ),
+                              ),
+                            ),
+                        ],
+                      ),
+                      Row(
+                        crossAxisAlignment: CrossAxisAlignment.end,
+                        children: [
+                          for (final p in points)
+                            Expanded(
+                              child: Padding(
+                                padding:
+                                    const EdgeInsets.symmetric(horizontal: 1.5),
+                                child: Container(
+                                  height: p.minutes == 0
+                                      ? 2
+                                      : (p.minutes / (peak == 0 ? 1 : peak)) *
+                                          barH,
+                                  decoration: BoxDecoration(
+                                    color: p.minutes > 0 && p.minutes == peak
+                                        ? accent
+                                        : AppColors.hairline,
+                                    borderRadius: BorderRadius.circular(2),
+                                  ),
+                                ),
+                              ),
+                            ),
+                        ],
+                      ),
+                    ],
+                  ),
+                ),
               ],
             ),
           );
@@ -73,7 +124,9 @@ class TrendBars extends StatelessWidget {
         // 终审 C4：按月只有 6 个点，skip(length-7) 会抛 RangeError；≤7 全显
         Row(
           mainAxisAlignment: MainAxisAlignment.spaceBetween,
+          // 与柱区左缘对齐（让出左侧刻度列）
           children: [
+            const SizedBox(width: 36),
             for (final p in (points.length > 7
                 ? points.sublist(points.length - 7)
                 : points))

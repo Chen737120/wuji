@@ -106,16 +106,20 @@ void main() {
     await tester.pumpWidget(host(saver));
     await tester.pumpAndSettle();
 
-    // 默认近1月：只剩 1 节、60 分钟
-    expect(find.text('60'), findsOneWidget);
+    // 默认近1月：只剩 1 节、60 分钟（时长卡字号 20；与 y 轴刻度 8 号区分）
+    final minutesCard = find.byWidgetPredicate(
+        (w) => w is Text && w.data == '60' && w.style?.fontSize == 20.0);
+    expect(minutesCard, findsOneWidget);
     // 切到全部：3 节
     await tester.tap(find.text('全部'));
     await tester.pumpAndSettle();
     expect(find.text('3'), findsWidgets);
-    expect(find.text('240'), findsOneWidget); // 时长 60 + 2节×90
+    final totalCard = find.byWidgetPredicate(
+        (w) => w is Text && w.data == '240' && w.style?.fontSize == 20.0);
+    expect(totalCard, findsOneWidget); // 时长 60 + 2节×90
     // 切回近1月
     await tester.tap(find.text('近1月'));
     await tester.pumpAndSettle();
-    expect(find.text('60'), findsOneWidget);
+    expect(minutesCard, findsOneWidget);
   });
 }

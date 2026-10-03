@@ -61,6 +61,18 @@ class Exporter {
         if (cancelled?.call() ?? false) throw ExportCancelled();
       }
 
+      // 2.5) 封面：thumbs/<uuid>.jpg 原相对路径入包（清单 thumbName 可直接命中，
+      //      导入后封面不丢）
+      final thumbNames = <String>{
+        for (final m in media)
+          if (m.thumbName != null) m.thumbName!,
+      };
+      for (final tn in thumbNames) {
+        if (!await _store.exists(tn)) continue;
+        final bytes = await _store.readBytes(tn);
+        encoder.addArchiveFile(ar.ArchiveFile(tn, bytes.length, bytes));
+      }
+
       // 3) 总表
       final counts = <String, int>{};
       for (final r in records) {

@@ -80,6 +80,8 @@ class _TextSheetState extends State<_TextSheet> {
                     child: TextField(
                       controller: _controller,
                       autofocus: true,
+                      style: const TextStyle(
+                          color: AppColors.secondary), // 输入文字用浅灰
                       decoration: InputDecoration(
                         hintText: widget.hint.isEmpty ? widget.title : widget.hint,
                         filled: true,
