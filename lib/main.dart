@@ -208,7 +208,10 @@ class _AppRootState extends State<AppRoot> {
             pages: const [StatsPage(), RecordsPage()],
             onFabPressed: () {
               _navigatorKey.currentState?.push(
-                MaterialPageRoute(builder: (_) => const RecordFormPage()),
+                MaterialPageRoute(
+                    builder: (_) => RecordFormPage(
+                        // 日历里选中的天直接作为新增默认日期
+                        initialDate: CalendarSelection.selectedDay)),
               ).then((_) => ReloadBus.instance.bump());
               // 保存/取消都可能改变数据；回来后让两个页面自行刷新
             },

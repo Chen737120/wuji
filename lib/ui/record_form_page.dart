@@ -20,10 +20,12 @@ import 'sheets/text_sheet.dart';
 
 /// 新增/编辑课（规格 §3.4）：仿「舞动时光」单页表单。
 class RecordFormPage extends StatefulWidget {
-  const RecordFormPage({super.key, this.existing, this.importer});
+  const RecordFormPage(
+      {super.key, this.existing, this.importer, this.initialDate});
 
   final ClassRecord? existing; // 编辑模式
   final MediaImporter? importer; // 测试注入；默认 PluginMediaImporter
+  final DateTime? initialDate; // 新增时的默认日期（如日历选中的那天）
 
   @override
   State<RecordFormPage> createState() => _RecordFormPageState();
@@ -60,7 +62,7 @@ class _RecordFormPageState extends State<RecordFormPage> {
       _studio = e.studioName == null ? null : _fakeItem(TaxonomyKind.studio, e.studioName!);
       _loadExistingMedia();
     } else {
-      _date = DateTime.now();
+      _date = widget.initialDate ?? DateTime.now();
     }
   }
 

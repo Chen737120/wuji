@@ -10,6 +10,7 @@ import '../services/abs_path_cache.dart';
 import '../services/archive_fs.dart' show MediaPathResolver;
 import '../theme.dart';
 import 'detail_page.dart';
+import 'sheets/date_sheet.dart';
 
 /// 卡片标题：感受第一行；未写则「M/D 舞种课」（无舞种「M/D 舞蹈课」）。
 String recordTitle(ClassRecord r) {
@@ -135,16 +136,14 @@ class _RecordsPageState extends State<RecordsPage> {
                 covers: _calendarCovers(),
                 resolver: context.read<MediaPathResolver?>(),
                 selectedDay: _selectedDay,
-                onPrev: () => setState(() {
-                  _calendarMonth =
-                      DateTime(_calendarMonth.year, _calendarMonth.month - 1);
-                }),
-                onNext: () => setState(() {
-                  _calendarMonth =
-                      DateTime(_calendarMonth.year, _calendarMonth.month + 1);
+                onMonthChanged: (m) => setState(() {
+                  _calendarMonth = m;
+                  _selectedDay = null;
+                  CalendarSelection.selectedDay = null;
                 }),
                 onDayTap: (d) => setState(() {
                   _selectedDay = _selectedDay == d ? null : d;
+                  CalendarSelection.selectedDay = _selectedDay;
                 }),
               ),
             if (_selectedDay != null) _filterBar(),
@@ -260,17 +259,23 @@ class _RecordsPageState extends State<RecordsPage> {
   }
 }
 
-/// 记录页日历：有课的日期用第一个视频封面做底图，
-/// 格子随宽度自适应（近正方形），日期角标叠在封面左下角。
-class _Calendar extends StatelessWidget {
+
+/// 日历当前选中的日期：FAB 新增记录时作为默认日期（App 内存态，不持久化）。
+class CalendarSelection {
+  CalendarSelection._();
+  static DateTime? selectedDay;
+}
+
+/// 记录页日历：左右滑动切月、点顶部年月跳转；有课的日期用第一个视频
+/// 封面做底图（缩小居中不重叠），背景衬当月份数字水印。
+class _Calendar extends StatefulWidget {
   const _Calendar({
     required this.month,
     required this.markedDays,
     required this.covers,
     required this.resolver,
     required this.selectedDay,
-    required this.onPrev,
-    required this.onNext,
+    required this.onMonthChanged,
     required this.onDayTap,
   });
 
@@ -279,19 +284,67 @@ class _Calendar extends StatelessWidget {
   final Map<int, String> covers;
   final MediaPathResolver? resolver;
   final DateTime? selectedDay;
-  final VoidCallback onPrev;
-  final VoidCallback onNext;
+  final ValueChanged<DateTime> onMonthChanged;
   final ValueChanged<DateTime> onDayTap;
 
   @override
-  Widget build(BuildContext context) {
-    final today = DateTime.now();
-    final first = DateTime(month.year, month.month, 1);
-    final daysInMonth = DateTime(month.year, month.month + 1, 0).day;
-    // 周一首列：Mon=1..Sun=7
-    final leadingBlanks = (first.weekday + 6) % 7;
-    final accent = Theme.of(context).colorScheme.primary;
+  State<_Calendar> createState() => _CalendarState();
+}
 
+class _CalendarState extends State<_Calendar> {
+  late PageController _pc;
+  late DateTime _shown;
+
+  static int _indexOf(DateTime m) => (m.year - 2000) * 12 + (m.month - 1);
+  static DateTime _monthOf(int page) => DateTime(2000, page + 1);
+
+  @override
+  void initState() {
+    super.initState();
+    _shown = widget.month;
+    _pc = PageController(initialPage: _indexOf(_shown));
+  }
+
+  @override
+  void didUpdateWidget(covariant _Calendar old) {
+    super.didUpdateWidget(old);
+    if (widget.month != _shown) {
+      _shown = widget.month;
+      _pc.jumpToPage(_indexOf(_shown));
+    }
+  }
+
+  @override
+  void dispose() {
+    _pc.dispose();
+    super.dispose();
+  }
+
+  void _go(int delta) {
+    final m = DateTime(_shown.year, _shown.month + delta);
+    setState(() => _shown = m);
+    widget.onMonthChanged(m);
+    _pc.animateToPage(_indexOf(m),
+        duration: const Duration(milliseconds: 250), curve: Curves.ease);
+  }
+
+  /// 点顶部年月：弹日期弹层，跳到所选月份并选中该天
+  Future<void> _pickMonthViaSheet() async {
+    final picked =
+        await showDateSheet(context, initial: widget.selectedDay ?? _shown);
+    if (picked == null || !mounted) return;
+    final m = DateTime(picked.year, picked.month);
+    if (m != _shown) {
+      setState(() => _shown = m);
+      widget.onMonthChanged(m);
+      _pc.jumpToPage(_indexOf(m));
+    }
+    widget.onDayTap(picked);
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final accent = Theme.of(context).colorScheme.primary;
     return Padding(
       padding: const EdgeInsets.fromLTRB(16, 4, 16, 8),
       child: Column(
@@ -301,12 +354,33 @@ class _Calendar extends StatelessWidget {
             children: [
               IconButton(
                   icon: const Icon(Icons.chevron_left, size: 18),
-                  onPressed: onPrev),
-              Text('${month.year}年${month.month}月',
-                  style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w600)),
+                  onPressed: () => _go(-1)),
+              GestureDetector(
+                onTap: _pickMonthViaSheet,
+                child: Container(
+                  padding:
+                      const EdgeInsets.symmetric(horizontal: 10, vertical: 3),
+                  decoration: BoxDecoration(
+                    color: Colors.white,
+                    borderRadius: BorderRadius.circular(10),
+                    border: Border.all(color: AppColors.hairline),
+                  ),
+                  child: Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Text('${_shown.year}年${_shown.month}月',
+                          style: const TextStyle(
+                              fontSize: 13, fontWeight: FontWeight.w600)),
+                      const SizedBox(width: 4),
+                      Icon(Icons.expand_more,
+                          size: 15, color: AppColors.secondary),
+                    ],
+                  ),
+                ),
+              ),
               IconButton(
                   icon: const Icon(Icons.chevron_right, size: 18),
-                  onPressed: onNext),
+                  onPressed: () => _go(1)),
             ],
           ),
           Row(
@@ -315,126 +389,168 @@ class _Calendar extends StatelessWidget {
                 Expanded(
                   child: Center(
                       child: Text(w,
-                          style:
-                              TextStyle(fontSize: 10, color: AppColors.faint))),
+                          style: TextStyle(
+                              fontSize: 10, color: AppColors.faint))),
                 ),
             ],
           ),
           const SizedBox(height: 2),
-          GridView.count(
-            crossAxisCount: 7,
-            shrinkWrap: true,
-            physics: const NeverScrollableScrollPhysics(),
-            childAspectRatio: 0.95, // 近正方形格子，封面可读
-            children: [
-              for (var i = 0; i < leadingBlanks; i++) const SizedBox(),
-              for (var day = 1; day <= daysInMonth; day++)
-                Builder(builder: (context) {
-                  final d = DateTime(month.year, month.month, day);
-                  final isToday = today.year == d.year &&
-                      today.month == d.month &&
-                      today.day == d.day;
-                  final isSelected = selectedDay == d;
-                  final hasClass = markedDays.contains(day);
-                  final cover = covers[day];
-                  return GestureDetector(
-                    onTap: () => onDayTap(d),
-                    child: cover == null
-                        ? Column(
-                            mainAxisAlignment: MainAxisAlignment.center,
-                            children: [
-                              Container(
-                                width: 26,
-                                height: 26,
-                                alignment: Alignment.center,
-                                decoration: BoxDecoration(
-                                  shape: BoxShape.circle,
-                                  color: isSelected
-                                      ? accent
-                                      : (isToday
-                                          ? accent.withValues(alpha: .15)
-                                          : null),
-                                ),
-                                child: Text('$day',
-                                    style: TextStyle(
-                                        fontSize: 11,
-                                        color: isSelected
-                                            ? Colors.white
-                                            : AppColors.ink,
-                                        fontWeight: isToday || isSelected
-                                            ? FontWeight.w700
-                                            : FontWeight.w400)),
-                              ),
-                              SizedBox(
-                                height: 4,
-                                child: hasClass
-                                    ? CircleAvatar(
-                                        radius: 2, backgroundColor: accent)
-                                    : null,
-                              ),
-                            ],
-                          )
-                        : _coverCell(day, cover, isSelected, isToday, accent),
-                  );
-                }),
-            ],
-          ),
+          LayoutBuilder(builder: (context, constraints) {
+            final cellH = constraints.maxWidth / 7 / 0.95; // 近正方形格子
+            return SizedBox(
+              height: cellH * 6,
+              child: PageView.builder(
+                controller: _pc,
+                onPageChanged: (page) {
+                  final m = _monthOf(page);
+                  if (m != _shown) {
+                    setState(() => _shown = m);
+                    widget.onMonthChanged(m);
+                  }
+                },
+                itemBuilder: (context, page) =>
+                    _monthPage(_monthOf(page), accent),
+              ),
+            );
+          }),
         ],
       ),
     );
   }
 
-  /// 封面底图格子：图片铺满 + 日期角标 + 今天/选中描边。
-  Widget _coverCell(
-      int day, String rel, bool isSelected, bool isToday, Color accent) {
+  Widget _monthPage(DateTime month, Color accent) {
+    final today = DateTime.now();
+    final first = DateTime(month.year, month.month, 1);
+    final daysInMonth = DateTime(month.year, month.month + 1, 0).day;
+    // 周一首列：Mon=1..Sun=7
+    final leadingBlanks = (first.weekday + 6) % 7;
+
     return Stack(
-      fit: StackFit.expand,
       children: [
-        FutureBuilder<String?>(
-          future: AbsPathCache.resolve(resolver, rel),
-          builder: (context, snap) {
-            final path = snap.data;
-            return ClipRRect(
-              borderRadius: BorderRadius.circular(8),
-              child: Container(
-                color: AppColors.hairline,
-                child: path == null
-                    ? null
-                    : Image.file(File(path),
-                        fit: BoxFit.cover,
-                        errorBuilder: (_, _, _) => const SizedBox.shrink()),
-              ),
-            );
-          },
+        // 当月份数字水印（衬底）
+        Center(
+          child: Text('${month.month}',
+              style: TextStyle(
+                  fontSize: 150,
+                  fontWeight: FontWeight.w900,
+                  color: accent.withValues(alpha: .06))),
         ),
-        if (isSelected || isToday)
-          Positioned.fill(
-            child: Container(
-              decoration: BoxDecoration(
-                borderRadius: BorderRadius.circular(8),
-                border: Border.all(
-                    color: isSelected ? accent : accent.withValues(alpha: .7),
-                    width: 2),
-              ),
-            ),
-          ),
-        Positioned(
-          left: 3,
-          bottom: 3,
-          child: Container(
-            padding: const EdgeInsets.symmetric(horizontal: 4),
-            decoration: BoxDecoration(
-              color: isSelected ? accent : Colors.black54,
-              borderRadius: BorderRadius.circular(6),
-            ),
-            child: Text('$day',
-                style: const TextStyle(
-                    fontSize: 10,
-                    fontWeight: FontWeight.w700,
-                    color: Colors.white)),
-          ),
+        GridView.count(
+          crossAxisCount: 7,
+          shrinkWrap: true,
+          physics: const NeverScrollableScrollPhysics(),
+          childAspectRatio: 0.95,
+          padding: EdgeInsets.zero,
+          children: [
+            for (var i = 0; i < leadingBlanks; i++) const SizedBox(),
+            for (var day = 1; day <= daysInMonth; day++)
+              Builder(builder: (context) {
+                final d = DateTime(month.year, month.month, day);
+                final isToday = today.year == d.year &&
+                    today.month == d.month &&
+                    today.day == d.day;
+                final isSelected = widget.selectedDay == d;
+                final hasClass = widget.markedDays.contains(day);
+                final cover = widget.covers[day];
+                return GestureDetector(
+                  behavior: HitTestBehavior.opaque,
+                  onTap: () => widget.onDayTap(d),
+                  child: cover == null
+                      ? Column(
+                          mainAxisAlignment: MainAxisAlignment.center,
+                          children: [
+                            Container(
+                              width: 26,
+                              height: 26,
+                              alignment: Alignment.center,
+                              decoration: BoxDecoration(
+                                shape: BoxShape.circle,
+                                color: isSelected
+                                    ? accent
+                                    : (isToday
+                                        ? accent.withValues(alpha: .15)
+                                        : null),
+                              ),
+                              child: Text('$day',
+                                  style: TextStyle(
+                                      fontSize: 11,
+                                      color: isSelected
+                                          ? Colors.white
+                                          : AppColors.ink,
+                                      fontWeight: isToday || isSelected
+                                          ? FontWeight.w700
+                                          : FontWeight.w400)),
+                            ),
+                            SizedBox(
+                              height: 4,
+                              child: hasClass
+                                  ? CircleAvatar(
+                                      radius: 2, backgroundColor: accent)
+                                  : null,
+                            ),
+                          ],
+                        )
+                      : _coverCell(day, cover, isSelected, isToday, accent),
+                );
+              }),
+          ],
         ),
       ],
+    );
+  }
+
+  /// 封面底图格子：内缩不重叠、数字居中叠在封面上。
+  Widget _coverCell(
+      int day, String rel, bool isSelected, bool isToday, Color accent) {
+    return Padding(
+      padding: const EdgeInsets.all(4),
+      child: Stack(
+        fit: StackFit.expand,
+        children: [
+          FutureBuilder<String?>(
+            future: AbsPathCache.resolve(widget.resolver, rel),
+            builder: (context, snap) {
+              final path = snap.data;
+              return ClipRRect(
+                borderRadius: BorderRadius.circular(10),
+                child: Container(
+                  color: AppColors.hairline,
+                  child: path == null
+                      ? null
+                      : Image.file(File(path),
+                          fit: BoxFit.cover,
+                          errorBuilder: (_, _, _) => const SizedBox.shrink()),
+                ),
+              );
+            },
+          ),
+          if (isSelected || isToday)
+            Positioned.fill(
+              child: Container(
+                decoration: BoxDecoration(
+                  borderRadius: BorderRadius.circular(10),
+                  border: Border.all(
+                      color: isSelected ? accent : accent.withValues(alpha: .7),
+                      width: 2),
+                ),
+              ),
+            ),
+          Center(
+            child: Container(
+              padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 2),
+              decoration: BoxDecoration(
+                color: isSelected ? accent : Colors.black54,
+                borderRadius: BorderRadius.circular(9),
+              ),
+              child: Text('$day',
+                  style: const TextStyle(
+                      fontSize: 11,
+                      fontWeight: FontWeight.w700,
+                      color: Colors.white)),
+            ),
+          ),
+        ],
+      ),
     );
   }
 }
@@ -577,7 +693,10 @@ class RecordCard extends StatelessWidget {
               ),
             ),
             const SizedBox(width: 10),
-            _CoverThumb(cover: cover, resolver: context.read<MediaPathResolver?>()),
+            // 无附件的课：卡片右侧留白（不显示黑色占位块）
+            if (cover != null)
+              _CoverThumb(
+                  cover: cover, resolver: context.read<MediaPathResolver?>()),
           ],
         ),
       ),
