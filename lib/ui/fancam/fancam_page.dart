@@ -2,12 +2,9 @@ import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:video_player/video_player.dart';
 import '../../editing/crop_box.dart';
-import '../../editing/fab_logic.dart';
 import '../../editing/keyframes.dart';
 import '../../editing/media_source_picker.dart';
-import '../../editing/ffmpeg_probe.dart';
 import 'fancam_preview_page.dart';
-import '../../theme.dart';
 
 /// 舞蹈直拍页（规格 §5.1）：画面最大化＋比例锁定框＋关键帧轨道。
 /// 手势分工：单指拖框体=移动；拖翠芽角柄（右下）=缩放（比例锁定）；

@@ -1,4 +1,3 @@
-import 'package:flutter/foundation.dart';
 
 /// 对比重叠区间计算（规格 §4.2）。
 /// 偏移语义：offset 正值＝我的视频延后（老师先出画）；负值＝我的提前。
