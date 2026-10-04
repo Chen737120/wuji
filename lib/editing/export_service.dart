@@ -99,8 +99,12 @@ class ExportService {
       var rc = await _runner.run(cmd,
           onProgress: onProgress,
           expectedDurationMs: job.expectedDurationMs);
-      // 硬件编码器（mediacodec）在部分设备/尺寸上会失败：回退软编码 mpeg4
+      // 硬件编码器（mediacodec）在部分设备/尺寸上会失败：回退软编码 mpeg4。
+      // 回退前必须删掉第一次运行可能写出的半成品——FFmpeg 遇到已存在
+      // 输出文件会问 Overwrite? 并以退出码 1 退出
       if (rc != 0 && cmd.contains('-c:v h264_mediacodec')) {
+        final half = File(temp);
+        if (half.existsSync()) half.deleteSync();
         cmd = cmd.replaceAll('-c:v h264_mediacodec', '-c:v mpeg4 -q:v 4');
         rc = await _runner.run('$cmd "$temp"',
             onProgress: onProgress,

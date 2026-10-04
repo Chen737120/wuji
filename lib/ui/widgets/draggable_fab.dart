@@ -90,8 +90,8 @@ class _DraggableFabState extends State<DraggableFab> {
         },
         onTap: widget.onTap,
         child: Container(
-          width: 48,
-          height: 48,
+          width: _ballSize.width,
+          height: _ballSize.height,
           decoration: BoxDecoration(
             color: accent,
             shape: BoxShape.circle,
@@ -106,7 +106,7 @@ class _DraggableFabState extends State<DraggableFab> {
           child: Icon(
             _dragging ? Icons.open_with : Icons.add,
             color: Colors.white,
-            size: _dragging ? 36 : 56,
+            size: _dragging ? 44 : 56,
           ),
         ),
       ),

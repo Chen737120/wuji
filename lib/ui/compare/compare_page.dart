@@ -82,28 +82,27 @@ class _ComparePageState extends State<ComparePage> {
     }
   }
 
-  /// 老师播放器作为时钟主：位置/播放状态/速度变化时同步我的播放器。
-  /// 播放中不做高频 seek（会把我的视频卡成一帧一帧跳），
-  /// 只在暂停微调或漂移超过 400ms 时校正。
-  DateTime _lastSync = DateTime.fromMillisecondsSinceEpoch(0);
-
+  /// 老师播放器作为时钟主。播放期间**完全不做 seek**——
+  /// 高频 seek 会把我的视频卡成一帧一帧跳（真机复现）。
+  /// 两控制器同倍率播放，时钟天然同步；对齐只在播放/拖动/微调时一次性施加。
   void _onTeacherTick() {
     final t = _teacherCtl;
     final m = _mineCtl;
     if (t == null || m == null || !mounted) return;
-    final want = t.value.position - _offset;
-    final drift = (m.value.position - want).inMilliseconds.abs();
     if (t.value.isPlaying != m.value.isPlaying) {
       t.value.isPlaying ? m.play() : m.pause();
     }
-    if (!t.value.isPlaying) {
-      if (drift > 60) m.seekTo(want); // 暂停态：紧跟微调
-      return;
-    }
-    final now = DateTime.now();
-    if (drift > 400 && now.difference(_lastSync).inMilliseconds > 300) {
-      _lastSync = now;
-      m.seekTo(want);
+    if (m.value.playbackSpeed != _speed) m.setPlaybackSpeed(_speed);
+  }
+
+  /// 把我的播放器对齐到老师当前进度（点播放/拖进度/微调时调用）。
+  Future<void> _syncMineToTeacher() async {
+    final t = _teacherCtl;
+    final m = _mineCtl;
+    if (t == null || m == null) return;
+    final want = t.value.position - _offset;
+    if (want >= Duration.zero && want <= m.value.duration) {
+      await m.seekTo(want);
     }
   }
 
@@ -116,8 +115,17 @@ class _ComparePageState extends State<ComparePage> {
   Future<void> _togglePlay() async {
     final t = _teacherCtl;
     if (t == null) return;
-    t.value.isPlaying ? await t.pause() : await t.play();
-    if (mounted) setState(() {}); // 刷新按钮图标
+    if (t.value.isPlaying) {
+      await t.pause();
+      await _mineCtl?.pause();
+      if (mounted) setState(() {});
+      return;
+    }
+    // 播放前一次性对齐起点，随后两路同倍率自然同步
+    await _syncMineToTeacher();
+    await t.play();
+    await _mineCtl?.play();
+    if (mounted) setState(() {});
   }
 
   Future<void> _export() async {
@@ -200,19 +208,50 @@ class _ComparePageState extends State<ComparePage> {
       ),
       body: Column(
               children: [
-                // 双画面（左右同屏）
-                Padding(
-                  padding: const EdgeInsets.symmetric(horizontal: 16),
-                  child: Row(
-                    children: [
-                      Expanded(child: _side(context, t, '老师视频')),
-                      const SizedBox(width: 6),
-                      Expanded(child: _side(context, _mineCtl, '我的视频')),
-                    ],
-                  ),
-                ),
+                // 双画面（左右同屏）；画面微调时放大并叠加固定裁剪框
+                _adjustingFrame
+                    ? Expanded(
+                        child: Padding(
+                          padding: const EdgeInsets.symmetric(horizontal: 16),
+                          child: Row(
+                            children: [
+                              Expanded(
+                                  child: _side(context, t, '老师视频',
+                                      adjusting: true,
+                                      transform: _left,
+                                      selected: _selectedSide == 0,
+                                      onSelect: () =>
+                                          setState(() => _selectedSide = 0),
+                                      onTransformed: () => setState(() {}))),
+                              const SizedBox(width: 6),
+                              Expanded(
+                                  child: _side(context, _mineCtl, '我的视频',
+                                      adjusting: true,
+                                      transform: _right,
+                                      selected: _selectedSide == 1,
+                                      onSelect: () =>
+                                          setState(() => _selectedSide = 1),
+                                      onTransformed: () => setState(() {}))),
+                            ],
+                          ),
+                        ),
+                      )
+                    : Padding(
+                        padding: const EdgeInsets.symmetric(horizontal: 16),
+                        child: Row(
+                          children: [
+                            Expanded(
+                                child: _side(context, t, '老师视频',
+                                    adjusting: false)),
+                            const SizedBox(width: 6),
+                            Expanded(
+                                child: _side(context, _mineCtl, '我的视频',
+                                    adjusting: false)),
+                          ],
+                        ),
+                      ),
                 const SizedBox(height: 8),
-                // 播放/速度/进度条
+                // 播放/速度/进度条（拖动同时校正两路）
                 Row(
                   children: [
                     IconButton(
@@ -224,11 +263,24 @@ class _ComparePageState extends State<ComparePage> {
                             color: AppColors.ink)),
                     Expanded(
                       child: (t != null && t.value.isInitialized)
-                          ? VideoProgressIndicator(
-                              t,
-                              allowScrubbing: true,
-                              colors: VideoProgressColors(
-                                  playedColor: accent),
+                          ? Slider(
+                              value: t.value.position.inMilliseconds
+                                  .clamp(0, t.value.duration.inMilliseconds)
+                                  .toDouble(),
+                              max: t.value.duration.inMilliseconds
+                                      .toDouble()
+                                      .clamp(1, double.infinity)
+                                      .toDouble(),
+                              onChanged: (ms) async {
+                                final pos = Duration(milliseconds: ms.round());
+                                await t.seekTo(pos);
+                                final want = pos - _offset;
+                                if (!want.isNegative &&
+                                    want <= _mineCtl!.value.duration) {
+                                  await _mineCtl?.seekTo(want);
+                                }
+                                if (mounted) setState(() {});
+                              },
                             )
                           : Container(height: 2, color: AppColors.hairline),
                     ),
@@ -261,63 +313,64 @@ class _ComparePageState extends State<ComparePage> {
                         () => setState(() => _adjustingFrame = true)),
                   ],
                 ),
-                Expanded(
-                  child: Padding(
+                if (_adjustingFrame)
+                  Padding(
                     padding: const EdgeInsets.all(16),
-                    child: _adjustingFrame
-                        ? FrameAdjustView(
-                            left: _left,
-                            right: _right,
-                            teacherCtl: _teacherCtl,
-                            mineCtl: _mineCtl,
-                            selectedSide: _selectedSide,
-                            onSelect: (s) => setState(() => _selectedSide = s),
-                            onLeftChanged: () => setState(() {}),
-                            onRightChanged: () => setState(() {}))
-                        : Column(
-                            children: [
-                              Expanded(
-                                child: AlignView(
-                                  offset: _offset,
-                                  teacherDur: teacherDur,
-                                  myDur: myDur,
-                                  onStep: (v) =>
-                                      setState(() => _offset = v),
-                                  onReset: () => setState(
-                                      () => _offset = Duration.zero),
-                                ),
-                              ),
-                              const SizedBox(height: 8),
-                              // 确认已对齐：确认后导出按钮才可用
-                              FilledButton.icon(
-                                style: FilledButton.styleFrom(
-                                  backgroundColor: _alignedConfirmed
-                                      ? accent
-                                      : Colors.white,
-                                  foregroundColor: _alignedConfirmed
-                                      ? Colors.white
-                                      : AppColors.ink,
-                                  side: _alignedConfirmed
-                                      ? null
-                                      : const BorderSide(
-                                          color: AppColors.hairline),
-                                  shape: const StadiumBorder(),
-                                  padding: const EdgeInsets.symmetric(
-                                      horizontal: 18, vertical: 8),
-                                ),
-                                onPressed: () => setState(
-                                    () => _alignedConfirmed = true),
-                                icon: Icon(_alignedConfirmed
-                                    ? Icons.check_circle
-                                    : Icons.check_circle_outline),
-                                label: Text(
-                                    _alignedConfirmed ? '已确认对齐' : '确认已对齐',
-                                    style: const TextStyle(fontSize: 13)),
-                              ),
-                            ],
+                    child: FrameAdjustView(
+                      left: _left,
+                      right: _right,
+                      selectedSide: _selectedSide,
+                      onSelect: (s) => setState(() => _selectedSide = s),
+                      onLeftChanged: () => setState(() {}),
+                      onRightChanged: () => setState(() {})),
+                  )
+                else
+                  Expanded(
+                    child: Padding(
+                      padding: const EdgeInsets.all(16),
+                      child: Column(
+                        children: [
+                          Expanded(
+                            child: AlignView(
+                              offset: _offset,
+                              teacherDur: teacherDur,
+                              myDur: myDur,
+                              onStep: (v) => setState(() => _offset = v),
+                              onReset: () =>
+                                  setState(() => _offset = Duration.zero),
+                            ),
                           ),
+                          const SizedBox(height: 8),
+                          // 确认已对齐：确认后导出按钮才可用
+                          FilledButton.icon(
+                            style: FilledButton.styleFrom(
+                              backgroundColor: _alignedConfirmed
+                                  ? accent
+                                  : Colors.white,
+                              foregroundColor: _alignedConfirmed
+                                  ? Colors.white
+                                  : AppColors.ink,
+                              side: _alignedConfirmed
+                                  ? null
+                                  : const BorderSide(
+                                      color: AppColors.hairline),
+                              shape: const StadiumBorder(),
+                              padding: const EdgeInsets.symmetric(
+                                  horizontal: 18, vertical: 8),
+                            ),
+                            onPressed: () =>
+                                setState(() => _alignedConfirmed = true),
+                            icon: Icon(_alignedConfirmed
+                                ? Icons.check_circle
+                                : Icons.check_circle_outline),
+                            label: Text(
+                                _alignedConfirmed ? '已确认对齐' : '确认已对齐',
+                                style: const TextStyle(fontSize: 13)),
+                          ),
+                        ],
+                      ),
+                    ),
                   ),
-                ),
                 // 音源选择（导出前可切）
                 SafeArea(
                   child: Padding(
@@ -392,28 +445,120 @@ class _ComparePageState extends State<ComparePage> {
     );
   }
 
-  Widget _side(BuildContext context, VideoPlayerController? ctl, String label) {
+  /// 单侧画面。非微调：小窗播放。画面微调：撑满＋固定裁剪框，
+  /// 手势改变该侧 SideTransform（框不动、框内内容平移/缩放）。
+  Widget _side(
+    BuildContext context,
+    VideoPlayerController? ctl,
+    String label, {
+    bool adjusting = false,
+    SideTransform? transform,
+    bool selected = false,
+    VoidCallback? onSelect,
+    VoidCallback? onTransformed,
+  }) {
+    final ready = ctl != null && ctl.value.isInitialized;
+    if (!adjusting || transform == null) {
+      return Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(label, style: TextStyle(fontSize: 10, color: AppColors.faint)),
+          const SizedBox(height: 4),
+          Container(
+            height: 110,
+            decoration: BoxDecoration(
+              color: AppColors.ink,
+              borderRadius: BorderRadius.circular(10),
+            ),
+            alignment: Alignment.center,
+            child: ready
+                ? ClipRRect(
+                    borderRadius: BorderRadius.circular(10),
+                    child: AspectRatio(
+                      aspectRatio: ctl.value.aspectRatio,
+                      child: VideoPlayer(ctl),
+                    ),
+                  )
+                : const Icon(Icons.play_arrow, color: AppColors.bg, size: 30),
+          ),
+        ],
+      );
+    }
+    // 画面微调态
+    final accent = Theme.of(context).colorScheme.primary;
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        Text(label, style: TextStyle(fontSize: 10, color: AppColors.faint)),
+        Text(label, style: const TextStyle(fontSize: 10, color: AppColors.faint)),
         const SizedBox(height: 4),
-        Container(
-          height: 110,
-          decoration: BoxDecoration(
-            color: AppColors.ink,
-            borderRadius: BorderRadius.circular(10),
+        Expanded(
+          child: GestureDetector(
+            behavior: HitTestBehavior.opaque,
+            onTap: onSelect?.call,
+            onScaleStart: (_) => onSelect?.call(),
+            onScaleUpdate: (d) {
+              if (d.pointerCount >= 2) {
+                transform.scale =
+                    (transform.scale * d.scale).clamp(1.0, 4.0);
+              } else {
+                transform.pan = Offset(
+                  (transform.pan.dx - d.focalPointDelta.dx / 200)
+                      .clamp(-1.0, 1.0),
+                  (transform.pan.dy + d.focalPointDelta.dy / 200)
+                      .clamp(-1.0, 1.0),
+                );
+              }
+              onTransformed?.call();
+            },
+            child: Container(
+              decoration: BoxDecoration(
+                color: AppColors.ink,
+                borderRadius: BorderRadius.circular(12),
+                border: Border.all(
+                    color: selected ? accent : AppColors.hairline,
+                    width: selected ? 2 : 1),
+              ),
+              child: ClipRRect(
+                borderRadius: BorderRadius.circular(11),
+                child: ready
+                    ? Stack(
+                        fit: StackFit.expand,
+                        children: [
+                          // 内容层：按变换平移/缩放（固定裁剪框不动）
+                          LayoutBuilder(builder: (context, box) {
+                            final va = ctl.value.aspectRatio;
+                            double w = box.maxHeight * va;
+                            double h = box.maxHeight;
+                            if (w < box.maxWidth) {
+                              w = box.maxWidth;
+                              h = box.maxWidth / va;
+                            }
+                            return Transform(
+                              alignment: Alignment.center,
+                              transform: Matrix4.identity()
+                                ..translateByDouble(
+                                    transform.pan.dx * w * 0.3,
+                                    transform.pan.dy * h * 0.3,
+                                    0,
+                                    1)
+                                ..scaleByDouble(transform.scale,
+                                    transform.scale, 1, 1),
+                              child: SizedBox(
+                                  width: w,
+                                  height: h,
+                                  child: VideoPlayer(ctl)),
+                            );
+                          }),
+                        ],
+                      )
+                    : const Center(
+                        child: Text('视频加载中…',
+                            style: TextStyle(
+                                fontSize: 10, color: AppColors.faint)),
+                      ),
+              ),
+            ),
           ),
-          alignment: Alignment.center,
-          child: ctl != null && ctl.value.isInitialized
-              ? ClipRRect(
-                  borderRadius: BorderRadius.circular(10),
-                  child: AspectRatio(
-                    aspectRatio: ctl.value.aspectRatio,
-                    child: VideoPlayer(ctl),
-                  ),
-                )
-              : const Icon(Icons.play_arrow, color: AppColors.bg, size: 30),
         ),
       ],
     );
