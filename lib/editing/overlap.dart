@@ -32,6 +32,14 @@ class OverlapCalc {
       end.inMilliseconds - start.inMilliseconds >= 1000;
 }
 
+/// 重叠时长（供导出命令构建复用）。
+Duration overlapLength(Duration teacherDur, Duration myDur, Duration offset) {
+  final s = OverlapCalc.start(offset);
+  var e = OverlapCalc.end(teacherDur, myDur, offset);
+  if (e < s) e = s;
+  return e - s;
+}
+
 /// 微调文案（规格：offset<0 显示"提前"，>0 显示"延后"）。
 String describeOffset(Duration offset) {
   final ms = offset.inMilliseconds.abs();
