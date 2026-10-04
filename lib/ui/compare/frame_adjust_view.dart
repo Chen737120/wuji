@@ -172,7 +172,7 @@ class _SidePreview extends StatelessWidget {
             borderRadius: BorderRadius.circular(9),
             child: ready
                 ? Stack(
-                    fit: StackFit.expand,
+                    alignment: Alignment.center,
                     children: [
                       // 视频画面：按视频比例 cover 填充预览框，随变换平移/缩放
                       LayoutBuilder(builder: (context, box) {

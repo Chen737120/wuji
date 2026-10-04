@@ -17,7 +17,7 @@ class DraggableFab extends StatefulWidget {
 
 class _DraggableFabState extends State<DraggableFab> {
   static const _key = 'fabOffset';
-  static const _ballSize = Size(64, 64);
+  static const _ballSize = Size(96, 96);
 
   Offset _offset = Offset.zero;
   bool _loaded = false;
@@ -106,7 +106,7 @@ class _DraggableFabState extends State<DraggableFab> {
           child: Icon(
             _dragging ? Icons.open_with : Icons.add,
             color: Colors.white,
-            size: _dragging ? 26 : 38,
+            size: _dragging ? 36 : 56,
           ),
         ),
       ),

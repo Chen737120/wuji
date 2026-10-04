@@ -53,6 +53,11 @@ class PluginMediaImporter implements MediaImporter {
 
   @override
   Future<PickResult> pick(BuildContext context, {int max = 30}) async {
+    // 权限已在系统层完成（含「部分照片」）；跳过选择器自带的权限中间页，
+    // 否则 limited 用户每次都要额外点一遍「继续访问部分资源」
+    try {
+      await PhotoManager.setIgnorePermissionCheck(true);
+    } catch (_) {}
     final state = await PhotoManager.requestPermissionExtend();
     // hasAccess 覆盖「已授权」与 Android 14+ 的「仅部分照片」；
     // 只看 isAuth 会把 limited 误判成未授权（系统已允许仍弹引导）

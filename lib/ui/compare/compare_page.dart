@@ -83,17 +83,27 @@ class _ComparePageState extends State<ComparePage> {
   }
 
   /// 老师播放器作为时钟主：位置/播放状态/速度变化时同步我的播放器。
+  /// 播放中不做高频 seek（会把我的视频卡成一帧一帧跳），
+  /// 只在暂停微调或漂移超过 400ms 时校正。
+  DateTime _lastSync = DateTime.fromMillisecondsSinceEpoch(0);
+
   void _onTeacherTick() {
     final t = _teacherCtl;
     final m = _mineCtl;
     if (t == null || m == null || !mounted) return;
     final want = t.value.position - _offset;
     final drift = (m.value.position - want).inMilliseconds.abs();
-    if (drift > 80 && want >= Duration.zero && want <= m.value.duration) {
-      m.seekTo(want);
-    }
     if (t.value.isPlaying != m.value.isPlaying) {
       t.value.isPlaying ? m.play() : m.pause();
+    }
+    if (!t.value.isPlaying) {
+      if (drift > 60) m.seekTo(want); // 暂停态：紧跟微调
+      return;
+    }
+    final now = DateTime.now();
+    if (drift > 400 && now.difference(_lastSync).inMilliseconds > 300) {
+      _lastSync = now;
+      m.seekTo(want);
     }
   }
 

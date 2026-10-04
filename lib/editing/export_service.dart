@@ -2,6 +2,7 @@ import 'dart:async';
 import 'dart:io';
 
 import 'package:ffmpeg_kit_flutter_new_min/ffmpeg_kit.dart';
+import 'package:ffmpeg_kit_flutter_new_min/ffmpeg_kit_config.dart';
 import 'package:ffmpeg_kit_flutter_new_min/ffmpeg_session.dart';
 import 'package:ffmpeg_kit_flutter_new_min/return_code.dart';
 import 'package:ffmpeg_kit_flutter_new_min/statistics.dart';
@@ -92,17 +93,46 @@ class ExportService {
     var moved = false;
     try {
       if (_cancelRequested) throw ExportCancelled();
-      final rc = await _runner.run(
-        '${job.command} "$temp"',
-        onProgress: onProgress,
-        expectedDurationMs: job.expectedDurationMs,
-      );
+      var cmd = '${job.command} "$temp"';
+      var rc = await _runner.run(cmd,
+          onProgress: onProgress,
+          expectedDurationMs: job.expectedDurationMs);
+      // 硬件编码器（mediacodec）在部分设备/尺寸上会失败：回退软编码 mpeg4
+      if (rc != 0 && cmd.contains('-c:v h264_mediacodec')) {
+        cmd = cmd.replaceAll('-c:v h264_mediacodec', '-c:v mpeg4 -q:v 4');
+        rc = await _runner.run('$cmd "$temp"',
+            onProgress: onProgress,
+            expectedDurationMs: job.expectedDurationMs);
+      }
       if (_cancelRequested) throw ExportCancelled();
-      if (rc != 0) throw ExportFailed('FFmpeg 退出码 $rc');
+      if (rc != 0) {
+        // FFmpegKitConfig 在无绑定环境（测试）会抛异步错误，用 zone 兜住
+        var logs = '';
+        await runZonedGuarded(() async {
+          logs = await _lastLogs();
+        }, (e, s) {});
+        throw ExportFailed('FFmpeg 退出码 $rc${logs.isEmpty ? '' : '：$logs'}');
+      }
       moved = true; // 成功：mover 搬进相册并消费临时文件
       return await _mover.moveToGallery(temp, fileName);
     } finally {
       if (!moved) await _mover.cleanTemp(temp); // 失败/取消：清半成品
+    }
+  }
+
+  /// 最近一次 FFmpeg 会话的错误日志（截尾，便于用户回报真实原因）。
+  Future<String> _lastLogs() async {
+    try {
+      final session = await FFmpegKitConfig.getLastCompletedSession();
+      if (session is! FFmpegSession) return '';
+      final String? s = await session.getAllLogsAsString();
+      if (s == null || s.isEmpty) return '';
+      final lines = s.trim().split('\n');
+      return lines.length <= 3
+          ? lines.join(' | ')
+          : lines.sublist(lines.length - 3).join(' | ');
+    } catch (_) {
+      return '';
     }
   }
 
