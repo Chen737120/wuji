@@ -106,6 +106,27 @@ Future<PickedSource?> showVideoSourceSheet(
   return null;
 }
 
+/// 相册单选视频（剪辑入口用）：权限+选择器+originFile 解析一体。
+Future<PickedSource?> pickSingleVideoFromAlbum(BuildContext context, [String? hint]) async {
+  final assets = await AssetPicker.pickAssets(
+    context,
+    pickerConfig: const AssetPickerConfig(
+      maxAssets: 1,
+      requestType: RequestType.video,
+      themeColor: Color(0xFF3FA26F),
+    ),
+  );
+  if (assets == null || assets.isEmpty) return null;
+  final a = assets.single;
+  final file = await a.originFile;
+  if (file == null) return null;
+  return PickedSource(
+    path: file.path,
+    name: a.title ?? '相册视频',
+    duration: a.videoDuration,
+  );
+}
+
 /// 课堂记录选择页入口（规格 §4.1 ①「从舞记课堂选」）：推入选择页。
 Future<PickedSource?> showRecordMediaPicker(BuildContext context) {
   return Navigator.push<PickedSource>(

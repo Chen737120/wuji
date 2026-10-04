@@ -16,6 +16,9 @@ import 'services/thumb_service.dart';
 import 'theme.dart';
 import 'ui/edit_hub_page.dart';
 import 'ui/home_shell.dart';
+import 'ui/fancam/fancam_page.dart';
+import 'ui/compare/compare_page.dart';
+import 'editing/media_source_picker.dart';
 import 'ui/record_form_page.dart';
 import 'ui/records_page.dart';
 import 'ui/stats_page.dart';
@@ -210,12 +213,8 @@ class _AppRootState extends State<AppRoot> {
             pages: [
               const StatsPage(),
               EditHubPage(
-                onFancam: () => _navigatorKey.currentState?.push(
-                  MaterialPageRoute(builder: (_) => const _EditPlaceholder(title: '舞蹈直拍')),
-                ),
-                onCompare: () => _navigatorKey.currentState?.push(
-                  MaterialPageRoute(builder: (_) => const _EditPlaceholder(title: '同屏对比')),
-                ),
+                onFancam: () => _startFancam(),
+                onCompare: () => _startCompare(),
               ),
               const RecordsPage(),
             ],
@@ -233,27 +232,38 @@ class _AppRootState extends State<AppRoot> {
       ),
     );
   }
-}
 
-class _EditPlaceholder extends StatelessWidget {
-  const _EditPlaceholder({required this.title});
-  final String title;
-  @override
-  Widget build(BuildContext context) {
-    return Scaffold(
-      backgroundColor: AppColors.bg,
-      appBar: AppBar(
-        backgroundColor: AppColors.bg,
-        elevation: 0,
-        leading: IconButton(
-            icon: const Icon(Icons.arrow_back, color: AppColors.secondary),
-            onPressed: () => Navigator.pop(context)),
-        title: Text(title,
-            style: const TextStyle(fontSize: 14, fontWeight: FontWeight.w600)),
-      ),
-      body: const Center(
-          child: Text('剪辑功能开发中',
-              style: TextStyle(fontSize: 12, color: AppColors.faint))),
+  /// 舞蹈直拍：先选视频（相册/课堂记录），选中进编辑器。
+  Future<void> _startFancam() async {
+    final nav = _navigatorKey.currentState;
+    if (nav == null) return;
+    final src = await showVideoSourceSheet(
+      nav.context,
+      albumPicker: pickSingleVideoFromAlbum,
+      archivePicker: showRecordMediaPicker,
     );
+    if (src == null || !mounted) return;
+    nav.push(MaterialPageRoute(
+        builder: (_) => FancamPage(source: src)));
+  }
+
+  /// 同屏对比：连选两段视频（老师 → 我的），任一取消即中止。
+  Future<void> _startCompare() async {
+    final nav = _navigatorKey.currentState;
+    if (nav == null) return;
+    final teacher = await showVideoSourceSheet(
+      nav.context,
+      albumPicker: pickSingleVideoFromAlbum,
+      archivePicker: showRecordMediaPicker,
+    );
+    if (teacher == null || !mounted) return;
+    final mine = await showVideoSourceSheet(
+      nav.context,
+      albumPicker: pickSingleVideoFromAlbum,
+      archivePicker: showRecordMediaPicker,
+    );
+    if (mine == null || !mounted) return;
+    nav.push(MaterialPageRoute(
+        builder: (_) => ComparePage(teacher: teacher, mine: mine)));
   }
 }
