@@ -69,10 +69,8 @@ class _FancamPageState extends State<FancamPage> {
   void _setRatio(String r) {
     setState(() {
       _ratio = r;
-      // 比例切换：保持中心，按新比例重设框（宽度基准换算）
-      final oldAspect = _box.w / _box.h;
+      // 比例切换：保持中心，按新比例重设框（h 不变，w=h*newAspect）
       final newAspect = _ratioAspect(r);
-      // 归一化面积近似保持：h 不变则 w=h*newAspect
       var w = _box.h * newAspect;
       var h = _box.h;
       if (w > 1) {
