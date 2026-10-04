@@ -1,4 +1,6 @@
+import 'dart:io';
 import 'package:flutter/material.dart';
+import 'package:video_player/video_player.dart';
 import '../../editing/export_service.dart';
 import '../../editing/fancam_export.dart';
 import '../../editing/keyframes.dart';
@@ -61,7 +63,7 @@ class _FancamPreviewPageState extends State<FancamPreviewPage> {
     try {
       final svc = ExportService(runner: FFmpegKitRunner(), mover: GalleryMover());
       final info = await _probeDur();
-      await svc.run(
+      final rel = await svc.run(
         ExportJob(
             command: _command,
             base: '直拍',
@@ -73,7 +75,11 @@ class _FancamPreviewPageState extends State<FancamPreviewPage> {
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(content: Text('已保存到相册 Movies/wuji/')));
-      Navigator.pop(context); // 回编辑页
+      // 导出成功：原地预览成片（预览确认环节），完成后返回编辑页
+      setState(() {
+        _exportedPath = '/storage/emulated/0/$rel';
+        _exporting = false;
+      });
     } on ExportCancelled {
       if (mounted) setState(() => _exporting = false);
     } catch (e) {
@@ -87,6 +93,8 @@ class _FancamPreviewPageState extends State<FancamPreviewPage> {
 
   Future<int?> _probeDur() async => null; // 时长进度由 T3 选择器补挂；预留
 
+  String? _exportedPath; // 导出成功后的成片路径（预览确认环节）
+
   @override
   Widget build(BuildContext context) {
     final accent = Theme.of(context).colorScheme.primary;
@@ -96,6 +104,51 @@ class _FancamPreviewPageState extends State<FancamPreviewPage> {
                 ? _outHeight * 9 / 16
                 : _outHeight * 3 / 4)
         .round();
+    if (_exportedPath != null) {
+      return Scaffold(
+        backgroundColor: Colors.black,
+        appBar: AppBar(
+          backgroundColor: Colors.black,
+          elevation: 0,
+          leading: IconButton(
+              icon: const Icon(Icons.arrow_back, color: Colors.white),
+              onPressed: () => Navigator.pop(context)),
+          centerTitle: true,
+          title: const Text('成片预览',
+              style: TextStyle(
+                  fontSize: 14,
+                  fontWeight: FontWeight.w600,
+                  color: Colors.white)),
+        ),
+        body: SafeArea(
+          child: Column(
+            children: [
+              Expanded(
+                child: _ResultPreview(path: _exportedPath!),
+              ),
+              Padding(
+                padding: const EdgeInsets.all(12),
+                child: SizedBox(
+                  width: double.infinity,
+                  child: FilledButton(
+                    style: FilledButton.styleFrom(
+                      backgroundColor: AppColors.bg,
+                      foregroundColor: AppColors.ink,
+                      shape: const StadiumBorder(),
+                      padding: const EdgeInsets.symmetric(vertical: 10),
+                    ),
+                    onPressed: () => Navigator.pop(context),
+                    child: const Text('完成',
+                        style: TextStyle(
+                            fontSize: 13, fontWeight: FontWeight.w600)),
+                  ),
+                ),
+              ),
+            ],
+          ),
+        ),
+      );
+    }
     return Scaffold(
       backgroundColor: AppColors.bg,
       appBar: AppBar(
@@ -182,4 +235,57 @@ class _FancamPreviewPageState extends State<FancamPreviewPage> {
           ],
         ),
       );
+}
+
+/// 导出成片预览：自动播放，支持暂停/拖动，作为「预览确认环节」。
+class _ResultPreview extends StatefulWidget {
+  const _ResultPreview({required this.path});
+
+  final String path;
+
+  @override
+  State<_ResultPreview> createState() => _ResultPreviewState();
+}
+
+class _ResultPreviewState extends State<_ResultPreview> {
+  late final VideoPlayerController _ctl;
+
+  @override
+  void initState() {
+    super.initState();
+    _ctl = VideoPlayerController.file(File(widget.path));
+    _ctl.initialize().then((_) {
+      if (!mounted) return;
+      setState(() {});
+      _ctl.play();
+    });
+  }
+
+  @override
+  void dispose() {
+    _ctl.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    if (!_ctl.value.isInitialized) {
+      return const Center(
+          child: Text('成片准备中…',
+              style: TextStyle(fontSize: 11, color: Colors.white54)));
+    }
+    return Column(
+      children: [
+        AspectRatio(
+          aspectRatio: _ctl.value.aspectRatio,
+          child: VideoPlayer(_ctl),
+        ),
+        VideoProgressIndicator(
+          _ctl,
+          allowScrubbing: true,
+          colors: VideoProgressColors(playedColor: AppColors.bg),
+        ),
+      ],
+    );
+  }
 }
