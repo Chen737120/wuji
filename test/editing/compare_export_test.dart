@@ -26,7 +26,7 @@ void main() {
     // 每侧各一个 crop
     expect('crop='.allMatches(cmd).length, 2);
     // 音源=老师（0:a）
-    expect(cmd, contains('-map 0:a'));
+    expect(cmd, contains('-map "[a]"'));
     // 帧率上限
     expect(cmd, contains('fps=30'));
     // 输出时长 = 重叠区间 = [5s, 60s) = 55s
@@ -46,7 +46,7 @@ void main() {
         rightSrc: const Size(1080, 1920),
         audio: 'mine',
         fpsCap: 30);
-    expect(mine, contains('-map 1:a'));
+    expect(mine, contains('-map "[a]"'));
     final none = buildCompareCommand(
         teacherPath: '/t.mp4',
         minePath: '/m.mp4',
@@ -97,8 +97,9 @@ void main() {
       audio: 'teacher',
       fpsCap: 30,
     );
-    // 我的延后 5s（offset>0）：老师从 0 起、我的跳过前 5s（与时间微调文案一致）
-    expect(cmd, contains('-ss 5.000 -i "/m.mp4"'));
-    expect(cmd, contains('-i "/t.mp4"'));
+    // 我的延后 5s（offset>0）：我的流前置 5s 静帧（tpad），老师不动
+    expect(cmd, isNot(contains('-ss')), reason: cmd);
+    expect(cmd, contains('tpad=start_duration=5.000'), reason: cmd);
+    expect(cmd, contains('-t 55.000'), reason: cmd);
   });
 }
