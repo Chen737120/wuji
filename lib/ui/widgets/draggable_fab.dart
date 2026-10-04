@@ -44,6 +44,7 @@ class _DraggableFabState extends State<DraggableFab> {
     }
     if (!mounted) return;
     setState(() {
+      // ignore: use_build_context_synchronously
       _offset = FabLogic.clampIntoScreen(
           restored, MediaQuery.sizeOf(context), _ballSize);
       _loaded = true;

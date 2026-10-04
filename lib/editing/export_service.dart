@@ -65,14 +65,11 @@ class ExportJob {
 /// 导出管线（规格 §6）：统一进度/取消/半成品清理；成功才进相册。
 class ExportService {
   ExportService({
-    required CommandRunner runner,
-    required FileMover mover,
-    DateTime Function()? clock,
+    required this._runner,
+    required this._mover,
+    this._clock,
     Future<Directory> Function()? tempDirProvider,
-  })  : _runner = runner,
-        _mover = mover,
-        _clock = clock,
-        _tempDir = tempDirProvider;
+  })  : _tempDir = tempDirProvider;
 
   final CommandRunner _runner;
   final FileMover _mover;

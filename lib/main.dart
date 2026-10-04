@@ -233,6 +233,7 @@ class _AppRootState extends State<AppRoot> {
       ),
     );
   }
+}
 
 class _EditPlaceholder extends StatelessWidget {
   const _EditPlaceholder({required this.title});
@@ -255,5 +256,4 @@ class _EditPlaceholder extends StatelessWidget {
               style: TextStyle(fontSize: 12, color: AppColors.faint))),
     );
   }
-}
 }

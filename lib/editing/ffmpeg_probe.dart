@@ -71,7 +71,7 @@ Future<bool> hasHardwareH264Encoder() async {
 /// 设备端：读取媒体信息。
 Future<MediaInfo?> probeMedia(String path) async {
   final session = await FFprobeKit.getMediaInformation(path);
-  final info = await session.getMediaInformation();
+  final info = session.getMediaInformation();
   final props = info?.getAllProperties();
   if (props == null) return null;
   return parseMediaInformationJson(jsonEncode(props));
