@@ -5,6 +5,8 @@ import '../../editing/crop_box.dart';
 import '../../editing/fab_logic.dart';
 import '../../editing/keyframes.dart';
 import '../../editing/media_source_picker.dart';
+import '../../editing/ffmpeg_probe.dart';
+import 'fancam_preview_page.dart';
 import '../../theme.dart';
 
 /// 舞蹈直拍页（规格 §5.1）：画面最大化＋比例锁定框＋关键帧轨道。
@@ -170,8 +172,8 @@ class _FancamPageState extends State<FancamPage> {
             child: Transform(
               alignment: Alignment.center,
               transform: Matrix4.identity()
-                ..translate(_previewPan.dx, _previewPan.dy)
-                ..scale(_previewScale),
+                ..translateByDouble(_previewPan.dx, _previewPan.dy, 0, 1)
+                ..scaleByDouble(_previewScale, _previewScale, 1, 1),
               child: Center(
                 child: ctl != null && ctl.value.isInitialized
                     ? AspectRatio(
@@ -309,7 +311,19 @@ class _FancamPageState extends State<FancamPage> {
                             padding: const EdgeInsets.symmetric(
                                 horizontal: 20, vertical: 8),
                           ),
-                          onPressed: () {}, // T8 预览导出接线
+                          onPressed: () {
+                          Navigator.push(
+                            context,
+                            MaterialPageRoute(
+                                builder: (_) => FancamPreviewPage(
+                                    sourcePath: widget.source.path,
+                                    track: _track!,
+                                    srcW: 1080,
+                                    srcH: 1920,
+                                    ratio: _ratio,
+                                    keyframeCount: _track!.frames.length)),
+                          );
+                        },
                           child: const Text('下一步',
                               style: TextStyle(
                                   fontSize: 13, fontWeight: FontWeight.w600)),
@@ -408,4 +422,67 @@ class _KeyframeSlider extends StatelessWidget {
       ],
     );
   }
+}
+
+/// 裁剪叠加层：框外半透明遮罩＋翠芽边框＋右下角柄。
+class _CropOverlayPainter extends CustomPainter {
+  _CropOverlayPainter({
+    required this.box,
+    required this.aspect,
+    required this.accent,
+  });
+
+  final CropBox box; // 归一化
+  final double aspect; // 视频宽高比
+  final Color accent;
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    // 视频在画布中的实际渲染区（AspectRatio 居中）
+    double vw = size.width, vh = size.width / aspect;
+    if (vh > size.height) {
+      vh = size.height;
+      vw = size.height * aspect;
+    }
+    final vx = (size.width - vw) / 2;
+    final vy = (size.height - vh) / 2;
+
+    final bx = vx + box.left * vw;
+    final by = vy + box.top * vh;
+    final bw = box.w * vw;
+    final bh = box.h * vh;
+    final boxRect = Rect.fromLTWH(bx, by, bw, bh);
+
+    // 框外遮罩（even-odd 挖洞）
+    final path = Path()
+      ..addRect(Rect.fromLTWH(0, 0, size.width, size.height))
+      ..addRect(boxRect)
+      ..fillType = PathFillType.evenOdd;
+    canvas.drawPath(path, Paint()..color = Colors.black54);
+
+    // 翠芽边框
+    canvas.drawRect(
+        boxRect,
+        Paint()
+          ..style = PaintingStyle.stroke
+          ..strokeWidth = 2
+          ..color = accent);
+
+    // 右下角柄
+    final handle = Rect.fromCenter(
+        center: boxRect.bottomRight, width: 22, height: 22);
+    canvas.drawCircle(
+        handle.center, 11, Paint()..color = accent);
+    canvas.drawCircle(
+        handle.center,
+        11,
+        Paint()
+          ..style = PaintingStyle.stroke
+          ..strokeWidth = 1.5
+          ..color = Colors.white);
+  }
+
+  @override
+  bool shouldRepaint(covariant _CropOverlayPainter old) =>
+      old.box != box || old.aspect != aspect;
 }

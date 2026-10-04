@@ -1,4 +1,5 @@
 import 'dart:math' as math;
+import 'dart:ui';
 
 /// 直拍框（规格 §5.1）：归一化 0..1 坐标（相对源画面），比例锁定。
 class CropBox {
@@ -103,16 +104,3 @@ class CropBox {
   }
 }
 
-class Offset {
-  const Offset(this.dx, this.dy);
-  final double dx;
-  final double dy;
-}
-
-class Rect {
-  const Rect.fromLTWH(this.left, this.top, this.width, this.height);
-  final double left;
-  final double top;
-  final double width;
-  final double height;
-}

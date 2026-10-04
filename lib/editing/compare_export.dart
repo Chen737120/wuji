@@ -1,62 +1,62 @@
-import 'dart:ui' show Size;
-import '../data/db.dart';
-import 'overlap.dart';
-import 'side_transform.dart';
-
-String _fmtSec(Duration d) =>
-    (d.inMilliseconds / 1000).toStringAsFixed(3);
-
-/// 构建同屏对比导出的 FFmpeg 命令（规格 §4.2）。
-///
-/// 布局：每侧 crop=取样矩形 → scale=-2:720 → hstack=inputs=2。
-/// 时长：重叠区间 `[max(0,offset), min(teacherDur, myDur+offset))`，
-/// 输出 `-t <重叠时长>`；offset>0（我的延后）时老师输入加 `-ss offset`。
-/// 音频：teacher→`-map 0:a`；mine→`-map 1:a`；none→`-an`。
-/// 帧率：`fps=min(30, teacherFps)`。
-String buildCompareCommand({
-  required String teacherPath,
-  required String minePath,
-  required Duration offset,
-  required Duration teacherDur,
-  required Duration myDur,
-  required SideTransform left,
-  required SideTransform right,
-  required Size leftSrc,
-  required Size rightSrc,
-  required String audio, // teacher | mine | none
-  required double fpsCap,
-  int outHeight = 720,
-}) {
-  final lr = left.toSourceRect(leftSrc, outHeight.toDouble());
-  final rr = right.toSourceRect(rightSrc, outHeight.toDouble());
-
-  final teacherFpsCap =
-      fpsCap < 30 ? fpsCap : 30.0;
-
-  // 输入顺序：0=老师（可能带 -ss），1=我的
-  final ssTeacher =
-      offset > Duration.zero ? '-ss ${_fmtSec(offset)} ' : '';
-  final inputs = '${ssTeacher}-i "$teacherPath" -i "$minePath"';
-
-  final filter =
-      '[0:v]crop=${lr.width.round()}:${lr.height.round()}:${lr.left.round()}:${lr.top.round()},scale=-2:$outHeight,setsar=1[v0];'
-      '[1:v]crop=${rr.width.round()}:${rr.height.round()}:${rr.left.round()}:${rr.top.round()},scale=-2:$outHeight,setsar=1[v1];'
-      '[v0][v1]hstack=inputs=2,fps=${_fmtRate(teacherFpsCap)}[v]';
-
-  final audioMap = switch (audio) {
-    'teacher' => '-map 0:a',
-    'mine' => '-map 1:a',
-    _ => '-an',
-  };
-
-  final overlap = overlapLength(teacherDur, myDur, offset);
-
-  return '$inputs -filter_complex "$filter" '
-      '-map "[v]" $audioMap '
-      '-c:v h264_mediacodec -c:a aac -b:a 128k '
-      '-t ${_fmtSec(overlap)} '
-      '-movflags +faststart';
-}
-
-String _fmtRate(double fps) =>
-    fps == fps.roundToDouble() ? fps.toInt().toString() : fps.toStringAsFixed(3);
+i$ssTeacherm$ssTeacherp$ssTeachero$ssTeacherr$ssTeachert$ssTeacher $ssTeacher'$ssTeacherd$ssTeachera$ssTeacherr$ssTeachert$ssTeacher:$ssTeacheru$ssTeacheri$ssTeacher'$ssTeacher $ssTeachers$ssTeacherh$ssTeachero$ssTeacherw$ssTeacher $ssTeacherS$ssTeacheri$ssTeacherz$ssTeachere$ssTeacher;$ssTeacher
+$ssTeacheri$ssTeacherm$ssTeacherp$ssTeachero$ssTeacherr$ssTeachert$ssTeacher $ssTeacher'$ssTeacher.$ssTeacher.$ssTeacher/$ssTeacherd$ssTeachera$ssTeachert$ssTeachera$ssTeacher/$ssTeacherd$ssTeacherb$ssTeacher.$ssTeacherd$ssTeachera$ssTeacherr$ssTeachert$ssTeacher'$ssTeacher;$ssTeacher
+$ssTeacheri$ssTeacherm$ssTeacherp$ssTeachero$ssTeacherr$ssTeachert$ssTeacher $ssTeacher'$ssTeachero$ssTeacherv$ssTeachere$ssTeacherr$ssTeacherl$ssTeachera$ssTeacherp$ssTeacher.$ssTeacherd$ssTeachera$ssTeacherr$ssTeachert$ssTeacher'$ssTeacher;$ssTeacher
+$ssTeacheri$ssTeacherm$ssTeacherp$ssTeachero$ssTeacherr$ssTeachert$ssTeacher $ssTeacher'$ssTeachers$ssTeacheri$ssTeacherd$ssTeachere$ssTeacher_$ssTeachert$ssTeacherr$ssTeachera$ssTeachern$ssTeachers$ssTeacherf$ssTeachero$ssTeacherr$ssTeacherm$ssTeacher.$ssTeacherd$ssTeachera$ssTeacherr$ssTeachert$ssTeacher'$ssTeacher;$ssTeacher
+$ssTeacher
+$ssTeacherS$ssTeachert$ssTeacherr$ssTeacheri$ssTeachern$ssTeacherg$ssTeacher $ssTeacher_$ssTeacherf$ssTeacherm$ssTeachert$ssTeacherS$ssTeachere$ssTeacherc$ssTeacher($ssTeacherD$ssTeacheru$ssTeacherr$ssTeachera$ssTeachert$ssTeacheri$ssTeachero$ssTeachern$ssTeacher $ssTeacherd$ssTeacher)$ssTeacher $ssTeacher=$ssTeacher>$ssTeacher
+$ssTeacher $ssTeacher $ssTeacher $ssTeacher $ssTeacher($ssTeacherd$ssTeacher.$ssTeacheri$ssTeachern$ssTeacherM$ssTeacheri$ssTeacherl$ssTeacherl$ssTeacheri$ssTeachers$ssTeachere$ssTeacherc$ssTeachero$ssTeachern$ssTeacherd$ssTeachers$ssTeacher $ssTeacher/$ssTeacher $ssTeacher1$ssTeacher0$ssTeacher0$ssTeacher0$ssTeacher)$ssTeacher.$ssTeachert$ssTeachero$ssTeacherS$ssTeachert$ssTeacherr$ssTeacheri$ssTeachern$ssTeacherg$ssTeacherA$ssTeachers$ssTeacherF$ssTeacheri$ssTeacherx$ssTeachere$ssTeacherd$ssTeacher($ssTeacher3$ssTeacher)$ssTeacher;$ssTeacher
+$ssTeacher
+$ssTeacher/$ssTeacher/$ssTeacher/$ssTeacher $ssTeacher构$ssTeacher建$ssTeacher同$ssTeacher屏$ssTeacher对$ssTeacher比$ssTeacher导$ssTeacher出$ssTeacher的$ssTeacher $ssTeacherF$ssTeacherF$ssTeacherm$ssTeacherp$ssTeachere$ssTeacherg$ssTeacher $ssTeacher命$ssTeacher令$ssTeacher（$ssTeacher规$ssTeacher格$ssTeacher $ssTeacher§$ssTeacher4$ssTeacher.$ssTeacher2$ssTeacher）$ssTeacher。$ssTeacher
+$ssTeacher/$ssTeacher/$ssTeacher/$ssTeacher
+$ssTeacher/$ssTeacher/$ssTeacher/$ssTeacher $ssTeacher布$ssTeacher局$ssTeacher：$ssTeacher每$ssTeacher侧$ssTeacher $ssTeacherc$ssTeacherr$ssTeachero$ssTeacherp$ssTeacher=$ssTeacher取$ssTeacher样$ssTeacher矩$ssTeacher形$ssTeacher $ssTeacher→$ssTeacher $ssTeachers$ssTeacherc$ssTeachera$ssTeacherl$ssTeachere$ssTeacher=$ssTeacher-$ssTeacher2$ssTeacher:$ssTeacher7$ssTeacher2$ssTeacher0$ssTeacher $ssTeacher→$ssTeacher $ssTeacherh$ssTeachers$ssTeachert$ssTeachera$ssTeacherc$ssTeacherk$ssTeacher=$ssTeacheri$ssTeachern$ssTeacherp$ssTeacheru$ssTeachert$ssTeachers$ssTeacher=$ssTeacher2$ssTeacher。$ssTeacher
+$ssTeacher/$ssTeacher/$ssTeacher/$ssTeacher $ssTeacher时$ssTeacher长$ssTeacher：$ssTeacher重$ssTeacher叠$ssTeacher区$ssTeacher间$ssTeacher $ssTeacher`$ssTeacher[$ssTeacherm$ssTeachera$ssTeacherx$ssTeacher($ssTeacher0$ssTeacher,$ssTeachero$ssTeacherf$ssTeacherf$ssTeachers$ssTeachere$ssTeachert$ssTeacher)$ssTeacher,$ssTeacher $ssTeacherm$ssTeacheri$ssTeachern$ssTeacher($ssTeachert$ssTeachere$ssTeachera$ssTeacherc$ssTeacherh$ssTeachere$ssTeacherr$ssTeacherD$ssTeacheru$ssTeacherr$ssTeacher,$ssTeacher $ssTeacherm$ssTeachery$ssTeacherD$ssTeacheru$ssTeacherr$ssTeacher+$ssTeachero$ssTeacherf$ssTeacherf$ssTeachers$ssTeachere$ssTeachert$ssTeacher)$ssTeacher)$ssTeacher`$ssTeacher，$ssTeacher
+$ssTeacher/$ssTeacher/$ssTeacher/$ssTeacher $ssTeacher输$ssTeacher出$ssTeacher $ssTeacher`$ssTeacher-$ssTeachert$ssTeacher $ssTeacher<$ssTeacher重$ssTeacher叠$ssTeacher时$ssTeacher长$ssTeacher>$ssTeacher`$ssTeacher；$ssTeachero$ssTeacherf$ssTeacherf$ssTeachers$ssTeachere$ssTeachert$ssTeacher>$ssTeacher0$ssTeacher（$ssTeacher我$ssTeacher的$ssTeacher延$ssTeacher后$ssTeacher）$ssTeacher时$ssTeacher老$ssTeacher师$ssTeacher输$ssTeacher入$ssTeacher加$ssTeacher $ssTeacher`$ssTeacher-$ssTeachers$ssTeachers$ssTeacher $ssTeachero$ssTeacherf$ssTeacherf$ssTeachers$ssTeachere$ssTeachert$ssTeacher`$ssTeacher。$ssTeacher
+$ssTeacher/$ssTeacher/$ssTeacher/$ssTeacher $ssTeacher音$ssTeacher频$ssTeacher：$ssTeachert$ssTeachere$ssTeachera$ssTeacherc$ssTeacherh$ssTeachere$ssTeacherr$ssTeacher→$ssTeacher`$ssTeacher-$ssTeacherm$ssTeachera$ssTeacherp$ssTeacher $ssTeacher0$ssTeacher:$ssTeachera$ssTeacher`$ssTeacher；$ssTeacherm$ssTeacheri$ssTeachern$ssTeachere$ssTeacher→$ssTeacher`$ssTeacher-$ssTeacherm$ssTeachera$ssTeacherp$ssTeacher $ssTeacher1$ssTeacher:$ssTeachera$ssTeacher`$ssTeacher；$ssTeachern$ssTeachero$ssTeachern$ssTeachere$ssTeacher→$ssTeacher`$ssTeacher-$ssTeachera$ssTeachern$ssTeacher`$ssTeacher。$ssTeacher
+$ssTeacher/$ssTeacher/$ssTeacher/$ssTeacher $ssTeacher帧$ssTeacher率$ssTeacher：$ssTeacher`$ssTeacherf$ssTeacherp$ssTeachers$ssTeacher=$ssTeacherm$ssTeacheri$ssTeachern$ssTeacher($ssTeacher3$ssTeacher0$ssTeacher,$ssTeacher $ssTeachert$ssTeachere$ssTeachera$ssTeacherc$ssTeacherh$ssTeachere$ssTeacherr$ssTeacherF$ssTeacherp$ssTeachers$ssTeacher)$ssTeacher`$ssTeacher。$ssTeacher
+$ssTeacherS$ssTeachert$ssTeacherr$ssTeacheri$ssTeachern$ssTeacherg$ssTeacher $ssTeacherb$ssTeacheru$ssTeacheri$ssTeacherl$ssTeacherd$ssTeacherC$ssTeachero$ssTeacherm$ssTeacherp$ssTeachera$ssTeacherr$ssTeachere$ssTeacherC$ssTeachero$ssTeacherm$ssTeacherm$ssTeachera$ssTeachern$ssTeacherd$ssTeacher($ssTeacher{$ssTeacher
+$ssTeacher $ssTeacher $ssTeacherr$ssTeachere$ssTeacherq$ssTeacheru$ssTeacheri$ssTeacherr$ssTeachere$ssTeacherd$ssTeacher $ssTeacherS$ssTeachert$ssTeacherr$ssTeacheri$ssTeachern$ssTeacherg$ssTeacher $ssTeachert$ssTeachere$ssTeachera$ssTeacherc$ssTeacherh$ssTeachere$ssTeacherr$ssTeacherP$ssTeachera$ssTeachert$ssTeacherh$ssTeacher,$ssTeacher
+$ssTeacher $ssTeacher $ssTeacherr$ssTeachere$ssTeacherq$ssTeacheru$ssTeacheri$ssTeacherr$ssTeachere$ssTeacherd$ssTeacher $ssTeacherS$ssTeachert$ssTeacherr$ssTeacheri$ssTeachern$ssTeacherg$ssTeacher $ssTeacherm$ssTeacheri$ssTeachern$ssTeachere$ssTeacherP$ssTeachera$ssTeachert$ssTeacherh$ssTeacher,$ssTeacher
+$ssTeacher $ssTeacher $ssTeacherr$ssTeachere$ssTeacherq$ssTeacheru$ssTeacheri$ssTeacherr$ssTeachere$ssTeacherd$ssTeacher $ssTeacherD$ssTeacheru$ssTeacherr$ssTeachera$ssTeachert$ssTeacheri$ssTeachero$ssTeachern$ssTeacher $ssTeachero$ssTeacherf$ssTeacherf$ssTeachers$ssTeachere$ssTeachert$ssTeacher,$ssTeacher
+$ssTeacher $ssTeacher $ssTeacherr$ssTeachere$ssTeacherq$ssTeacheru$ssTeacheri$ssTeacherr$ssTeachere$ssTeacherd$ssTeacher $ssTeacherD$ssTeacheru$ssTeacherr$ssTeachera$ssTeachert$ssTeacheri$ssTeachero$ssTeachern$ssTeacher $ssTeachert$ssTeachere$ssTeachera$ssTeacherc$ssTeacherh$ssTeachere$ssTeacherr$ssTeacherD$ssTeacheru$ssTeacherr$ssTeacher,$ssTeacher
+$ssTeacher $ssTeacher $ssTeacherr$ssTeachere$ssTeacherq$ssTeacheru$ssTeacheri$ssTeacherr$ssTeachere$ssTeacherd$ssTeacher $ssTeacherD$ssTeacheru$ssTeacherr$ssTeachera$ssTeachert$ssTeacheri$ssTeachero$ssTeachern$ssTeacher $ssTeacherm$ssTeachery$ssTeacherD$ssTeacheru$ssTeacherr$ssTeacher,$ssTeacher
+$ssTeacher $ssTeacher $ssTeacherr$ssTeachere$ssTeacherq$ssTeacheru$ssTeacheri$ssTeacherr$ssTeachere$ssTeacherd$ssTeacher $ssTeacherS$ssTeacheri$ssTeacherd$ssTeachere$ssTeacherT$ssTeacherr$ssTeachera$ssTeachern$ssTeachers$ssTeacherf$ssTeachero$ssTeacherr$ssTeacherm$ssTeacher $ssTeacherl$ssTeachere$ssTeacherf$ssTeachert$ssTeacher,$ssTeacher
+$ssTeacher $ssTeacher $ssTeacherr$ssTeachere$ssTeacherq$ssTeacheru$ssTeacheri$ssTeacherr$ssTeachere$ssTeacherd$ssTeacher $ssTeacherS$ssTeacheri$ssTeacherd$ssTeachere$ssTeacherT$ssTeacherr$ssTeachera$ssTeachern$ssTeachers$ssTeacherf$ssTeachero$ssTeacherr$ssTeacherm$ssTeacher $ssTeacherr$ssTeacheri$ssTeacherg$ssTeacherh$ssTeachert$ssTeacher,$ssTeacher
+$ssTeacher $ssTeacher $ssTeacherr$ssTeachere$ssTeacherq$ssTeacheru$ssTeacheri$ssTeacherr$ssTeachere$ssTeacherd$ssTeacher $ssTeacherS$ssTeacheri$ssTeacherz$ssTeachere$ssTeacher $ssTeacherl$ssTeachere$ssTeacherf$ssTeachert$ssTeacherS$ssTeacherr$ssTeacherc$ssTeacher,$ssTeacher
+$ssTeacher $ssTeacher $ssTeacherr$ssTeachere$ssTeacherq$ssTeacheru$ssTeacheri$ssTeacherr$ssTeachere$ssTeacherd$ssTeacher $ssTeacherS$ssTeacheri$ssTeacherz$ssTeachere$ssTeacher $ssTeacherr$ssTeacheri$ssTeacherg$ssTeacherh$ssTeachert$ssTeacherS$ssTeacherr$ssTeacherc$ssTeacher,$ssTeacher
+$ssTeacher $ssTeacher $ssTeacherr$ssTeachere$ssTeacherq$ssTeacheru$ssTeacheri$ssTeacherr$ssTeachere$ssTeacherd$ssTeacher $ssTeacherS$ssTeachert$ssTeacherr$ssTeacheri$ssTeachern$ssTeacherg$ssTeacher $ssTeachera$ssTeacheru$ssTeacherd$ssTeacheri$ssTeachero$ssTeacher,$ssTeacher $ssTeacher/$ssTeacher/$ssTeacher $ssTeachert$ssTeachere$ssTeachera$ssTeacherc$ssTeacherh$ssTeachere$ssTeacherr$ssTeacher $ssTeacher|$ssTeacher $ssTeacherm$ssTeacheri$ssTeachern$ssTeachere$ssTeacher $ssTeacher|$ssTeacher $ssTeachern$ssTeachero$ssTeachern$ssTeachere$ssTeacher
+$ssTeacher $ssTeacher $ssTeacherr$ssTeachere$ssTeacherq$ssTeacheru$ssTeacheri$ssTeacherr$ssTeachere$ssTeacherd$ssTeacher $ssTeacherd$ssTeachero$ssTeacheru$ssTeacherb$ssTeacherl$ssTeachere$ssTeacher $ssTeacherf$ssTeacherp$ssTeachers$ssTeacherC$ssTeachera$ssTeacherp$ssTeacher,$ssTeacher
+$ssTeacher $ssTeacher $ssTeacheri$ssTeachern$ssTeachert$ssTeacher $ssTeachero$ssTeacheru$ssTeachert$ssTeacherH$ssTeachere$ssTeacheri$ssTeacherg$ssTeacherh$ssTeachert$ssTeacher $ssTeacher=$ssTeacher $ssTeacher7$ssTeacher2$ssTeacher0$ssTeacher,$ssTeacher
+$ssTeacher}$ssTeacher)$ssTeacher $ssTeacher{$ssTeacher
+$ssTeacher $ssTeacher $ssTeacherf$ssTeacheri$ssTeachern$ssTeachera$ssTeacherl$ssTeacher $ssTeacherl$ssTeacherr$ssTeacher $ssTeacher=$ssTeacher $ssTeacherl$ssTeachere$ssTeacherf$ssTeachert$ssTeacher.$ssTeachert$ssTeachero$ssTeacherS$ssTeachero$ssTeacheru$ssTeacherr$ssTeacherc$ssTeachere$ssTeacherR$ssTeachere$ssTeacherc$ssTeachert$ssTeacher($ssTeacherl$ssTeachere$ssTeacherf$ssTeachert$ssTeacherS$ssTeacherr$ssTeacherc$ssTeacher,$ssTeacher $ssTeachero$ssTeacheru$ssTeachert$ssTeacherH$ssTeachere$ssTeacheri$ssTeacherg$ssTeacherh$ssTeachert$ssTeacher.$ssTeachert$ssTeachero$ssTeacherD$ssTeachero$ssTeacheru$ssTeacherb$ssTeacherl$ssTeachere$ssTeacher($ssTeacher)$ssTeacher)$ssTeacher;$ssTeacher
+$ssTeacher $ssTeacher $ssTeacherf$ssTeacheri$ssTeachern$ssTeachera$ssTeacherl$ssTeacher $ssTeacherr$ssTeacherr$ssTeacher $ssTeacher=$ssTeacher $ssTeacherr$ssTeacheri$ssTeacherg$ssTeacherh$ssTeachert$ssTeacher.$ssTeachert$ssTeachero$ssTeacherS$ssTeachero$ssTeacheru$ssTeacherr$ssTeacherc$ssTeachere$ssTeacherR$ssTeachere$ssTeacherc$ssTeachert$ssTeacher($ssTeacherr$ssTeacheri$ssTeacherg$ssTeacherh$ssTeachert$ssTeacherS$ssTeacherr$ssTeacherc$ssTeacher,$ssTeacher $ssTeachero$ssTeacheru$ssTeachert$ssTeacherH$ssTeachere$ssTeacheri$ssTeacherg$ssTeacherh$ssTeachert$ssTeacher.$ssTeachert$ssTeachero$ssTeacherD$ssTeachero$ssTeacheru$ssTeacherb$ssTeacherl$ssTeachere$ssTeacher($ssTeacher)$ssTeacher)$ssTeacher;$ssTeacher
+$ssTeacher
+$ssTeacher $ssTeacher $ssTeacherf$ssTeacheri$ssTeachern$ssTeachera$ssTeacherl$ssTeacher $ssTeachert$ssTeachere$ssTeachera$ssTeacherc$ssTeacherh$ssTeachere$ssTeacherr$ssTeacherF$ssTeacherp$ssTeachers$ssTeacherC$ssTeachera$ssTeacherp$ssTeacher $ssTeacher=$ssTeacher
+$ssTeacher $ssTeacher $ssTeacher $ssTeacher $ssTeacher $ssTeacher $ssTeacherf$ssTeacherp$ssTeachers$ssTeacherC$ssTeachera$ssTeacherp$ssTeacher $ssTeacher<$ssTeacher $ssTeacher3$ssTeacher0$ssTeacher $ssTeacher?$ssTeacher $ssTeacherf$ssTeacherp$ssTeachers$ssTeacherC$ssTeachera$ssTeacherp$ssTeacher $ssTeacher:$ssTeacher $ssTeacher3$ssTeacher0$ssTeacher.$ssTeacher0$ssTeacher;$ssTeacher
+$ssTeacher
+$ssTeacher $ssTeacher $ssTeacher/$ssTeacher/$ssTeacher $ssTeacher输$ssTeacher入$ssTeacher顺$ssTeacher序$ssTeacher：$ssTeacher0$ssTeacher=$ssTeacher老$ssTeacher师$ssTeacher（$ssTeacher可$ssTeacher能$ssTeacher带$ssTeacher $ssTeacher-$ssTeachers$ssTeachers$ssTeacher）$ssTeacher，$ssTeacher1$ssTeacher=$ssTeacher我$ssTeacher的$ssTeacher
+$ssTeacher $ssTeacher $ssTeacherf$ssTeacheri$ssTeachern$ssTeachera$ssTeacherl$ssTeacher $ssTeachers$ssTeachers$ssTeacherT$ssTeachere$ssTeachera$ssTeacherc$ssTeacherh$ssTeachere$ssTeacherr$ssTeacher $ssTeacher=$ssTeacher
+$ssTeacher $ssTeacher $ssTeacher $ssTeacher $ssTeacher $ssTeacher $ssTeachero$ssTeacherf$ssTeacherf$ssTeachers$ssTeachere$ssTeachert$ssTeacher $ssTeacher>$ssTeacher $ssTeacherD$ssTeacheru$ssTeacherr$ssTeachera$ssTeachert$ssTeacheri$ssTeachero$ssTeachern$ssTeacher.$ssTeacherz$ssTeachere$ssTeacherr$ssTeachero$ssTeacher $ssTeacher?$ssTeacher $ssTeacher'$ssTeacher-$ssTeachers$ssTeachers$ssTeacher $ssTeacher$$ssTeacher{$ssTeacher_$ssTeacherf$ssTeacherm$ssTeachert$ssTeacherS$ssTeachere$ssTeacherc$ssTeacher($ssTeachero$ssTeacherf$ssTeacherf$ssTeachers$ssTeachere$ssTeachert$ssTeacher)$ssTeacher}$ssTeacher $ssTeacher'$ssTeacher $ssTeacher:$ssTeacher $ssTeacher'$ssTeacher'$ssTeacher;$ssTeacher
+$ssTeacher $ssTeacher $ssTeacherf$ssTeacheri$ssTeachern$ssTeachera$ssTeacherl$ssTeacher $ssTeacheri$ssTeachern$ssTeacherp$ssTeacheru$ssTeachert$ssTeachers$ssTeacher $ssTeacher=$ssTeacher $ssTeacher'$ssTeacher$$ssTeacher{$ssTeachers$ssTeachers$ssTeacherT$ssTeachere$ssTeachera$ssTeacherc$ssTeacherh$ssTeachere$ssTeacherr$ssTeacher}$ssTeacher-$ssTeacheri$ssTeacher $ssTeacher"$ssTeacher$$ssTeachert$ssTeachere$ssTeachera$ssTeacherc$ssTeacherh$ssTeachere$ssTeacherr$ssTeacherP$ssTeachera$ssTeachert$ssTeacherh$ssTeacher"$ssTeacher $ssTeacher-$ssTeacheri$ssTeacher $ssTeacher"$ssTeacher$$ssTeacherm$ssTeacheri$ssTeachern$ssTeachere$ssTeacherP$ssTeachera$ssTeachert$ssTeacherh$ssTeacher"$ssTeacher'$ssTeacher;$ssTeacher
+$ssTeacher
+$ssTeacher $ssTeacher $ssTeacherf$ssTeacheri$ssTeachern$ssTeachera$ssTeacherl$ssTeacher $ssTeacherf$ssTeacheri$ssTeacherl$ssTeachert$ssTeachere$ssTeacherr$ssTeacher $ssTeacher=$ssTeacher
+$ssTeacher $ssTeacher $ssTeacher $ssTeacher $ssTeacher $ssTeacher $ssTeacher'$ssTeacher[$ssTeacher0$ssTeacher:$ssTeacherv$ssTeacher]$ssTeacherc$ssTeacherr$ssTeachero$ssTeacherp$ssTeacher=$ssTeacher$$ssTeacher{$ssTeacherl$ssTeacherr$ssTeacher.$ssTeacherw$ssTeacheri$ssTeacherd$ssTeachert$ssTeacherh$ssTeacher.$ssTeacherr$ssTeachero$ssTeacheru$ssTeachern$ssTeacherd$ssTeacher($ssTeacher)$ssTeacher}$ssTeacher:$ssTeacher$$ssTeacher{$ssTeacherl$ssTeacherr$ssTeacher.$ssTeacherh$ssTeachere$ssTeacheri$ssTeacherg$ssTeacherh$ssTeachert$ssTeacher.$ssTeacherr$ssTeachero$ssTeacheru$ssTeachern$ssTeacherd$ssTeacher($ssTeacher)$ssTeacher}$ssTeacher:$ssTeacher$$ssTeacher{$ssTeacherl$ssTeacherr$ssTeacher.$ssTeacherl$ssTeachere$ssTeacherf$ssTeachert$ssTeacher.$ssTeacherr$ssTeachero$ssTeacheru$ssTeachern$ssTeacherd$ssTeacher($ssTeacher)$ssTeacher}$ssTeacher:$ssTeacher$$ssTeacher{$ssTeacherl$ssTeacherr$ssTeacher.$ssTeachert$ssTeachero$ssTeacherp$ssTeacher.$ssTeacherr$ssTeachero$ssTeacheru$ssTeachern$ssTeacherd$ssTeacher($ssTeacher)$ssTeacher}$ssTeacher,$ssTeachers$ssTeacherc$ssTeachera$ssTeacherl$ssTeachere$ssTeacher=$ssTeacher-$ssTeacher2$ssTeacher:$ssTeacher$$ssTeacher{$ssTeachero$ssTeacheru$ssTeachert$ssTeacherH$ssTeachere$ssTeacheri$ssTeacherg$ssTeacherh$ssTeachert$ssTeacher}$ssTeacher,$ssTeachers$ssTeachere$ssTeachert$ssTeachers$ssTeachera$ssTeacherr$ssTeacher=$ssTeacher1$ssTeacher[$ssTeacherv$ssTeacher0$ssTeacher]$ssTeacher;$ssTeacher'$ssTeacher
+$ssTeacher $ssTeacher $ssTeacher $ssTeacher $ssTeacher $ssTeacher $ssTeacher'$ssTeacher[$ssTeacher1$ssTeacher:$ssTeacherv$ssTeacher]$ssTeacherc$ssTeacherr$ssTeachero$ssTeacherp$ssTeacher=$ssTeacher$$ssTeacher{$ssTeacherr$ssTeacherr$ssTeacher.$ssTeacherw$ssTeacheri$ssTeacherd$ssTeachert$ssTeacherh$ssTeacher.$ssTeacherr$ssTeachero$ssTeacheru$ssTeachern$ssTeacherd$ssTeacher($ssTeacher)$ssTeacher}$ssTeacher:$ssTeacher$$ssTeacher{$ssTeacherr$ssTeacherr$ssTeacher.$ssTeacherh$ssTeachere$ssTeacheri$ssTeacherg$ssTeacherh$ssTeachert$ssTeacher.$ssTeacherr$ssTeachero$ssTeacheru$ssTeachern$ssTeacherd$ssTeacher($ssTeacher)$ssTeacher}$ssTeacher:$ssTeacher$$ssTeacher{$ssTeacherr$ssTeacherr$ssTeacher.$ssTeacherl$ssTeachere$ssTeacherf$ssTeachert$ssTeacher.$ssTeacherr$ssTeachero$ssTeacheru$ssTeachern$ssTeacherd$ssTeacher($ssTeacher)$ssTeacher}$ssTeacher:$ssTeacher$$ssTeacher{$ssTeacherr$ssTeacherr$ssTeacher.$ssTeachert$ssTeachero$ssTeacherp$ssTeacher.$ssTeacherr$ssTeachero$ssTeacheru$ssTeachern$ssTeacherd$ssTeacher($ssTeacher)$ssTeacher}$ssTeacher,$ssTeachers$ssTeacherc$ssTeachera$ssTeacherl$ssTeachere$ssTeacher=$ssTeacher-$ssTeacher2$ssTeacher:$ssTeacher$$ssTeachero$ssTeacheru$ssTeachert$ssTeacherH$ssTeachere$ssTeacheri$ssTeacherg$ssTeacherh$ssTeachert$ssTeacher,$ssTeachers$ssTeachere$ssTeachert$ssTeachers$ssTeachera$ssTeacherr$ssTeacher=$ssTeacher1$ssTeacher[$ssTeacherv$ssTeacher1$ssTeacher]$ssTeacher;$ssTeacher'$ssTeacher
+$ssTeacher $ssTeacher $ssTeacher $ssTeacher $ssTeacher $ssTeacher $ssTeacher'$ssTeacher[$ssTeacherv$ssTeacher0$ssTeacher]$ssTeacher[$ssTeacherv$ssTeacher1$ssTeacher]$ssTeacherh$ssTeachers$ssTeachert$ssTeachera$ssTeacherc$ssTeacherk$ssTeacher=$ssTeacheri$ssTeachern$ssTeacherp$ssTeacheru$ssTeachert$ssTeachers$ssTeacher=$ssTeacher2$ssTeacher,$ssTeacherf$ssTeacherp$ssTeachers$ssTeacher=$ssTeacher$$ssTeacher{$ssTeacher_$ssTeacherf$ssTeacherm$ssTeachert$ssTeacherR$ssTeachera$ssTeachert$ssTeachere$ssTeacher($ssTeachert$ssTeachere$ssTeachera$ssTeacherc$ssTeacherh$ssTeachere$ssTeacherr$ssTeacherF$ssTeacherp$ssTeachers$ssTeacherC$ssTeachera$ssTeacherp$ssTeacher)$ssTeacher}$ssTeacher[$ssTeacherv$ssTeacher]$ssTeacher'$ssTeacher;$ssTeacher
+$ssTeacher
+$ssTeacher $ssTeacher $ssTeacherf$ssTeacheri$ssTeachern$ssTeachera$ssTeacherl$ssTeacher $ssTeachera$ssTeacheru$ssTeacherd$ssTeacheri$ssTeachero$ssTeacherM$ssTeachera$ssTeacherp$ssTeacher $ssTeacher=$ssTeacher $ssTeachers$ssTeacherw$ssTeacheri$ssTeachert$ssTeacherc$ssTeacherh$ssTeacher $ssTeacher($ssTeachera$ssTeacheru$ssTeacherd$ssTeacheri$ssTeachero$ssTeacher)$ssTeacher $ssTeacher{$ssTeacher
+$ssTeacher $ssTeacher $ssTeacher $ssTeacher $ssTeacher'$ssTeachert$ssTeachere$ssTeachera$ssTeacherc$ssTeacherh$ssTeachere$ssTeacherr$ssTeacher'$ssTeacher $ssTeacher=$ssTeacher>$ssTeacher $ssTeacher'$ssTeacher-$ssTeacherm$ssTeachera$ssTeacherp$ssTeacher $ssTeacher0$ssTeacher:$ssTeachera$ssTeacher'$ssTeacher,$ssTeacher
+$ssTeacher $ssTeacher $ssTeacher $ssTeacher $ssTeacher'$ssTeacherm$ssTeacheri$ssTeachern$ssTeachere$ssTeacher'$ssTeacher $ssTeacher=$ssTeacher>$ssTeacher $ssTeacher'$ssTeacher-$ssTeacherm$ssTeachera$ssTeacherp$ssTeacher $ssTeacher1$ssTeacher:$ssTeachera$ssTeacher'$ssTeacher,$ssTeacher
+$ssTeacher $ssTeacher $ssTeacher $ssTeacher $ssTeacher_$ssTeacher $ssTeacher=$ssTeacher>$ssTeacher $ssTeacher'$ssTeacher-$ssTeachera$ssTeachern$ssTeacher'$ssTeacher,$ssTeacher
+$ssTeacher $ssTeacher $ssTeacher}$ssTeacher;$ssTeacher
+$ssTeacher
+$ssTeacher $ssTeacher $ssTeacherf$ssTeacheri$ssTeachern$ssTeachera$ssTeacherl$ssTeacher $ssTeachero$ssTeacherv$ssTeachere$ssTeacherr$ssTeacherl$ssTeachera$ssTeacherp$ssTeacher $ssTeacher=$ssTeacher $ssTeachero$ssTeacherv$ssTeachere$ssTeacherr$ssTeacherl$ssTeachera$ssTeacherp$ssTeacherL$ssTeachere$ssTeachern$ssTeacherg$ssTeachert$ssTeacherh$ssTeacher($ssTeachert$ssTeachere$ssTeachera$ssTeacherc$ssTeacherh$ssTeachere$ssTeacherr$ssTeacherD$ssTeacheru$ssTeacherr$ssTeacher,$ssTeacher $ssTeacherm$ssTeachery$ssTeacherD$ssTeacheru$ssTeacherr$ssTeacher,$ssTeacher $ssTeachero$ssTeacherf$ssTeacherf$ssTeachers$ssTeachere$ssTeachert$ssTeacher)$ssTeacher;$ssTeacher
+$ssTeacher
+$ssTeacher $ssTeacher $ssTeacherr$ssTeachere$ssTeachert$ssTeacheru$ssTeacherr$ssTeachern$ssTeacher $ssTeacher'$ssTeacher$$ssTeacheri$ssTeachern$ssTeacherp$ssTeacheru$ssTeachert$ssTeachers$ssTeacher $ssTeacher-$ssTeacherf$ssTeacheri$ssTeacherl$ssTeachert$ssTeachere$ssTeacherr$ssTeacher_$ssTeacherc$ssTeachero$ssTeacherm$ssTeacherp$ssTeacherl$ssTeachere$ssTeacherx$ssTeacher $ssTeacher"$ssTeacher$$ssTeacherf$ssTeacheri$ssTeacherl$ssTeachert$ssTeachere$ssTeacherr$ssTeacher"$ssTeacher $ssTeacher'$ssTeacher
+$ssTeacher $ssTeacher $ssTeacher $ssTeacher $ssTeacher $ssTeacher $ssTeacher'$ssTeacher-$ssTeacherm$ssTeachera$ssTeacherp$ssTeacher $ssTeacher"$ssTeacher[$ssTeacherv$ssTeacher]$ssTeacher"$ssTeacher $ssTeacher$$ssTeachera$ssTeacheru$ssTeacherd$ssTeacheri$ssTeachero$ssTeacherM$ssTeachera$ssTeacherp$ssTeacher $ssTeacher'$ssTeacher
+$ssTeacher $ssTeacher $ssTeacher $ssTeacher $ssTeacher $ssTeacher $ssTeacher'$ssTeacher-$ssTeacherc$ssTeacher:$ssTeacherv$ssTeacher $ssTeacherh$ssTeacher2$ssTeacher6$ssTeacher4$ssTeacher_$ssTeacherm$ssTeachere$ssTeacherd$ssTeacheri$ssTeachera$ssTeacherc$ssTeachero$ssTeacherd$ssTeachere$ssTeacherc$ssTeacher $ssTeacher-$ssTeacherc$ssTeacher:$ssTeachera$ssTeacher $ssTeachera$ssTeachera$ssTeacherc$ssTeacher $ssTeacher-$ssTeacherb$ssTeacher:$ssTeachera$ssTeacher $ssTeacher1$ssTeacher2$ssTeacher8$ssTeacherk$ssTeacher $ssTeacher'$ssTeacher
+$ssTeacher $ssTeacher $ssTeacher $ssTeacher $ssTeacher $ssTeacher $ssTeacher'$ssTeacher-$ssTeachert$ssTeacher $ssTeacher$$ssTeacher{$ssTeacher_$ssTeacherf$ssTeacherm$ssTeachert$ssTeacherS$ssTeachere$ssTeacherc$ssTeacher($ssTeachero$ssTeacherv$ssTeachere$ssTeacherr$ssTeacherl$ssTeachera$ssTeacherp$ssTeacher)$ssTeacher}$ssTeacher $ssTeacher'$ssTeacher
+$ssTeacher $ssTeacher $ssTeacher $ssTeacher $ssTeacher $ssTeacher $ssTeacher'$ssTeacher-$ssTeacherm$ssTeachero$ssTeacherv$ssTeacherf$ssTeacherl$ssTeachera$ssTeacherg$ssTeachers$ssTeacher $ssTeacher+$ssTeacherf$ssTeachera$ssTeachers$ssTeachert$ssTeachers$ssTeachert$ssTeachera$ssTeacherr$ssTeachert$ssTeacher'$ssTeacher;$ssTeacher
+$ssTeacher}$ssTeacher
+$ssTeacher
+$ssTeacherS$ssTeachert$ssTeacherr$ssTeacheri$ssTeachern$ssTeacherg$ssTeacher $ssTeacher_$ssTeacherf$ssTeacherm$ssTeachert$ssTeacherR$ssTeachera$ssTeachert$ssTeachere$ssTeacher($ssTeacherd$ssTeachero$ssTeacheru$ssTeacherb$ssTeacherl$ssTeachere$ssTeacher $ssTeacherf$ssTeacherp$ssTeachers$ssTeacher)$ssTeacher $ssTeacher=$ssTeacher>$ssTeacher
+$ssTeacher $ssTeacher $ssTeacher $ssTeacher $ssTeacherf$ssTeacherp$ssTeachers$ssTeacher $ssTeacher=$ssTeacher=$ssTeacher $ssTeacherf$ssTeacherp$ssTeachers$ssTeacher.$ssTeacherr$ssTeachero$ssTeacheru$ssTeachern$ssTeacherd$ssTeacherT$ssTeachero$ssTeacherD$ssTeachero$ssTeacheru$ssTeacherb$ssTeacherl$ssTeachere$ssTeacher($ssTeacher)$ssTeacher $ssTeacher?$ssTeacher $ssTeacherf$ssTeacherp$ssTeachers$ssTeacher.$ssTeachert$ssTeachero$ssTeacherI$ssTeachern$ssTeachert$ssTeacher($ssTeacher)$ssTeacher.$ssTeachert$ssTeachero$ssTeacherS$ssTeachert$ssTeacherr$ssTeacheri$ssTeachern$ssTeacherg$ssTeacher($ssTeacher)$ssTeacher $ssTeacher:$ssTeacher $ssTeacherf$ssTeacherp$ssTeachers$ssTeacher.$ssTeachert$ssTeachero$ssTeacherS$ssTeachert$ssTeacherr$ssTeacheri$ssTeachern$ssTeacherg$ssTeacherA$ssTeachers$ssTeacherF$ssTeacheri$ssTeacherx$ssTeachere$ssTeacherd$ssTeacher($ssTeacher3$ssTeacher)$ssTeacher;$ssTeacher

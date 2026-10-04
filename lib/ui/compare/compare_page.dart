@@ -2,6 +2,9 @@ import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:video_player/video_player.dart';
 import '../../editing/media_source_picker.dart';
+import '../../editing/compare_export.dart';
+import '../../editing/export_service.dart';
+import '../../editing/ffmpeg_probe.dart';
 import '../../editing/overlap.dart';
 import '../../editing/side_transform.dart';
 import 'frame_adjust_view.dart';
@@ -31,6 +34,10 @@ class _ComparePageState extends State<ComparePage> {
   Duration _offset = Duration.zero;
   double _speed = 1.0;
   bool _adjustingFrame = false;
+  bool _exporting = false;
+  String _exportProgress = '';
+  String? _audioChoice = 'teacher';
+  ExportService? _exportSvc;
   int _selectedSide = 0;
   final SideTransform _left = SideTransform(ratio: '3:4');
   final SideTransform _right = SideTransform(ratio: '3:4');
@@ -99,6 +106,60 @@ class _ComparePageState extends State<ComparePage> {
     final t = _teacherCtl;
     if (t == null) return;
     t.value.isPlaying ? await t.pause() : await t.play();
+  }
+
+  Future<void> _export() async {
+    if (_exporting || _teacherCtl == null || _mineCtl == null) return;
+    setState(() => _exporting = true);
+    try {
+      _exportSvc ??= ExportService(
+        runner: FFmpegKitRunner(),
+        mover: GalleryMover(),
+      );
+      final teacherInfo = await probeMedia(widget.teacher.path);
+      final overlapMs = overlapLength(teacherDur, myDur, _offset).inMilliseconds;
+      final cmd = buildCompareCommand(
+        teacherPath: widget.teacher.path,
+        minePath: widget.mine.path,
+        offset: _offset,
+        teacherDur: teacherDur,
+        myDur: myDur,
+        left: _left,
+        right: _right,
+        leftSrc: Size((teacherInfo?.width ?? 1080).toDouble(),
+            (teacherInfo?.height ?? 1920).toDouble()),
+        rightSrc: Size(
+            _mineCtl!.value.size.width, _mineCtl!.value.size.height),
+        audio: _audioChoice!,
+        fpsCap: teacherInfo?.fps == 0 ? 30 : (teacherInfo?.fps ?? 30),
+      );
+      await _exportSvc!.run(
+        ExportJob(
+            command: cmd,
+            base: '对比',
+            expectedDurationMs: overlapMs),
+        onProgress: (p) {
+          if (mounted) {
+            setState(() => _exportProgress = '${(p * 100).round()}%');
+          }
+        },
+      );
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('已保存到相册 Movies/wuji/')));
+    } on ExportCancelled {
+      if (mounted) {
+        ScaffoldMessenger.of(context)
+            .showSnackBar(const SnackBar(content: Text('已取消导出')));
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context)
+            .showSnackBar(SnackBar(content: Text('导出失败：$e')));
+      }
+    } finally {
+      if (mounted) setState(() => _exporting = false);
+    }
   }
 
   @override
@@ -201,7 +262,42 @@ class _ComparePageState extends State<ComparePage> {
                           ),
                   ),
                 ),
-                // 底部导出按钮（T6 接线；先按重叠区间做可用性提示）
+                // 音源选择（导出前可切）
+                SafeArea(
+                  child: Padding(
+                    padding: const EdgeInsets.fromLTRB(16, 4, 16, 0),
+                    child: Row(
+                      mainAxisAlignment: MainAxisAlignment.center,
+                      children: [
+                        Text('对比音频：',
+                            style: TextStyle(
+                                fontSize: 11, color: AppColors.secondary)),
+                        for (final (v, label) in [
+                          ('teacher', '老师原声'),
+                          ('mine', '我的原声'),
+                          ('none', '静音'),
+                        ])
+                          Padding(
+                            padding:
+                                const EdgeInsets.symmetric(horizontal: 4),
+                            child: ChoiceChip(
+                              label: Text(label,
+                                  style: const TextStyle(fontSize: 11)),
+                              selected: _audioChoice == v,
+                              selectedColor: accent,
+                              backgroundColor: Colors.white,
+                              labelStyle: TextStyle(
+                                  color: _audioChoice == v
+                                      ? Colors.white
+                                      : AppColors.ink),
+                              onSelected: (_) =>
+                                  setState(() => _audioChoice = v),
+                            ),
+                          ),
+                      ],
+                    ),
+                  ),
+                ),
                 SafeArea(
                   child: Padding(
                     padding: const EdgeInsets.fromLTRB(16, 4, 16, 14),
@@ -214,9 +310,13 @@ class _ComparePageState extends State<ComparePage> {
                           shape: const StadiumBorder(),
                           padding: const EdgeInsets.symmetric(vertical: 11),
                         ),
-                        onPressed: exportable ? () {} : null,
+                        onPressed: (_exporting || !exportable)
+                            ? null
+                            : _export,
                         child: Text(
-                            exportable ? '导出视频' : '重叠区间不足 1 秒，无法导出',
+                            _exporting
+                                ? '导出中 ${_exportProgress.isEmpty ? '' : _exportProgress}'
+                                : (exportable ? '导出视频' : '重叠区间不足 1 秒，无法导出'),
                             style: TextStyle(
                                 fontSize: 13,
                                 fontWeight: FontWeight.w600,
