@@ -30,10 +30,10 @@ class _DraggableFabState extends State<DraggableFab> {
   }
 
   Future<void> _restore() async {
+    final screenAtStart = MediaQuery.sizeOf(context);
     final sp = await SharedPreferences.getInstance();
     final raw = sp.getString(_key);
-    var restored = FabLogic.initialOffset(
-        MediaQuery.sizeOf(context), _ballSize);
+    var restored = FabLogic.initialOffset(screenAtStart, _ballSize);
     if (raw != null) {
       final parts = raw.split(',');
       if (parts.length == 2) {
@@ -44,9 +44,8 @@ class _DraggableFabState extends State<DraggableFab> {
     }
     if (!mounted) return;
     setState(() {
-      // ignore: use_build_context_synchronously
       _offset = FabLogic.clampIntoScreen(
-          restored, MediaQuery.sizeOf(context), _ballSize);
+          restored, screenAtStart, _ballSize);
       _loaded = true;
     });
   }
