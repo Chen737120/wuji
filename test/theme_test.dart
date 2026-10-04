@@ -9,6 +9,9 @@ void main() {
     expect(AccentPreset.indigo.value, 0xFF3E5AA8);
     expect(AccentPreset.amber.value, 0xFFE8842E);
     expect(AccentPreset.mint.value, 0xFF6FCF9F);
+    expect(AccentPreset.violet.value, 0xFF7A66B8);
+    expect(AccentPreset.rose.value, 0xFFC25B72);
+    expect(AccentPreset.values, hasLength(6));
   });
   test('legacy stored preset name falls back to jade', () async {
     SharedPreferences.setMockInitialValues({'accentPreset': 'matcha'});

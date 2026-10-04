@@ -5,9 +5,11 @@ import 'package:shared_preferences/shared_preferences.dart';
 /// 黛蓝/琥珀橘取自配色方案评审定稿；旧值 matcha/pine 用户回退默认翠芽。
 enum AccentPreset {
   jade(0xFF3FA26F, '翠芽'),
+  mint(0xFF6FCF9F, '薄荷'),
   indigo(0xFF3E5AA8, '黛蓝'),
+  violet(0xFF7A66B8, '暮紫'),
   amber(0xFFE8842E, '琥珀橘'),
-  mint(0xFF6FCF9F, '薄荷');
+  rose(0xFFC25B72, '莓红');
 
   const AccentPreset(this.value, this.label);
   final int value;
