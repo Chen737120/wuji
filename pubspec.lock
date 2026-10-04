@@ -273,6 +273,22 @@ packages:
       url: "https://pub.flutter-io.cn"
     source: hosted
     version: "0.1.2"
+  ffmpeg_kit_flutter_new_min:
+    dependency: "direct main"
+    description:
+      name: ffmpeg_kit_flutter_new_min
+      sha256: f472b9e71b499bdaeb92b23c1729c86b74cdd5966921b8ee21a3e0b40ba3d11e
+      url: "https://pub.flutter-io.cn"
+    source: hosted
+    version: "3.6.4"
+  ffmpeg_kit_flutter_platform_interface:
+    dependency: transitive
+    description:
+      name: ffmpeg_kit_flutter_platform_interface
+      sha256: addf046ae44e190ad0101b2fde2ad909a3cd08a2a109f6106d2f7048b7abedee
+      url: "https://pub.flutter-io.cn"
+    source: hosted
+    version: "0.2.1"
   file:
     dependency: transitive
     description:
