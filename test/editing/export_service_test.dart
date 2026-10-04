@@ -56,7 +56,7 @@ void main() {
         base: '对比',
         ext: 'mp4'));
     expect(p, contains('Movies/wuji/'));
-    expect(p, contains('对比_20261004_2130.mp4'));
+    expect(p, contains('对比_20261004_213000.mp4'));
     expect(mover.moved, hasLength(1));
     expect(mover.cleanedTemps, isEmpty); // 成功不留临时
     // 命令尾部带上临时输出路径（输出文件是最后一个参数）

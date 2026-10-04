@@ -86,10 +86,12 @@ class ExportService {
 
   Future<String> run(ExportJob job, {void Function(double p)? onProgress}) async {
     final now = (_clock ?? DateTime.now)();
-    final stamp = DateFormat('yyyyMMdd_HHmm').format(now);
+    final stamp = DateFormat('yyyyMMdd_HHmmss').format(now);
     final fileName = '${job.base}_$stamp.${job.ext}';
     final dir = await (_tempDir ?? _defaultTempDir)();
     final temp = '${dir.path}${Platform.pathSeparator}$fileName';
+    final existed = File(temp);
+    if (existed.existsSync()) existed.deleteSync(); // FFmpeg 不覆盖已有文件
     var moved = false;
     try {
       if (_cancelRequested) throw ExportCancelled();

@@ -31,9 +31,13 @@ String buildCompareCommand({
 
   final fps = fpsCap < 30 ? fpsCap : 30.0;
 
-  // 输入顺序：0=老师（可能带 -ss），1=我的
-  final ssTeacher = offset > Duration.zero ? '-ss ${_fmtSec(offset)} ' : '';
-  final inputs = '$ssTeacher-i "$teacherPath" -i "$minePath"';
+  // 输入顺序：0=老师 1=我的。对齐语义（与时间微调文案一致）：
+  // offset>0 = 我的视频延后 → 我的输入跳过前 offset 秒；
+  // offset<0 = 我的视频提前 → 老师输入跳过前 |offset| 秒。
+  final ssTeacher =
+      offset < Duration.zero ? '-ss ${_fmtSec(-offset)} ' : '';
+  final ssMine = offset > Duration.zero ? '-ss ${_fmtSec(offset)} ' : '';
+  final inputs = '$ssTeacher-i "$teacherPath" $ssMine-i "$minePath"';
 
   final filter =
       '[0:v]crop=${lr.width.round()}:${lr.height.round()}:${lr.left.round()}:${lr.top.round()},scale=-2:$outHeight,setsar=1[v0];'

@@ -69,6 +69,7 @@ class _FancamPageState extends State<FancamPage> {
   void _setRatio(String r) {
     setState(() {
       _ratio = r;
+      if (r == '自由') return; // 自由：保持当前框，角柄可独立改宽高
       // 比例切换：保持中心，按新比例重设框（h 不变，w=h*newAspect）
       final newAspect = _ratioAspect(r);
       var w = _box.h * newAspect;
@@ -88,6 +89,8 @@ class _FancamPageState extends State<FancamPage> {
         return 1;
       case '9:16':
         return 9 / 16;
+      case '自由':
+        return 3 / 4; // 自由模式预览框仍用 3:4 基准（框可任意拖）
       default:
         return 3 / 4;
     }
@@ -203,9 +206,20 @@ class _FancamPageState extends State<FancamPage> {
                           .movedBy(Offset(dx, dy))
                           .clamped();
                     case _GestureMode.resize:
-                      // 角柄：取位移在框宽方向上的投影作为缩放
-                      final grow = (dx > dy ? dx : dy) * 2;
-                      _box = _boxAtStart.scaledBy(1 + grow).clamped();
+                      if (_ratio == '自由') {
+                        // 自由模式：宽高随拖动独立变化
+                        var w = (_boxAtStart.w + dx * 2).clamp(0.1, 1.0);
+                        var h = (_boxAtStart.h + dy * 2).clamp(0.1, 1.0);
+                        _box = CropBox(
+                            cx: _boxAtStart.cx + dx / 2,
+                            cy: _boxAtStart.cy + dy / 2,
+                            w: w,
+                            h: h).clamped();
+                      } else {
+                        // 角柄：取位移在框宽方向上的投影作为缩放
+                        final grow = (dx > dy ? dx : dy) * 2;
+                        _box = _boxAtStart.scaledBy(1 + grow).clamped();
+                      }
                     default:
                       break;
                   }
@@ -247,7 +261,7 @@ class _FancamPageState extends State<FancamPage> {
                     Row(
                       mainAxisAlignment: MainAxisAlignment.center,
                       children: [
-                        for (final r in ['9:16', '3:4', '1:1'])
+                        for (final r in ['9:16', '3:4', '1:1', '自由'])
                           Padding(
                             padding: const EdgeInsets.symmetric(horizontal: 4),
                             child: ChoiceChip(
@@ -255,9 +269,7 @@ class _FancamPageState extends State<FancamPage> {
                                   style: TextStyle(
                                       fontSize: 12,
                                       fontWeight: FontWeight.w700,
-                                      color: _ratio == r
-                                          ? Colors.white
-                                          : Colors.white)),
+                                      color: Colors.white)),
                               selected: _ratio == r,
                               selectedColor: accent,
                               backgroundColor: Colors.black45,

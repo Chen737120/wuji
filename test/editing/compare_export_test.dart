@@ -97,8 +97,8 @@ void main() {
       audio: 'teacher',
       fpsCap: 30,
     );
-    // 我的延后 5s：老师从 5s 起播，我的从 0 起
-    expect(cmd, contains('-ss 5.000 -i "/t.mp4"'));
-    expect(cmd, contains('-i "/m.mp4"'));
+    // 我的延后 5s（offset>0）：老师从 0 起、我的跳过前 5s（与时间微调文案一致）
+    expect(cmd, contains('-ss 5.000 -i "/m.mp4"'));
+    expect(cmd, contains('-i "/t.mp4"'));
   });
 }

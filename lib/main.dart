@@ -18,6 +18,7 @@ import 'ui/edit_hub_page.dart';
 import 'ui/home_shell.dart';
 import 'ui/fancam/fancam_page.dart';
 import 'ui/compare/compare_page.dart';
+import 'ui/compare/compare_pick_page.dart';
 import 'editing/media_source_picker.dart';
 import 'ui/record_form_page.dart';
 import 'ui/records_page.dart';
@@ -247,25 +248,15 @@ class _AppRootState extends State<AppRoot> {
         builder: (_) => FancamPage(source: src)));
   }
 
-  /// 同屏对比：连选两段视频（老师 → 我的），任一取消即中止。
+  /// 同屏对比：先进入双卡片选择页（图五原型），选定两段后进编辑。
   Future<void> _startCompare() async {
     final nav = _navigatorKey.currentState;
     if (nav == null) return;
-    final teacher = await showVideoSourceSheet(
-      nav.context,
-      title: '选择老师视频',
-      albumPicker: pickSingleVideoFromAlbum,
-      archivePicker: showRecordMediaPicker,
-    );
-    if (teacher == null || !mounted) return;
-    final mine = await showVideoSourceSheet(
-      nav.context,
-      title: '选择我的视频',
-      albumPicker: pickSingleVideoFromAlbum,
-      archivePicker: showRecordMediaPicker,
-    );
-    if (mine == null || !mounted) return;
+    final picked = await nav.push<({PickedSource teacher, PickedSource mine})>(
+        MaterialPageRoute(builder: (_) => const ComparePickPage()));
+    if (picked == null || !mounted) return;
     nav.push(MaterialPageRoute(
-        builder: (_) => ComparePage(teacher: teacher, mine: mine)));
+        builder: (_) => ComparePage(
+            teacher: picked.teacher, mine: picked.mine)));
   }
 }
