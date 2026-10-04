@@ -3,6 +3,8 @@ import 'package:flutter/material.dart';
 import 'package:video_player/video_player.dart';
 import '../../editing/media_source_picker.dart';
 import '../../editing/overlap.dart';
+import '../../editing/side_transform.dart';
+import 'frame_adjust_view.dart';
 import '../../theme.dart';
 import 'align_view.dart';
 
@@ -29,6 +31,9 @@ class _ComparePageState extends State<ComparePage> {
   Duration _offset = Duration.zero;
   double _speed = 1.0;
   bool _adjustingFrame = false;
+  int _selectedSide = 0;
+  final SideTransform _left = SideTransform(ratio: '3:4');
+  final SideTransform _right = SideTransform(ratio: '3:4');
 
   VideoPlayerController? get ctl => _teacherCtl;
   Duration get teacherDur =>
@@ -179,10 +184,13 @@ class _ComparePageState extends State<ComparePage> {
                   child: Padding(
                     padding: const EdgeInsets.all(16),
                     child: _adjustingFrame
-                        ? Center(
-                            child: Text('画面微调（下一步接入）',
-                                style: TextStyle(
-                                    fontSize: 12, color: AppColors.faint)))
+                        ? FrameAdjustView(
+                            left: _left,
+                            right: _right,
+                            selectedSide: _selectedSide,
+                            onSelect: (s) => setState(() => _selectedSide = s),
+                            onLeftChanged: () => setState(() {}),
+                            onRightChanged: () => setState(() {}))
                         : AlignView(
                             offset: _offset,
                             teacherDur: teacherDur,

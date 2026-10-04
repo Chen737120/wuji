@@ -100,9 +100,9 @@ void main() {
         home: ComparePage(teacher: src('teacher'), mine: src('mine'))));
     await tester.pumpAndSettle();
 
-    expect(find.text('画面微调（下一步接入）'), findsNothing);
     await tester.tap(find.text('画面微调'));
     await tester.pumpAndSettle();
-    expect(find.text('画面微调（下一步接入）'), findsOneWidget);
+    expect(find.text('选中侧比例：'), findsOneWidget);
+    expect(find.text('老师视频'), findsWidgets);
   });
 }
