@@ -23,10 +23,20 @@ class _DraggableFabState extends State<DraggableFab> {
   bool _loaded = false;
   bool _dragging = false;
 
+  bool _restoreRequested = false;
+
   @override
   void initState() {
     super.initState();
-    _restore();
+  }
+
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    if (!_restoreRequested) {
+      _restoreRequested = true;
+      _restore();
+    }
   }
 
   Future<void> _restore() async {
