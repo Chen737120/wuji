@@ -79,6 +79,7 @@ Future<ImportReport> executeImport(
   required ArchiveStore archive,
   required AppRepository repo,
   required TaxonomyRepo taxonomy,
+  void Function(int done, int total)? onProgress,
 }) async {
   await taxonomy.ensureBuiltins();
   final existing = await repo.allRecords();
@@ -94,6 +95,9 @@ Future<ImportReport> executeImport(
   var createdCount = 0;
   var patchedCount = 0;
   var mediaCopied = 0;
+  final planTotalMedia = [
+    for (final e in [...plan.toCreate, ...plan.toPatch]) ...e.media,
+  ].length;
 
   // 先拷文件（幂等），再一次性事务登记 DB（终审 C2）
   final dbRows = <(ClassRecordsCompanion?, List<MediaAssetsCompanion>)>[];
@@ -175,6 +179,7 @@ Future<ImportReport> executeImport(
         createdAt: DateTime.now(),
       ));
       mediaCopied++;
+      onProgress?.call(mediaCopied, planTotalMedia);
       haveKeys.add(key);
     }
 

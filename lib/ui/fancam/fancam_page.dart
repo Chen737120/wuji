@@ -58,7 +58,7 @@ class _FancamPageState extends State<FancamPage> {
         _box = CropBox.centered(_ratio);
         _track!.reset(_box);
       });
-      await ctl.play();
+      // 不自动播放：先停在首帧让用户选区/加关键帧，控制条可手动播放
     } catch (_) {
       if (!mounted) return;
       setState(() => _error = '视频加载失败');
@@ -251,17 +251,46 @@ class _FancamPageState extends State<FancamPage> {
                           Padding(
                             padding: const EdgeInsets.symmetric(horizontal: 4),
                             child: ChoiceChip(
-                              label: Text(r, style: const TextStyle(fontSize: 11)),
+                              label: Text(r,
+                                  style: TextStyle(
+                                      fontSize: 12,
+                                      fontWeight: FontWeight.w700,
+                                      color: _ratio == r
+                                          ? Colors.white
+                                          : Colors.white)),
                               selected: _ratio == r,
                               selectedColor: accent,
-                              backgroundColor: Colors.white24,
-                              labelStyle: TextStyle(
-                                  color: _ratio == r
-                                      ? Colors.white
-                                      : Colors.white70),
+                              backgroundColor: Colors.black45,
                               onSelected: (_) => _setRatio(r),
                             ),
                           ),
+                      ],
+                    ),
+                    const SizedBox(height: 6),
+                    // 播放/暂停 + 可拖进度条
+                    Row(
+                      children: [
+                        IconButton(
+                          onPressed: () {
+                            final c = _ctl;
+                            if (c == null) return;
+                            c.value.isPlaying ? c.pause() : c.play();
+                            setState(() {});
+                          },
+                          icon: Icon(
+                              (ctl?.value.isPlaying ?? false)
+                                  ? Icons.pause
+                                  : Icons.play_arrow,
+                              color: Colors.white),
+                        ),
+                        Expanded(
+                          child: VideoProgressIndicator(
+                            _ctl!,
+                            allowScrubbing: true,
+                            colors: VideoProgressColors(
+                                playedColor: accent),
+                          ),
+                        ),
                       ],
                     ),
                     const SizedBox(height: 6),

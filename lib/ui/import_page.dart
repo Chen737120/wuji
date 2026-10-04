@@ -147,13 +147,25 @@ class _ImportPageState extends State<ImportPage> {
 
   Future<void> _confirm() async {
     if (_plan == null || _plan!.isEmpty) return;
+    final total =
+        _plan!.toCreate.fold<int>(0, (a, e) => a + e.media.length) +
+            _plan!.toPatch.fold<int>(0, (a, e) => a + e.media.length);
     setState(() {
       _busy = true;
-      _status = '导入中…';
+      _status = total > 0
+          ? '导入中 0/$total…（大视频需要一些时间，请保持屏幕常亮）'
+          : '导入中…';
     });
     try {
       final report = await executeImport(_plan!,
-          sourceFs: _pendingSourceFs!, archive: _store, repo: _repo, taxonomy: _taxonomy);
+          sourceFs: _pendingSourceFs!,
+          archive: _store,
+          repo: _repo,
+          taxonomy: _taxonomy, onProgress: (done, t) {
+        if (mounted) {
+          setState(() => _status = '导入中 $done/$t…（请保持屏幕常亮）');
+        }
+      });
       ReloadBus.instance.bump();
       if (!mounted) return;
       ScaffoldMessenger.of(context)

@@ -253,12 +253,14 @@ class _AppRootState extends State<AppRoot> {
     if (nav == null) return;
     final teacher = await showVideoSourceSheet(
       nav.context,
+      title: '选择老师视频',
       albumPicker: pickSingleVideoFromAlbum,
       archivePicker: showRecordMediaPicker,
     );
     if (teacher == null || !mounted) return;
     final mine = await showVideoSourceSheet(
       nav.context,
+      title: '选择我的视频',
       albumPicker: pickSingleVideoFromAlbum,
       archivePicker: showRecordMediaPicker,
     );

@@ -56,6 +56,7 @@ List<ClassVideoGroup> groupVideosByClass(
 /// [albumPicker]/[archivePicker] 注入便于测试；默认实现见下。
 Future<PickedSource?> showVideoSourceSheet(
   BuildContext context, {
+  String title = '选择视频',
   Future<PickedSource?> Function(BuildContext, String? hint)? albumPicker,
   Future<PickedSource?> Function(BuildContext)? archivePicker,
 }) async {
@@ -69,12 +70,13 @@ Future<PickedSource?> showVideoSourceSheet(
       child: Column(
         mainAxisSize: MainAxisSize.min,
         children: [
-          const Padding(
-            padding: EdgeInsets.fromLTRB(16, 14, 16, 4),
+          Padding(
+            padding: const EdgeInsets.fromLTRB(16, 14, 16, 4),
             child: Align(
               alignment: Alignment.centerLeft,
-              child: Text('选择视频',
-                  style: TextStyle(fontSize: 16, fontWeight: FontWeight.w700)),
+              child: Text(title,
+                  style: const TextStyle(
+                      fontSize: 16, fontWeight: FontWeight.w700)),
             ),
           ),
           ListTile(

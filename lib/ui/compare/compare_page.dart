@@ -34,6 +34,7 @@ class _ComparePageState extends State<ComparePage> {
   Duration _offset = Duration.zero;
   double _speed = 1.0;
   bool _adjustingFrame = false;
+  bool _alignedConfirmed = false;
   bool _exporting = false;
   String _exportProgress = '';
   String? _audioChoice = 'teacher';
@@ -106,6 +107,7 @@ class _ComparePageState extends State<ComparePage> {
     final t = _teacherCtl;
     if (t == null) return;
     t.value.isPlaying ? await t.pause() : await t.play();
+    if (mounted) setState(() {}); // 刷新按钮图标
   }
 
   Future<void> _export() async {
@@ -200,9 +202,8 @@ class _ComparePageState extends State<ComparePage> {
                   ),
                 ),
                 const SizedBox(height: 8),
-                // 播放/速度
+                // 播放/速度/进度条
                 Row(
-                  mainAxisAlignment: MainAxisAlignment.center,
                   children: [
                     IconButton(
                         onPressed: _togglePlay,
@@ -211,7 +212,16 @@ class _ComparePageState extends State<ComparePage> {
                                 ? Icons.pause
                                 : Icons.play_arrow,
                             color: AppColors.ink)),
-                    const SizedBox(width: 8),
+                    Expanded(
+                      child: (t != null && t.value.isInitialized)
+                          ? VideoProgressIndicator(
+                              t,
+                              allowScrubbing: true,
+                              colors: VideoProgressColors(
+                                  playedColor: accent),
+                            )
+                          : Container(height: 2, color: AppColors.hairline),
+                    ),
                     PopupMenuButton<double>(
                       onSelected: _applySpeed,
                       itemBuilder: (_) => [
@@ -248,17 +258,53 @@ class _ComparePageState extends State<ComparePage> {
                         ? FrameAdjustView(
                             left: _left,
                             right: _right,
+                            teacherCtl: _teacherCtl,
+                            mineCtl: _mineCtl,
                             selectedSide: _selectedSide,
                             onSelect: (s) => setState(() => _selectedSide = s),
                             onLeftChanged: () => setState(() {}),
                             onRightChanged: () => setState(() {}))
-                        : AlignView(
-                            offset: _offset,
-                            teacherDur: teacherDur,
-                            myDur: myDur,
-                            onStep: (v) => setState(() => _offset = v),
-                            onReset: () =>
-                                setState(() => _offset = Duration.zero),
+                        : Column(
+                            children: [
+                              Expanded(
+                                child: AlignView(
+                                  offset: _offset,
+                                  teacherDur: teacherDur,
+                                  myDur: myDur,
+                                  onStep: (v) =>
+                                      setState(() => _offset = v),
+                                  onReset: () => setState(
+                                      () => _offset = Duration.zero),
+                                ),
+                              ),
+                              const SizedBox(height: 8),
+                              // 确认已对齐：确认后导出按钮才可用
+                              FilledButton.icon(
+                                style: FilledButton.styleFrom(
+                                  backgroundColor: _alignedConfirmed
+                                      ? accent
+                                      : Colors.white,
+                                  foregroundColor: _alignedConfirmed
+                                      ? Colors.white
+                                      : AppColors.ink,
+                                  side: _alignedConfirmed
+                                      ? null
+                                      : const BorderSide(
+                                          color: AppColors.hairline),
+                                  shape: const StadiumBorder(),
+                                  padding: const EdgeInsets.symmetric(
+                                      horizontal: 18, vertical: 8),
+                                ),
+                                onPressed: () => setState(
+                                    () => _alignedConfirmed = true),
+                                icon: Icon(_alignedConfirmed
+                                    ? Icons.check_circle
+                                    : Icons.check_circle_outline),
+                                label: Text(
+                                    _alignedConfirmed ? '已确认对齐' : '确认已对齐',
+                                    style: const TextStyle(fontSize: 13)),
+                              ),
+                            ],
                           ),
                   ),
                 ),
@@ -310,18 +356,23 @@ class _ComparePageState extends State<ComparePage> {
                           shape: const StadiumBorder(),
                           padding: const EdgeInsets.symmetric(vertical: 11),
                         ),
-                        onPressed: (_exporting || !exportable)
+                        onPressed: (_exporting || !exportable || !_alignedConfirmed)
                             ? null
                             : _export,
                         child: Text(
                             _exporting
                                 ? '导出中 ${_exportProgress.isEmpty ? '' : _exportProgress}'
-                                : (exportable ? '导出视频' : '重叠区间不足 1 秒，无法导出'),
+                                : (!exportable
+                                    ? '重叠区间不足 1 秒，无法导出'
+                                    : (!_alignedConfirmed
+                                        ? '请先「确认已对齐」'
+                                        : '导出视频')),
                             style: TextStyle(
                                 fontSize: 13,
                                 fontWeight: FontWeight.w600,
-                                color:
-                                    exportable ? Colors.white : AppColors.faint)),
+                                color: (exportable && _alignedConfirmed)
+                                    ? Colors.white
+                                    : AppColors.faint)),
                       ),
                     ),
                   ),

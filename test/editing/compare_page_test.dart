@@ -19,8 +19,12 @@ void main() {
     // 双侧占位画面渲染（无真视频）
     expect(find.text('老师视频'), findsWidgets); // 侧标签＋图例
     expect(find.text('我的视频'), findsWidgets);
-    // 默认未偏移；60s 源重叠充足 → 导出可用
+    // 默认未偏移；60s 源重叠充足
     expect(find.text('未偏移'), findsOneWidget);
+    // 需先点「确认已对齐」，导出按钮才可用
+    expect(find.text('请先「确认已对齐」'), findsOneWidget);
+    await tester.tap(find.text('确认已对齐'));
+    await tester.pumpAndSettle();
     expect(find.text('导出视频'), findsOneWidget);
 
     // 延后一步 → 0.10 秒

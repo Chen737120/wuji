@@ -54,7 +54,9 @@ class PluginMediaImporter implements MediaImporter {
   @override
   Future<PickResult> pick(BuildContext context, {int max = 30}) async {
     final state = await PhotoManager.requestPermissionExtend();
-    if (!state.isAuth) {
+    // hasAccess 覆盖「已授权」与 Android 14+ 的「仅部分照片」；
+    // 只看 isAuth 会把 limited 误判成未授权（系统已允许仍弹引导）
+    if (!state.isAuth && !state.hasAccess) {
       // 权限被拒（历史拒绝/仅部分授权被收回）：弹窗引导，而不是静默返回空
       if (!context.mounted) return const PickResultEmpty();
       final open = await showDialog<bool>(
