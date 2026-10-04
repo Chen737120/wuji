@@ -35,7 +35,11 @@ void main() {
     var fabTapped = false;
     await tester.pumpWidget(MaterialApp(
         home: HomeShell(
-            pages: const [SizedBox(), SizedBox(), SizedBox()],
+            pages: [
+              SizedBox(),
+              EditHubPage(),
+              SizedBox(),
+            ],
             onFabPressed: () => fabTapped = true)));
     await tester.pumpAndSettle();
 
@@ -63,15 +67,16 @@ void main() {
     tester.view.devicePixelRatio = 1.0;
     addTearDown(tester.view.reset);
     SharedPreferences.setMockInitialValues({});
-    BuildContext? context0;
+    final navKey = GlobalKey<NavigatorState>();
     await tester.pumpWidget(MaterialApp(
+      navigatorKey: navKey,
       navigatorObservers: [RootRouteObserver()],
       home: HomeShell(
         pages: [
           SizedBox(),
           EditHubPage(
-            onFancam: () => Navigator.push(context0!,
-                MaterialPageRoute(builder: (_) => const Scaffold())),
+            onFancam: () => Navigator.push(navKey.currentContext!,
+                MaterialPageRoute(builder: (_) => Scaffold(appBar: AppBar()))),
             onCompare: null,
           ),
           SizedBox(),

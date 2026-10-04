@@ -14,6 +14,7 @@ import 'services/archive_store.dart';
 import 'services/saf_archive.dart';
 import 'services/thumb_service.dart';
 import 'theme.dart';
+import 'ui/edit_hub_page.dart';
 import 'ui/home_shell.dart';
 import 'ui/record_form_page.dart';
 import 'ui/records_page.dart';
@@ -196,6 +197,7 @@ class _AppRootState extends State<AppRoot> {
         builder: (_, t, _) => MaterialApp(
           title: '舞记',
           navigatorKey: _navigatorKey,
+          navigatorObservers: [RootRouteObserver()],
           locale: const Locale('zh'),
           localizationsDelegates: const [
             GlobalMaterialLocalizations.delegate,
@@ -205,7 +207,18 @@ class _AppRootState extends State<AppRoot> {
           supportedLocales: const [Locale('zh')],
           theme: AppTheme.light(t.accentPreset),
           home: HomeShell(
-            pages: const [StatsPage(), RecordsPage()],
+            pages: [
+              const StatsPage(),
+              EditHubPage(
+                onFancam: () => _navigatorKey.currentState?.push(
+                  MaterialPageRoute(builder: (_) => const _EditPlaceholder(title: '舞蹈直拍')),
+                ),
+                onCompare: () => _navigatorKey.currentState?.push(
+                  MaterialPageRoute(builder: (_) => const _EditPlaceholder(title: '同屏对比')),
+                ),
+              ),
+              const RecordsPage(),
+            ],
             onFabPressed: () {
               _navigatorKey.currentState?.push(
                 MaterialPageRoute(
@@ -220,4 +233,27 @@ class _AppRootState extends State<AppRoot> {
       ),
     );
   }
+
+class _EditPlaceholder extends StatelessWidget {
+  const _EditPlaceholder({required this.title});
+  final String title;
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      backgroundColor: AppColors.bg,
+      appBar: AppBar(
+        backgroundColor: AppColors.bg,
+        elevation: 0,
+        leading: IconButton(
+            icon: const Icon(Icons.arrow_back, color: AppColors.secondary),
+            onPressed: () => Navigator.pop(context)),
+        title: Text(title,
+            style: const TextStyle(fontSize: 14, fontWeight: FontWeight.w600)),
+      ),
+      body: const Center(
+          child: Text('剪辑功能开发中',
+              style: TextStyle(fontSize: 12, color: AppColors.faint))),
+    );
+  }
+}
 }

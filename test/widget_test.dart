@@ -5,7 +5,7 @@ import 'package:wuji/ui/home_shell.dart';
 void main() {
   testWidgets('shell boots with two pages', (tester) async {
     await tester.pumpWidget(MaterialApp(home: HomeShell(
-      pages: const [SizedBox(), SizedBox()],
+      pages: const [SizedBox(), SizedBox(), SizedBox()],
       onFabPressed: null,
     )));
     expect(find.text('首页'), findsOneWidget);

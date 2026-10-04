@@ -23,13 +23,21 @@ class RootRouteTracker extends ChangeNotifier {
 }
 
 class RootRouteObserver extends NavigatorObserver {
+  bool _homeCounted = false;
+
   @override
   void didPush(Route route, Route? previousRoute) {
+    // MaterialApp 启动时 home 路由的首次 push 不计数（深度从 1 起）
+    if (!_homeCounted) {
+      _homeCounted = true;
+      return;
+    }
     RootRouteTracker.instance.pushed();
   }
 
   @override
   void didPop(Route route, Route? previousRoute) {
+    // home 路由不会被 pop；防御：深度不低于 1（tracker 内部 clamp）
     RootRouteTracker.instance.popped();
   }
 }
@@ -64,27 +72,17 @@ class _HomeShellState extends State<HomeShell> {
     final accent = Theme.of(context).colorScheme.primary;
     return Scaffold(
       backgroundColor: AppColors.bg,
-      body: Stack(
-        children: [
-          IndexedStack(index: _tab, children: widget.pages),
-          // 悬浮球：仅根 tab 可见（RootRouteObserver 汇报二级页深度）
-          ListenableBuilder(
-            listenable: RootRouteTracker.instance,
-            builder: (context, _) {
-              final visible = RootRouteTracker.instance.isRoot;
-              return AnimatedOpacity(
-                duration: const Duration(milliseconds: 150),
-                opacity: visible ? 1 : 0,
-                child: IgnorePointer(
-                  ignoring: !visible,
-                  child: DraggableFab(
-                    onTap: () => widget.onFabPressed?.call(),
-                  ),
-                ),
-              );
-            },
-          ),
-        ],
+      body: ListenableBuilder(
+        listenable: RootRouteTracker.instance,
+        builder: (context, _) => Stack(
+          children: [
+            IndexedStack(index: _tab, children: widget.pages),
+            // 悬浮球：仅根 tab 挂载（进二级页从 Stack 移除，Positioned 必须是
+            // Stack 的直接子级，所以可见性控制在外层）
+            if (RootRouteTracker.instance.isRoot)
+              DraggableFab(onTap: () => widget.onFabPressed?.call()),
+          ],
+        ),
       ),
       bottomNavigationBar: SizedBox(
         height: FabLogic.bottomBarHeight,
