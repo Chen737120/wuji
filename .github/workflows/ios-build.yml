@@ -26,8 +26,21 @@ jobs:
       - name: Build IPA (no codesign)
         run: flutter build ipa --release --no-codesign
 
+      # 未签名 IPA：可直接拖入 Sideloadly/爱思助手，用免费 Apple ID 签名后装机
+      - name: Package unsigned IPA
+        run: |
+          mkdir -p build/ios/ipa/Payload
+          cp -R "build/ios/archive/Runner.xcarchive/Products/Applications/Runner.app" build/ios/ipa/Payload/
+          cd build/ios/ipa && zip -qry wuji-unsigned.ipa Payload
+
       - name: Upload archive
         uses: actions/upload-artifact@v4
         with:
           name: wuji-ios
           path: build/ios/archive/Runner.xcarchive
+
+      - name: Upload unsigned IPA
+        uses: actions/upload-artifact@v4
+        with:
+          name: wuji-ios-unsigned-ipa
+          path: build/ios/ipa/wuji-unsigned.ipa
