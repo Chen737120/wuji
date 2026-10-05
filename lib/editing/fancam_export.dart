@@ -27,10 +27,13 @@ String buildFancamCommand({
   outHeight = outHeight.clamp(1, outH);
 
   final cropExpr = track.cropExpr(srcW, srcH, outH: outHeight);
-  final audioPart = hasAudio ? '-c:a aac -b:a 128k' : '-an';
+  // 音频显式标准化（docx 排查建议）：aac 48kHz 立体声，避免源特殊采样率
+  // 在编码收尾阶段触发 "2 frames left in the queue on closing" 类失败
+  final audioPart =
+      hasAudio ? '-c:a aac -ar 48000 -ac 2 -b:a 128k' : '-an';
 
   return '-y -i "$srcPath" '
       '-vf "$cropExpr,scale=-2:$outHeight,setsar=1" '
-      '-c:v h264_mediacodec $audioPart '
+      '-c:v h264_mediacodec -pix_fmt yuv420p $audioPart '
       '-movflags +faststart';
 }

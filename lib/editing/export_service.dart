@@ -103,6 +103,7 @@ class ExportService {
       // 回退前必须删掉第一次运行可能写出的半成品——FFmpeg 遇到已存在
       // 输出文件会问 Overwrite? 并以退出码 1 退出
       if (rc != 0 && cmd.contains('-c:v h264_mediacodec')) {
+        await _dumpLogs('ROUND1(mediacodec)', rc);
         final half = File(temp);
         if (half.existsSync()) half.deleteSync();
         // cmd 已含输出路径，只换编码器——再次追加会变成两个输出文件，
@@ -115,11 +116,12 @@ class ExportService {
       if (_cancelRequested) throw ExportCancelled();
       if (rc != 0) {
         // FFmpegKitConfig 在无绑定环境（测试）会抛异步错误，用 zone 兜住
-        var logs = '';
+        var (tail, full) = ('', '');
         await runZonedGuarded(() async {
-          logs = await _lastLogs();
+          (tail, full) = await _lastLogs(tailLines: 15);
         }, (e, s) {});
-        throw ExportFailed('FFmpeg 退出码 $rc${logs.isEmpty ? '' : '：$logs'}');
+        _dumpLines('FAIL', full);
+        throw ExportFailed('FFmpeg 退出码 $rc${tail.isEmpty ? '' : '：$tail'}');
       }
       moved = true; // 成功：mover 搬进相册并消费临时文件
       return await _mover.moveToGallery(temp, fileName);
@@ -128,19 +130,50 @@ class ExportService {
     }
   }
 
-  /// 最近一次 FFmpeg 会话的错误日志（截尾，便于用户回报真实原因）。
-  Future<String> _lastLogs() async {
+  /// 回退发生时把第一轮的完整日志逐行打进 logcat（release 保留 print）。
+  Future<void> _dumpLogs(String tag, int rc) async {
+    var (_, full) = ('', '');
+    await runZonedGuarded(() async {
+      (_, full) = await _lastLogs(tailLines: 0);
+    }, (e, s) {});
+    _dumpLines(tag, full, rc: rc);
+  }
+
+  void _dumpLines(String tag, String full, {int? rc}) {
+    if (full.isEmpty) return;
+    // ignore: avoid_print
+    print('WUJI_EXPORT $tag rc=$rc lines=${full.split('\n').length}');
+    var i = 0;
+    for (final line in full.split('\n')) {
+      i++;
+      if (i > 400) break; // 防炸 logcat
+      // ignore: avoid_print
+      print('WUJI_EXPORT $tag[$i] $line');
+    }
+  }
+
+  /// 最近一次 FFmpeg 会话的错误日志，返回 (弹窗截尾, 全量)。
+  /// 全量日志落盘 cache/wuji-export/last-failure.log
+  /// （aac "Conversion failed" 类问题真实原因在尾部几行之前，必须留全量）。
+  Future<(String, String)> _lastLogs({int tailLines = 3}) async {
     try {
       final session = await FFmpegKitConfig.getLastCompletedSession();
-      if (session is! FFmpegSession) return '';
+      if (session is! FFmpegSession) return ('', '');
       final String? s = await session.getAllLogsAsString();
-      if (s == null || s.isEmpty) return '';
-      final lines = s.trim().split('\n');
-      return lines.length <= 3
+      if (s == null || s.isEmpty) return ('', '');
+      final trimmed = s.trim();
+      try {
+        final dir = await _defaultTempDir();
+        File('${dir.path}${Platform.pathSeparator}last-failure.log')
+            .writeAsStringSync(trimmed, flush: true);
+      } catch (_) {}
+      final lines = trimmed.split('\n');
+      final tail = lines.length <= tailLines
           ? lines.join(' | ')
-          : lines.sublist(lines.length - 3).join(' | ');
+          : lines.sublist(lines.length - tailLines).join(' | ');
+      return (tail, trimmed);
     } catch (_) {
-      return '';
+      return ('', '');
     }
   }
 

@@ -81,8 +81,11 @@ class KeyframeTrack {
       return _constantExpr(_frames.single.box, srcW, srcH, outH);
     }
     // 多关键帧：对 w/h/x/y 各建一条分段线性表达式（像素域）
-    final wE = _pixelExpr(srcW, srcH, outH, (b) => b.w, (p, v) => v * srcW);
-    final hE = _pixelExpr(srcW, srcH, outH, (b) => b.h, (p, v) => v * srcH);
+    // w/h 必须 clamp 进源尺寸——FFmpeg crop 对 w/h 超界直接报错
+    final wE = _pixelExpr(srcW, srcH, outH, (b) => b.w,
+        (p, v) => (v * srcW).clamp(16.0, srcW.toDouble()));
+    final hE = _pixelExpr(srcW, srcH, outH, (b) => b.h,
+        (p, v) => (v * srcH).clamp(16.0, srcH.toDouble()));
     final xE = _pixelExpr(srcW, srcH, outH, (b) => b.left,
         (p, v) => (v * srcW - p / 2).clamp(0.0, srcW.toDouble()));
     final yE = _pixelExpr(srcW, srcH, outH, (b) => b.top,

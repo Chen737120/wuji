@@ -4,7 +4,9 @@ import '../../services/stats.dart';
 import '../../theme.dart';
 
 /// 跳舞趋势柱状图：非峰值柱 #ECECE8，峰值柱点缀色；顶部「按天 · 按月」切换。
-class TrendBars extends StatelessWidget {
+/// 2026-10-05 用户需求：柱区可**左右滑动**查看按天（60 天）/按月（12 个月）
+/// 的过往数据，进入/切换时自动定位到最右（最新）。
+class TrendBars extends StatefulWidget {
   const TrendBars({
     super.key,
     required this.points,
@@ -17,8 +19,43 @@ class TrendBars extends StatelessWidget {
   final ValueChanged<TrendMode> onModeChanged;
 
   @override
+  State<TrendBars> createState() => _TrendBarsState();
+}
+
+class _TrendBarsState extends State<TrendBars> {
+  final ScrollController _scroll = ScrollController();
+
+  @override
+  void initState() {
+    super.initState();
+    _jumpToEnd();
+  }
+
+  @override
+  void didUpdateWidget(covariant TrendBars old) {
+    super.didUpdateWidget(old);
+    if (old.mode != widget.mode || old.points != widget.points) {
+      _jumpToEnd();
+    }
+  }
+
+  void _jumpToEnd() {
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!_scroll.hasClients) return;
+      _scroll.jumpTo(_scroll.position.maxScrollExtent);
+    });
+  }
+
+  @override
+  void dispose() {
+    _scroll.dispose();
+    super.dispose();
+  }
+
+  @override
   Widget build(BuildContext context) {
     final accent = Theme.of(context).colorScheme.primary;
+    final points = widget.points;
     final peak = points.fold<int>(0, (a, b) => math.max(a, b.minutes));
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
@@ -40,9 +77,9 @@ class TrendBars extends StatelessWidget {
         ),
         const SizedBox(height: 10),
         LayoutBuilder(builder: (context, constraints) {
-          // 柱区高度随卡片宽度自适应（有封面/大屏时更高，夹在 56~112 之间）
+          // 柱区高度随卡片宽度自适应（夹在 56~112 之间），下方留 14 标签行
           final barH =
-              (constraints.maxWidth * 0.32).clamp(56.0, 112.0).toDouble();
+              (constraints.maxWidth * 0.30).clamp(56.0, 108.0).toDouble();
           // 纵轴刻度（分钟）：0 与峰值均分 4 段，左侧标签 + 横向网格线
           final ticks = <int>[
             0,
@@ -52,8 +89,12 @@ class TrendBars extends StatelessWidget {
             peak,
           ];
           const labelW = 30.0;
+          const labelH = 14.0;
+          // 每根柱固定 17px 宽（14 柱体 + 3 间距）→ 内容宽超出视口即可滑动
+          const slotW = 17.0;
+          final contentW = math.max(constraints.maxWidth, points.length * slotW);
           return SizedBox(
-            height: barH,
+            height: barH + labelH,
             child: Row(
               crossAxisAlignment: CrossAxisAlignment.stretch,
               children: [
@@ -67,6 +108,7 @@ class TrendBars extends StatelessWidget {
                         Text('$t',
                             style: TextStyle(
                                 fontSize: 8, color: AppColors.faint)),
+                      const SizedBox(height: labelH),
                     ],
                   ),
                 ),
@@ -74,44 +116,92 @@ class TrendBars extends StatelessWidget {
                 Expanded(
                   child: Stack(
                     children: [
-                      Column(
-                        children: [
-                          for (final _ in ticks)
-                            Expanded(
-                              child: Container(
-                                decoration: BoxDecoration(
-                                  border: Border(
-                                    bottom: BorderSide(
-                                        color: AppColors.hairline, width: 0.5),
-                                  ),
-                                ),
-                              ),
-                            ),
-                        ],
-                      ),
-                      Row(
-                        crossAxisAlignment: CrossAxisAlignment.end,
-                        children: [
-                          for (final p in points)
-                            Expanded(
-                              child: Padding(
-                                padding:
-                                    const EdgeInsets.symmetric(horizontal: 1.5),
+                      // 固定网格线（不随柱区滚动）
+                      Positioned(
+                        top: 0,
+                        left: 0,
+                        right: 0,
+                        height: barH,
+                        child: Column(
+                          children: [
+                            for (final _ in ticks)
+                              Expanded(
                                 child: Container(
-                                  height: p.minutes == 0
-                                      ? 2
-                                      : (p.minutes / (peak == 0 ? 1 : peak)) *
-                                          barH,
                                   decoration: BoxDecoration(
-                                    color: p.minutes > 0 && p.minutes == peak
-                                        ? accent
-                                        : AppColors.hairline,
-                                    borderRadius: BorderRadius.circular(2),
+                                    border: Border(
+                                      bottom: BorderSide(
+                                          color: AppColors.hairline,
+                                          width: 0.5),
+                                    ),
                                   ),
                                 ),
                               ),
+                          ],
+                        ),
+                      ),
+                      // 柱区＋日期标签：横向滑动
+                      Positioned.fill(
+                        child: SingleChildScrollView(
+                          controller: _scroll,
+                          scrollDirection: Axis.horizontal,
+                          child: SizedBox(
+                            width: contentW,
+                            height: barH + labelH,
+                            child: Row(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                for (final p in points)
+                                  SizedBox(
+                                    width: slotW,
+                                    child: Column(
+                                      children: [
+                                        SizedBox(
+                                          height: barH,
+                                          child: Column(
+                                            mainAxisAlignment:
+                                                MainAxisAlignment.end,
+                                            children: [
+                                              Container(
+                                                height: p.minutes == 0
+                                                    ? 2
+                                                    : (p.minutes /
+                                                            (peak == 0
+                                                                ? 1
+                                                                : peak)) *
+                                                        (barH - 4),
+                                                margin: const EdgeInsets
+                                                    .symmetric(
+                                                    horizontal: 1.5),
+                                                decoration: BoxDecoration(
+                                                  color: p.minutes > 0 &&
+                                                          p.minutes == peak
+                                                      ? accent
+                                                      : AppColors.hairline,
+                                                  borderRadius:
+                                                      BorderRadius.circular(
+                                                          2),
+                                                ),
+                                              ),
+                                            ],
+                                          ),
+                                        ),
+                                        SizedBox(
+                                          height: labelH,
+                                          child: Center(
+                                            child: Text(p.label,
+                                                style: TextStyle(
+                                                    fontSize: 8,
+                                                    color:
+                                                        AppColors.faint)),
+                                          ),
+                                        ),
+                                      ],
+                                    ),
+                                  ),
+                              ],
                             ),
-                        ],
+                          ),
+                        ),
                       ),
                     ],
                   ),
@@ -120,32 +210,14 @@ class TrendBars extends StatelessWidget {
             ),
           );
         }),
-        const SizedBox(height: 4),
-        // 终审 C4：按月只有 6 个点，skip(length-7) 会抛 RangeError；≤7 全显
-        Row(
-          mainAxisAlignment: MainAxisAlignment.spaceBetween,
-          // 与柱区左缘对齐（让出左侧刻度列）
-          children: [
-            const SizedBox(width: 36),
-            for (final p in (points.length > 7
-                ? points.sublist(points.length - 7)
-                : points))
-              Expanded(
-                child: Center(
-                    child: Text(p.label,
-                        style:
-                            TextStyle(fontSize: 9, color: AppColors.faint))),
-              ),
-          ],
-        ),
       ],
     );
   }
 
   Widget _modeBtn(BuildContext context, String label, TrendMode m) {
-    final selected = m == mode;
+    final selected = m == widget.mode;
     return GestureDetector(
-      onTap: () => onModeChanged(m),
+      onTap: () => widget.onModeChanged(m),
       child: Text(label,
           style: TextStyle(
               fontSize: 10,
@@ -301,10 +373,11 @@ class _NameBarsState extends State<NameBars> {
                         style: const TextStyle(fontSize: 12))),
                 Expanded(
                   child: Container(
-                    height: 3,
+                    // 2026-10-05 用户反馈：条形增粗、整体圆润
+                    height: 9,
                     decoration: BoxDecoration(
                       color: AppColors.hairline,
-                      borderRadius: BorderRadius.circular(2),
+                      borderRadius: BorderRadius.circular(4.5),
                     ),
                     child: FractionallySizedBox(
                       alignment: Alignment.centerLeft,
@@ -314,7 +387,7 @@ class _NameBarsState extends State<NameBars> {
                       child: Container(
                         decoration: BoxDecoration(
                           color: item == items.first ? accent : AppColors.ink,
-                          borderRadius: BorderRadius.circular(2),
+                          borderRadius: BorderRadius.circular(4.5),
                         ),
                       ),
                     ),

@@ -2,7 +2,9 @@ import '../data/db.dart' show ClassRecord, MediaAsset, ClassRecordRowX;
 
 /// 统计口径（规格 §3.2，全部为纯函数，不依赖 Flutter）：
 /// 跳舞节数 = Σ节数；时长 = Σ(节数×每节)；近1月=滚动30天、近1年=滚动365天（含今天）；
-/// 分布/老师/舞室按节数；趋势按天=最近14天、按月=最近6个自然月；未来日期进总数、不进趋势桶。
+/// 分布/老师/舞室按节数；趋势按天=最近60天、按月=最近12个自然月
+/// （2026-10-05 用户需求：图表可左右滑动查看过往数据，故趋势**不按范围过滤**，
+/// 永远基于全量记录，未来日期不进趋势桶）。
 
 enum StatRange { all, last30, last365, custom }
 
@@ -78,9 +80,10 @@ class StatsComputer {
     final inRangeIds = inRange.map((r) => r.id).toSet();
     final mediaCount = media.where((m) => inRangeIds.contains(m.classId)).length;
 
+    // 趋势基于全量记录（不随上方范围过滤）——滑动往左能看到更早的历史
     final trend = mode == TrendMode.daily
-        ? _dailyTrend(inRange, now)
-        : _monthlyTrend(inRange, now);
+        ? _dailyTrend(records, now)
+        : _monthlyTrend(records, now);
 
     return StatsResult(
       sessionCount: sessionCount,
@@ -118,29 +121,31 @@ class StatsComputer {
     }
   }
 
-  /// 最近 14 天（含今天），未来日期不入桶（桶锚定 now）。柱值=分钟。
+  /// 最近 60 天（含今天），未来日期不入桶（桶锚定 now）。柱值=分钟。
   static List<BarPoint> _dailyTrend(List<ClassRecord> rs, DateTime now) {
+    const days = 60;
     final today = DateTime(now.year, now.month, now.day);
-    final buckets = List<int>.filled(14, 0);
+    final buckets = List<int>.filled(days, 0);
     for (final r in rs) {
       final d = DateTime.parse(r.date);
       if (d.isAfter(today)) continue;
       final diff = today.difference(DateTime(d.year, d.month, d.day)).inDays;
-      if (diff >= 0 && diff < 14) buckets[13 - diff] += r.totalMinutes;
+      if (diff >= 0 && diff < days) buckets[days - 1 - diff] += r.totalMinutes;
     }
-    return List.generate(14, (i) {
-      final day = today.subtract(Duration(days: 13 - i));
+    return List.generate(days, (i) {
+      final day = today.subtract(Duration(days: days - 1 - i));
       return BarPoint('${day.day}', buckets[i]);
     });
   }
 
-  /// 最近 6 个自然月（含本月），未来日期不入桶。柱值=分钟。
+  /// 最近 12 个自然月（含本月），未来日期不入桶。柱值=分钟。
   static List<BarPoint> _monthlyTrend(List<ClassRecord> rs, DateTime now) {
+    const months = 12;
     final thisMonth = DateTime(now.year, now.month);
     final keys = <String>[];
-    final buckets = List<int>.filled(6, 0);
-    for (var i = 0; i < 6; i++) {
-      final m = DateTime(thisMonth.year, thisMonth.month - (5 - i));
+    final buckets = List<int>.filled(months, 0);
+    for (var i = 0; i < months; i++) {
+      final m = DateTime(thisMonth.year, thisMonth.month - (months - 1 - i));
       keys.add('${m.year}-${m.month}');
     }
     for (final r in rs) {
@@ -151,7 +156,7 @@ class StatsComputer {
       if (idx >= 0) buckets[idx] += r.totalMinutes;
     }
     return List.generate(
-        6, (i) => BarPoint('${keys[i].split('-')[1]}月', buckets[i]));
+        months, (i) => BarPoint('${keys[i].split('-')[1]}月', buckets[i]));
   }
 
   /// 舞种分布：按节数降序取前 6，其余并入"其他"。

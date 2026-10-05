@@ -17,7 +17,8 @@ class DraggableFab extends StatefulWidget {
 
 class _DraggableFabState extends State<DraggableFab> {
   static const _key = 'fabOffset';
-  static const _ballSize = Size(96, 96);
+  // 96px 的 80%（用户 2026-10-05 反馈：再缩小到当前大小的 80%）
+  static const _ballSize = Size(77, 77);
 
   Offset _offset = Offset.zero;
   bool _loaded = false;
@@ -106,7 +107,7 @@ class _DraggableFabState extends State<DraggableFab> {
           child: Icon(
             _dragging ? Icons.open_with : Icons.add,
             color: Colors.white,
-            size: _dragging ? 44 : 56,
+            size: _dragging ? 35 : 45,
           ),
         ),
       ),

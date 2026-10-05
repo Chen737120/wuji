@@ -75,7 +75,8 @@ String buildCompareCommand({
 
   return '-y $inputs -filter_complex "$filter" '
       '-map "[v]" $audioMap '
-      '-c:v h264_mediacodec -c:a aac -b:a 128k '
+      '-c:v h264_mediacodec -pix_fmt yuv420p '
+      '-c:a aac -ar 48000 -ac 2 -b:a 128k '
       '-t ${_fmtSec(total)} '
       '-movflags +faststart';
 }

@@ -28,11 +28,11 @@ class FrameAdjustView extends StatelessWidget {
     final accent = Theme.of(context).colorScheme.primary;
     return Column(
       children: [
-        // 比例 chips（作用于选中侧）
+        // 比例 chips（作用于选中侧；原型③「每侧比例」）
         Row(
           mainAxisAlignment: MainAxisAlignment.center,
           children: [
-            Text('选中侧比例：',
+            Text('每侧比例（选中侧）:',
                 style: TextStyle(fontSize: 11, color: AppColors.secondary)),
             for (final r in ['1:1', '3:4', '9:16'])
               Padding(
@@ -62,7 +62,8 @@ class FrameAdjustView extends StatelessWidget {
           ],
         ),
         const SizedBox(height: 10),
-        Text('点选一侧视频后拖动平移、双指缩放；框比例即导出比例',
+        Text('点选一侧视频后，可单指拖动、双指缩放（框内内容移动，裁剪框不动）。\n实线框＝老师侧，虚线框＝我的侧，框比例即导出比例',
+            textAlign: TextAlign.center,
             style: TextStyle(fontSize: 10, color: AppColors.faint)),
       ],
     );

@@ -63,13 +63,14 @@ void main() {
     final s = StatsComputer.compute(rs, const [],
         StatFilter(range: StatRange.last30), now,
         mode: TrendMode.daily);
-    expect(s.trend, hasLength(14));
+    // 2026-10-05：趋势扩到 60 天可滑动
+    expect(s.trend, hasLength(60));
     expect(s.trend.last.minutes, 60); // 今天：1节×60分
     expect(s.trend.any((b) => b.minutes == 180), isFalse); // 未来的3节×60不入桶
     expect(s.sessionCount, 4); // 统计总数仍含未来记录
   });
 
-  test('monthly trend covers 6 calendar months', () {
+  test('monthly trend covers 12 calendar months', () {
     final rs = [
       ...rec(0, 1, 60),
       ...rec(40, 2, 60), // 两个月前
@@ -77,7 +78,7 @@ void main() {
     final s = StatsComputer.compute(rs, const [],
         StatFilter(range: StatRange.last365), now,
         mode: TrendMode.monthly);
-    expect(s.trend, hasLength(6));
+    expect(s.trend, hasLength(12));
     expect(s.trend.last.minutes, 60); // 本月：1节×60分
     expect(s.trend.any((b) => b.minutes == 120), isTrue); // 两个月前2节×60分
   });

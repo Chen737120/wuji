@@ -27,6 +27,11 @@ class _FancamPageState extends State<FancamPage> {
   KeyframeTrack? _track;
   CropBox _box = const CropBox(cx: 0.5, cy: 0.5, w: 0.5, h: 0.5);
 
+  // 源视频真实尺寸（导出 crop 的像素域基准）。v1.5.6 前硬编码 1080×1920，
+  // 横屏视频 crop 超界 → FFmpeg "Invalid too big size" → 直拍导出必败
+  int _srcW = 0;
+  int _srcH = 0;
+
   // 预览缩放（双指，仅查看）
   double _previewScale = 1.0;
   Offset _previewPan = Offset.zero;
@@ -57,6 +62,10 @@ class _FancamPageState extends State<FancamPage> {
         _track = KeyframeTrack(duration: ctl.value.duration);
         _box = CropBox.centered(_ratio);
         _track!.reset(_box);
+        // video_player 的 size 已应用 rotation，与 FFmpeg 默认 autorotate
+        // 后滤镜看到的尺寸一致，可作为 crop 像素域基准
+        _srcW = ctl.value.size.width.round();
+        _srcH = ctl.value.size.height.round();
       });
       // 不自动播放：先停在首帧让用户选区/加关键帧，控制条可手动播放
     } catch (_) {
@@ -348,14 +357,15 @@ class _FancamPageState extends State<FancamPage> {
                                 horizontal: 20, vertical: 8),
                           ),
                           onPressed: () {
+                          if (_srcW <= 0 || _srcH <= 0) return;
                           Navigator.push(
                             context,
                             MaterialPageRoute(
                                 builder: (_) => FancamPreviewPage(
                                     sourcePath: widget.source.path,
                                     track: _track!,
-                                    srcW: 1080,
-                                    srcH: 1920,
+                                    srcW: _srcW,
+                                    srcH: _srcH,
                                     ratio: _ratio,
                                     keyframeCount: _track!.frames.length)),
                           );

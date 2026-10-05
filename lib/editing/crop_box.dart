@@ -95,9 +95,11 @@ class CropBox {
   }
 
   /// 像素域矩形（源尺寸），供 FFmpeg crop。
+  /// w/h 必须 clamp 进源——FFmpeg crop 对 w/h 超界直接报错
+  /// （x/y 超界才会自动夹取）。
   Rect toPixelRect(int srcW, int srcH) {
-    final pw = (w * srcW).roundToDouble();
-    final ph = (h * srcH).roundToDouble();
+    final pw = (w * srcW).roundToDouble().clamp(16.0, srcW.toDouble());
+    final ph = (h * srcH).roundToDouble().clamp(16.0, srcH.toDouble());
     final px = ((cx * srcW) - pw / 2).clamp(0.0, srcW - pw);
     final py = ((cy * srcH) - ph / 2).clamp(0.0, srcH - ph);
     return Rect.fromLTWH(px, py, pw, ph);
