@@ -390,7 +390,10 @@ class _NameBarsState extends State<NameBars> {
                           : item.sessions / totalSessions,
                       child: Container(
                         decoration: BoxDecoration(
-                          color: item == items.first ? accent : AppColors.ink,
+                          // 2026-10-05 用户反馈：黑色进度条突兀 → 点缀色淡化
+                          color: item == items.first
+                              ? accent
+                              : accent.withValues(alpha: .40),
                           borderRadius: BorderRadius.circular(4.5),
                         ),
                       ),

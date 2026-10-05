@@ -62,7 +62,7 @@ class FrameAdjustView extends StatelessWidget {
           ],
         ),
         const SizedBox(height: 10),
-        Text('点选一侧视频后，可单指拖动、双指缩放（框内内容移动，裁剪框不动）。\n实线框＝老师侧，虚线框＝我的侧，框比例即导出比例',
+        Text('选择比例＝改变裁剪框大小；单指拖动/双指缩放＝移动、放大框下面的视频。\n框内即导出画面，框外不可见；实线框＝老师侧，虚线框＝我的侧',
             textAlign: TextAlign.center,
             style: TextStyle(fontSize: 10, color: const Color(0xFF6A6A70))),
       ],

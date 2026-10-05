@@ -40,6 +40,10 @@ abstract final class DarkSkin {
 }
 
 class _ComparePageState extends State<ComparePage> {
+  /// 双画面预览容器高（逻辑像素）——SideTransform.frameInContainer 的
+  /// 边距折算与导出 containerAspect 都依赖此值，改动需同步。
+  static const double previewH = 210;
+
   VideoPlayerController? _teacherCtl;
   VideoPlayerController? _mineCtl;
 
@@ -163,6 +167,10 @@ class _ComparePageState extends State<ComparePage> {
 
   Future<void> _export() async {
     if (_exporting || _teacherCtl == null || _mineCtl == null) return;
+    // 预览容器宽高比（与 _side 的 LayoutBuilder 实际容器一致）：
+    // 页面左右 Padding 14×2、两列间距 6 → 容器宽=(屏宽-34)/2，高=210
+    final screenW = MediaQuery.sizeOf(context).width;
+    final containerAspect = (screenW - 34) / 2 / previewH;
     setState(() => _exporting = true);
     try {
       _exportSvc ??= ExportService(
@@ -186,6 +194,7 @@ class _ComparePageState extends State<ComparePage> {
             Size(_mineCtl!.value.size.width, _mineCtl!.value.size.height),
         audio: _audioChoice!,
         fpsCap: teacherInfo?.fps == 0 ? 30 : (teacherInfo?.fps ?? 30),
+        containerAspect: containerAspect,
       );
       await _exportSvc!.run(
         ExportJob(command: cmd, base: '对比', expectedDurationMs: overlapMs),
@@ -247,7 +256,7 @@ class _ComparePageState extends State<ComparePage> {
           Padding(
             padding: const EdgeInsets.symmetric(horizontal: 14),
             child: SizedBox(
-              height: 210,
+              height: previewH,
               child: Row(
                 children: [
                   Expanded(
@@ -569,11 +578,11 @@ class _ComparePageState extends State<ComparePage> {
     if (s != null) await _applySpeed(s);
   }
 
-  /// 单侧画面（暗色）。
-  /// - 时间微调态：cover 播放全画面；
-  /// - 画面微调态：视频 cover 打底＋**比例裁剪框**（1:1/3:4/9:16 跟随该侧
-  ///   transform），框外四块遮罩盖住（溢出不可见，遮罩预览），实线=老师、
-  ///   虚线=我的；手势平移/缩放的是底下的视频，框与遮罩不动。
+  /// 单侧画面（暗色）。**遮罩裁剪语义（2026-10-05 用户反馈重做）**：
+  /// 视频以正常大小完整打底（contain，不变形不预裁切）；
+  /// 画面微调态叠加固定比例裁剪框（实线=老师、虚线=我的），
+  /// **框外遮住不可见**；单指拖/双指缩放移动的是框下面的视频画面；
+  /// 切换比例=改变框的大小；框内即导出画面。
   Widget _side(
     BuildContext context,
     VideoPlayerController? ctl,
@@ -599,63 +608,44 @@ class _ComparePageState extends State<ComparePage> {
           children: [
             if (ready)
               LayoutBuilder(builder: (context, b) {
-                final va = ctl.value.aspectRatio;
-                double w = b.maxHeight * va;
-                double h = b.maxHeight;
-                if (w < b.maxWidth) {
-                  w = b.maxWidth;
-                  h = b.maxWidth / va;
-                }
-                final video =
-                    SizedBox(width: w, height: h, child: VideoPlayer(ctl));
-                final transformed = frameMode
-                    ? Transform(
-                        alignment: Alignment.center,
-                        transform: Matrix4.identity()
-                          ..translateByDouble(transform.pan.dx * w * 0.3,
-                              transform.pan.dy * h * 0.3, 0, 1)
-                          ..scaleByDouble(
-                              transform.scale, transform.scale, 1, 1),
-                        child: video,
-                      )
-                    : video;
-                return Center(child: transformed);
+                // 容器归一化坐标（高=1）→ 像素
+                final unit = b.maxHeight;
+                final ca = b.maxWidth / b.maxHeight;
+                final src = ctl.value.size;
+                Rect px(Rect r) => Rect.fromLTWH(
+                    r.left * unit, r.top * unit, r.width * unit, r.height * unit);
+                final videoRect = frameMode
+                    ? transform.videoRectInContainer(src, ca)
+                    : _containRect(src, ca);
+                final frameRect =
+                    frameMode ? transform.frameInContainer(ca) : null;
+                return Stack(
+                  children: [
+                    Positioned.fromRect(
+                      rect: px(videoRect),
+                      child: VideoPlayer(ctl),
+                    ),
+                    if (frameRect != null)
+                      Positioned.fill(
+                        child: IgnorePointer(
+                          child: CustomPaint(
+                            painter: _MaskPainter(
+                              frame: px(frameRect),
+                              strokeColor: selected
+                                  ? accent
+                                  : Colors.white.withValues(alpha: .8),
+                              strokeWidth: selected ? 2 : 1.2,
+                              dashed: dashed,
+                            ),
+                          ),
+                        ),
+                      ),
+                  ],
+                );
               })
             else
               const Center(
                 child: Icon(Icons.play_arrow, color: DarkSkin.faint, size: 30),
-              ),
-            // 遮罩预览：比例框外的部分不可见
-            if (frameMode)
-              Positioned.fill(
-                child: IgnorePointer(
-                  child: LayoutBuilder(builder: (context, b) {
-                    final a = transform.aspect;
-                    final availW = b.maxWidth - 10;
-                    final availH = b.maxHeight - 10;
-                    double bw = availH * a;
-                    double bh = availH;
-                    if (bw > availW) {
-                      bw = availW;
-                      bh = availW / a;
-                    }
-                    final rect = Rect.fromCenter(
-                      center: Offset(b.maxWidth / 2, b.maxHeight / 2),
-                      width: bw,
-                      height: bh,
-                    );
-                    return CustomPaint(
-                      painter: _MaskPainter(
-                        frame: rect,
-                        strokeColor: selected
-                            ? accent
-                            : Colors.white.withValues(alpha: .8),
-                        strokeWidth: selected ? 2 : 1.2,
-                        dashed: dashed,
-                      ),
-                    );
-                  }),
-                ),
               ),
           ],
         ),
@@ -680,14 +670,17 @@ class _ComparePageState extends State<ComparePage> {
             onScaleUpdate: frameMode
                 ? (d) {
                     if (d.pointerCount >= 2) {
+                      // 双指缩放：放大框下面的视频画面
                       transform.scale =
                           (transform.scale * d.scale).clamp(1.0, 4.0);
                     } else {
+                      // 单指拖动：移动视频（容器像素 → 归一化单位）
+                      final unit = previewH;
                       transform.pan = Offset(
-                        (transform.pan.dx - d.focalPointDelta.dx / 200)
-                            .clamp(-1.0, 1.0),
-                        (transform.pan.dy + d.focalPointDelta.dy / 200)
-                            .clamp(-1.0, 1.0),
+                        transform.pan.dx +
+                            d.focalPointDelta.dx / unit,
+                        transform.pan.dy +
+                            d.focalPointDelta.dy / unit,
                       );
                     }
                     onTransformed?.call();
@@ -708,6 +701,21 @@ class _ComparePageState extends State<ComparePage> {
         ),
       ],
     );
+  }
+
+  /// 非微调态：完整画面 contain 打底（与画面微调态同一视觉基准）。
+  Rect _containRect(Size src, double containerAspect) {
+    final sa = src.width / src.height;
+    double w, h;
+    if (sa > containerAspect) {
+      w = containerAspect;
+      h = containerAspect / sa;
+    } else {
+      h = 1.0;
+      w = sa;
+    }
+    return Rect.fromCenter(
+        center: Offset(containerAspect / 2, 0.5), width: w, height: h);
   }
 }
 

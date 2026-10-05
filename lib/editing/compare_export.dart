@@ -28,10 +28,11 @@ String buildCompareCommand({
   required Size rightSrc,
   required String audio, // teacher | mine | none
   required double fpsCap,
+  required double containerAspect, // 画面微调预览容器宽高比（WYSIWYG 基准）
   int outHeight = 720,
 }) {
-  final lr = left.toSourceRect(leftSrc, outHeight.toDouble());
-  final rr = right.toSourceRect(rightSrc, outHeight.toDouble());
+  final lr = left.toSourceRect(leftSrc, containerAspect);
+  final rr = right.toSourceRect(rightSrc, containerAspect);
 
   final fps = fpsCap < 30 ? fpsCap : 30.0;
 

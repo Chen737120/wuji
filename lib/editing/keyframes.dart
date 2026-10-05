@@ -117,22 +117,32 @@ class KeyframeTrack {
   double _clampedCenter(double centerNorm, int sizePx, int src) =>
       (centerNorm * src - sizePx / 2).clamp(0.0, (src - sizePx).toDouble());
 
-  /// x/y 逐帧表达式：嵌套 if 分段线性跟随框中心（结果 clamp 进源内）。
+  /// x/y 逐帧表达式：嵌套 if 时间分段，跟随框中心（节点值 clamp 进源内）。
+  ///
+  /// 时间轴语义（v1.5.8 修"第一关键帧前画面慢慢移动"）：
+  /// t<首帧 → **固定在第一帧位置**（旧实现误用 lerp 外推）；
+  /// [t_i, t_{i+1}) → lerp(v_i, v_{i+1})；t≥末帧 → 固定末帧位置。
   String _posExpr(double sizePx, int src, double Function(CropBox) pick) {
     String nodeOf(CropBox b) =>
         _clampedCenter(pick(b), sizePx.round(), src).toStringAsFixed(1);
-    var nested = nodeOf(_frames.last.box);
-    for (var i = _frames.length - 2; i >= 0; i--) {
-      final a = _frames[i].box;
-      final b = _frames[i + 1].box;
-      final tSec = (_frames[i].t.inMilliseconds / 1000).toStringAsFixed(3);
-      final span = ((_frames[i + 1].t - _frames[i].t).inMilliseconds / 1000)
-          .toStringAsFixed(3);
-      final va = nodeOf(a);
-      final vb = nodeOf(b);
-      nested =
-          'if(lt(t,$tSec),($va+($vb-($va))*(t-$tSec)/$span),$nested)';
+    var inner = nodeOf(_frames.last.box); // 最内层：t≥末帧 → 固定末帧
+    for (var i = _frames.length - 1; i >= 0; i--) {
+      final tSec =
+          (_frames[i].t.inMilliseconds / 1000).toStringAsFixed(3);
+      final String branch;
+      if (i == 0) {
+        branch = nodeOf(_frames[0].box);
+      } else {
+        final a = nodeOf(_frames[i - 1].box);
+        final b = nodeOf(_frames[i].box);
+        final t0 =
+            (_frames[i - 1].t.inMilliseconds / 1000).toStringAsFixed(3);
+        final span = ((_frames[i].t - _frames[i - 1].t).inMilliseconds / 1000)
+            .toStringAsFixed(3);
+        branch = '($a+($b-($a))*(t-$t0)/$span)';
+      }
+      inner = 'if(lt(t,$tSec),$branch,$inner)';
     }
-    return nested;
+    return inner;
   }
 }
