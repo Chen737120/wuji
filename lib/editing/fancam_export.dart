@@ -29,7 +29,7 @@ String buildFancamCommand({
   final cropExpr = track.cropExpr(srcW, srcH, outH: outHeight);
   final audioPart = hasAudio ? '-c:a aac -b:a 128k' : '-an';
 
-  return '-i "$srcPath" '
+  return '-y -i "$srcPath" '
       '-vf "$cropExpr,scale=-2:$outHeight,setsar=1" '
       '-c:v h264_mediacodec $audioPart '
       '-movflags +faststart';

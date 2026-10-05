@@ -105,8 +105,10 @@ class ExportService {
       if (rc != 0 && cmd.contains('-c:v h264_mediacodec')) {
         final half = File(temp);
         if (half.existsSync()) half.deleteSync();
+        // cmd 已含输出路径，只换编码器——再次追加会变成两个输出文件，
+        // FFmpeg 打开第二个时报 "File already exists"（历史 bug 根因）
         cmd = cmd.replaceAll('-c:v h264_mediacodec', '-c:v mpeg4 -q:v 4');
-        rc = await _runner.run('$cmd "$temp"',
+        rc = await _runner.run(cmd,
             onProgress: onProgress,
             expectedDurationMs: job.expectedDurationMs);
       }

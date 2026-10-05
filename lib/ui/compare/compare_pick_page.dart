@@ -210,6 +210,8 @@ class _SourceCardState extends State<_SourceCard> {
                         children: [
                           FittedBox(
                             fit: BoxFit.cover,
+                            // cover 会把子树放大到超出预选框，必须裁掉溢出
+                            clipBehavior: Clip.hardEdge,
                             child: SizedBox(
                               width: _ctl!.value.size.width == 0
                                   ? 1080

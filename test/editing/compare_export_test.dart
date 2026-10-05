@@ -21,16 +21,15 @@ void main() {
       audio: 'teacher',
       fpsCap: 30,
     );
+    expect(cmd, startsWith('-y '));
     expect(cmd, contains('hstack=inputs=2'));
     expect(cmd, contains('scale=-2:720'));
     // 每侧各一个 crop
     expect('crop='.allMatches(cmd).length, 2);
     // 音源=老师（0:a）
-    expect(cmd, contains('-map "[a]"'));
+    expect(cmd, contains('-map 0:a'));
     // 帧率上限
     expect(cmd, contains('fps=30'));
-    // 输出时长 = 重叠区间 = [5s, 60s) = 55s
-    expect(cmd, contains('-t 55.000'));
   });
 
   test('音源可切：mine → -map 1:a；none → -an', () {
@@ -46,7 +45,7 @@ void main() {
         rightSrc: const Size(1080, 1920),
         audio: 'mine',
         fpsCap: 30);
-    expect(mine, contains('-map "[a]"'));
+    expect(mine, contains('-map 1:a'));
     final none = buildCompareCommand(
         teacherPath: '/t.mp4',
         minePath: '/m.mp4',
@@ -83,7 +82,7 @@ void main() {
     expect(cmd, contains('crop=${rr.width.round()}:${rr.height.round()}:${rr.left.round()}:${rr.top.round()}'));
   });
 
-  test('-ss 偏移：我的侧从 0 起、老师侧加偏移（offset>0）', () {
+  test('我的延后（offset>0）：老师开头 -ss 剪掉、我的不动', () {
     final cmd = buildCompareCommand(
       teacherPath: '/t.mp4',
       minePath: '/m.mp4',
@@ -97,9 +96,54 @@ void main() {
       audio: 'teacher',
       fpsCap: 30,
     );
-    // 我的延后 5s（offset>0）：我的流前置 5s 静帧（tpad），老师不动
-    expect(cmd, isNot(contains('-ss')), reason: cmd);
-    expect(cmd, contains('tpad=start_duration=5.000'), reason: cmd);
-    expect(cmd, contains('-t 55.000'), reason: cmd);
+    expect(cmd, contains('-ss 5.000 -i "/t.mp4"'), reason: cmd);
+    expect(cmd, isNot(contains('-ss 5.000 -i "/m.mp4"')), reason: cmd);
+    // 开头无补帧
+    expect(cmd, isNot(contains('tpad=start')), reason: cmd);
+    // 总长 = 未剪侧（我的）全长 60s；老师剩 55s，末尾冻结补 5s
+    expect(cmd, contains('tpad=stop_duration=5.000'), reason: cmd);
+    expect(cmd, contains('-t 60.000'), reason: cmd);
+  });
+
+  test('我的提前（offset<0）：我的开头 -ss 剪掉、老师不动', () {
+    final cmd = buildCompareCommand(
+      teacherPath: '/t.mp4',
+      minePath: '/m.mp4',
+      offset: const Duration(seconds: -5),
+      teacherDur: const Duration(seconds: 60),
+      myDur: const Duration(seconds: 60),
+      left: left,
+      right: right,
+      leftSrc: const Size(1920, 1080),
+      rightSrc: const Size(1080, 1920),
+      audio: 'teacher',
+      fpsCap: 30,
+    );
+    expect(cmd, contains('-ss 5.000 -i "/m.mp4"'), reason: cmd);
+    expect(cmd, isNot(contains('-ss 5.000 -i "/t.mp4"')), reason: cmd);
+    expect(cmd, isNot(contains('tpad=start')), reason: cmd);
+    // 总长 = 未剪侧（老师）全长 60s；我剩 55s，末尾冻结补 5s
+    expect(cmd, contains('tpad=stop_duration=5.000'), reason: cmd);
+    expect(cmd, contains('-t 60.000'), reason: cmd);
+  });
+
+  test('偏移为 0：两侧都不剪，短侧末尾补齐到较长者', () {
+    final cmd = buildCompareCommand(
+      teacherPath: '/t.mp4',
+      minePath: '/m.mp4',
+      offset: Duration.zero,
+      teacherDur: const Duration(seconds: 60),
+      myDur: const Duration(seconds: 50),
+      left: left,
+      right: right,
+      leftSrc: const Size(1920, 1080),
+      rightSrc: const Size(1080, 1920),
+      audio: 'teacher',
+      fpsCap: 30,
+    );
+    expect(cmd, isNot(contains('-ss ')), reason: cmd);
+    // 我 50s 比老师短 10s：末尾冻结补 10s（允许的末尾竞争延长）
+    expect(cmd, contains('tpad=stop_duration=10.000'), reason: cmd);
+    expect(cmd, contains('-t 60.000'), reason: cmd);
   });
 }
