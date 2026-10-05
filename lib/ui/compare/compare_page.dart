@@ -8,14 +8,12 @@ import '../../editing/ffmpeg_probe.dart';
 import '../../editing/overlap.dart';
 import '../../editing/side_transform.dart';
 import 'frame_adjust_view.dart';
-import '../../theme.dart';
 import 'align_view.dart';
 
-/// 同屏对比页（规格 §4.1 + 原型 03-compare-flow）：
-/// 顶部小 tab → 双画面（**固定高度，两种模式同高**，画面微调只是在画面上
-/// 叠加固定裁剪框、框内内容平移缩放，绝不改变视频显示尺寸）→ 播放行
-/// （时间/播放/倍速）→ 大 tab 按钮 → 面板 → 音源+导出。
-/// 以老师播放器为时钟主：我的播放器位置 = 老师位置 - offset。
+/// 同屏对比编辑页——深暗色（与选择页一致，用户 2026-10-05 指定风格）。
+/// 结构：顶部小 tab → 双画面 → 播放行 → 大 tab → 面板 → 音源+导出。
+/// 画面微调模式：视频 cover 打底，**比例裁剪框外的部分被遮罩盖住不可见**
+/// （遮罩预览），手势只移动框内内容。
 class ComparePage extends StatefulWidget {
   const ComparePage({
     super.key,
@@ -30,13 +28,24 @@ class ComparePage extends StatefulWidget {
   State<ComparePage> createState() => _ComparePageState();
 }
 
+/// 暗色皮肤（页面级常量，点缀色仍取主题）。
+abstract final class DarkSkin {
+  static const bg = Color(0xFF0F0F11);
+  static const card = Color(0xFF1C1C1F);
+  static const line = Color(0xFF2E2E33);
+  static const text = Color(0xFFF2F2F2);
+  static const sub = Color(0xFF9A9AA0);
+  static const faint = Color(0xFF6A6A70);
+  static const track = Color(0xFF2A2A2E);
+}
+
 class _ComparePageState extends State<ComparePage> {
   VideoPlayerController? _teacherCtl;
   VideoPlayerController? _mineCtl;
 
   Duration _offset = Duration.zero;
   double _speed = 1.0;
-  double _appliedSpeed = 1.0; // 已实际下发到播放器的倍速（避免重复 setSpeed）
+  double _appliedSpeed = 1.0;
   bool _adjustingFrame = false;
   bool _alignedConfirmed = false;
   bool _exporting = false;
@@ -91,16 +100,14 @@ class _ComparePageState extends State<ComparePage> {
 
   /// 老师播放器作为时钟主。播放期间**完全不做 seek**——
   /// 高频 seek 会把我的视频卡成一帧一帧跳（真机复现）。
-  /// 两控制器同倍率播放，时钟天然同步；对齐只在播放/拖动/微调时一次性施加。
   void _onTeacherTick() {
     final t = _teacherCtl;
     final m = _mineCtl;
     if (t == null || m == null || !mounted) return;
     if (t.value.isPlaying && !m.value.isPlaying) {
-      // 我的视频已到片尾时不要反复 play()（会被重新拉起跳回）
       final ended = m.value.duration > Duration.zero &&
-          m.value.position >= m.value.duration -
-              const Duration(milliseconds: 80);
+          m.value.position >=
+              m.value.duration - const Duration(milliseconds: 80);
       if (!ended) m.play();
     } else if (!t.value.isPlaying && m.value.isPlaying) {
       m.pause();
@@ -112,16 +119,14 @@ class _ComparePageState extends State<ComparePage> {
     }
   }
 
-  /// 把我的播放器对齐到老师当前进度（点播放/拖进度/微调时调用）。
-  /// 漂移小于 250ms 不 seek——无谓的 seek 正是"点播放只动一帧"的来源。
+  /// 把我的播放器对齐到老师当前进度。漂移小于 250ms 不 seek。
   Future<void> _syncMineToTeacher({bool force = false}) async {
     final t = _teacherCtl;
     final m = _mineCtl;
     if (t == null || m == null) return;
     final want = t.value.position - _offset;
     if (want < Duration.zero || want > m.value.duration) return;
-    final drift =
-        (m.value.position - want).inMilliseconds.abs();
+    final drift = (m.value.position - want).inMilliseconds.abs();
     if (force || drift > 250) {
       await m.seekTo(want);
     }
@@ -143,13 +148,11 @@ class _ComparePageState extends State<ComparePage> {
       await m?.pause();
       return;
     }
-    // 播放前一次性对齐起点，随后两路同倍率自然同步
     await _syncMineToTeacher();
     await t.play();
     await m?.play();
   }
 
-  /// 时间微调步进：暂停状态下同步移动我的画面，让用户直接看到对齐效果。
   void _onOffsetChanged(Duration v) {
     setState(() => _offset = v);
     final t = _teacherCtl;
@@ -167,7 +170,8 @@ class _ComparePageState extends State<ComparePage> {
         mover: GalleryMover(),
       );
       final teacherInfo = await probeMedia(widget.teacher.path);
-      final overlapMs = overlapLength(teacherDur, myDur, _offset).inMilliseconds;
+      final overlapMs =
+          overlapLength(teacherDur, myDur, _offset).inMilliseconds;
       final cmd = buildCompareCommand(
         teacherPath: widget.teacher.path,
         minePath: widget.mine.path,
@@ -178,16 +182,13 @@ class _ComparePageState extends State<ComparePage> {
         right: _right,
         leftSrc: Size((teacherInfo?.width ?? 1080).toDouble(),
             (teacherInfo?.height ?? 1920).toDouble()),
-        rightSrc: Size(
-            _mineCtl!.value.size.width, _mineCtl!.value.size.height),
+        rightSrc:
+            Size(_mineCtl!.value.size.width, _mineCtl!.value.size.height),
         audio: _audioChoice!,
         fpsCap: teacherInfo?.fps == 0 ? 30 : (teacherInfo?.fps ?? 30),
       );
       await _exportSvc!.run(
-        ExportJob(
-            command: cmd,
-            base: '对比',
-            expectedDurationMs: overlapMs),
+        ExportJob(command: cmd, base: '对比', expectedDurationMs: overlapMs),
         onProgress: (p) {
           if (mounted) {
             setState(() => _exportProgress = '${(p * 100).round()}%');
@@ -225,23 +226,24 @@ class _ComparePageState extends State<ComparePage> {
     final accent = Theme.of(context).colorScheme.primary;
     final t = _teacherCtl;
     return Scaffold(
-      backgroundColor: AppColors.bg,
+      backgroundColor: DarkSkin.bg,
       appBar: AppBar(
-        backgroundColor: AppColors.bg,
+        backgroundColor: DarkSkin.bg,
         elevation: 0,
         leading: IconButton(
-            icon: const Icon(Icons.arrow_back, color: AppColors.secondary),
+            icon: const Icon(Icons.arrow_back, color: DarkSkin.text),
             onPressed: () => Navigator.pop(context)),
         centerTitle: true,
         title: const Text('同屏对比',
-            style: TextStyle(fontSize: 14, fontWeight: FontWeight.w600)),
+            style: TextStyle(
+                fontSize: 14,
+                fontWeight: FontWeight.w600,
+                color: DarkSkin.text)),
       ),
       body: Column(
         children: [
-          // 顶部小 tab（原型②③：页面顶部居中、选中点缀色下划线）
           _topTabs(),
           const SizedBox(height: 4),
-          // 双画面：固定高度，两种模式同高（原型②③一致；不改变视频长宽高）
           Padding(
             padding: const EdgeInsets.symmetric(horizontal: 14),
             child: SizedBox(
@@ -268,7 +270,6 @@ class _ComparePageState extends State<ComparePage> {
             ),
           ),
           const SizedBox(height: 6),
-          // 播放行＋细进度条（只重建这一段，不惊动双播放器）
           if (t != null && t.value.isInitialized)
             Padding(
               padding: const EdgeInsets.symmetric(horizontal: 14),
@@ -280,7 +281,6 @@ class _ComparePageState extends State<ComparePage> {
           else
             const SizedBox(height: 8),
           const SizedBox(height: 6),
-          // 大 tab 按钮（原型：图标+文字、描边圆角）
           Row(
             children: [
               const SizedBox(width: 14),
@@ -317,7 +317,6 @@ class _ComparePageState extends State<ComparePage> {
                     ),
                   ),
           ),
-          // 确认已对齐（时间微调面板底部，原型②）
           if (!_adjustingFrame)
             Padding(
               padding: const EdgeInsets.fromLTRB(14, 0, 14, 0),
@@ -326,25 +325,23 @@ class _ComparePageState extends State<ComparePage> {
                 child: FilledButton(
                   style: FilledButton.styleFrom(
                     backgroundColor:
-                        _alignedConfirmed ? accent : Colors.white,
+                        _alignedConfirmed ? accent : DarkSkin.card,
                     foregroundColor:
-                        _alignedConfirmed ? Colors.white : AppColors.ink,
+                        _alignedConfirmed ? Colors.white : DarkSkin.sub,
                     side: _alignedConfirmed
                         ? null
-                        : const BorderSide(color: AppColors.hairline),
+                        : const BorderSide(color: DarkSkin.line),
                     shape: const StadiumBorder(),
                     padding: const EdgeInsets.symmetric(vertical: 10),
                   ),
                   onPressed: () =>
                       setState(() => _alignedConfirmed = !_alignedConfirmed),
-                  child: Text(
-                      _alignedConfirmed ? '已确认对齐 ✓' : '确认已对齐',
+                  child: Text(_alignedConfirmed ? '已确认对齐 ✓' : '确认已对齐',
                       style: const TextStyle(
                           fontSize: 13, fontWeight: FontWeight.w700)),
                 ),
               ),
             ),
-          // 音源选择（原型③：导出按钮上方一行小 chips）
           SafeArea(
             top: false,
             child: Padding(
@@ -354,9 +351,9 @@ class _ComparePageState extends State<ComparePage> {
                   Row(
                     mainAxisAlignment: MainAxisAlignment.center,
                     children: [
-                      Text('音频：',
+                      const Text('音频：',
                           style: TextStyle(
-                              fontSize: 11, color: AppColors.secondary)),
+                              fontSize: 11, color: DarkSkin.sub)),
                       for (final (v, label) in [
                         ('teacher', '老师原声'),
                         ('mine', '我的原声'),
@@ -369,11 +366,11 @@ class _ComparePageState extends State<ComparePage> {
                                 style: const TextStyle(fontSize: 10)),
                             selected: _audioChoice == v,
                             selectedColor: accent,
-                            backgroundColor: Colors.white,
+                            backgroundColor: DarkSkin.card,
                             labelStyle: TextStyle(
                                 color: _audioChoice == v
                                     ? Colors.white
-                                    : AppColors.ink),
+                                    : DarkSkin.sub),
                             onSelected: (_) =>
                                 setState(() => _audioChoice = v),
                           ),
@@ -386,13 +383,14 @@ class _ComparePageState extends State<ComparePage> {
                     child: FilledButton(
                       style: FilledButton.styleFrom(
                         backgroundColor:
-                            exportable ? accent : AppColors.hairline,
+                            exportable ? accent : DarkSkin.card,
                         shape: const StadiumBorder(),
                         padding: const EdgeInsets.symmetric(vertical: 11),
                       ),
-                      onPressed: (_exporting || !exportable || !_alignedConfirmed)
-                          ? null
-                          : _export,
+                      onPressed:
+                          (_exporting || !exportable || !_alignedConfirmed)
+                              ? null
+                              : _export,
                       child: Text(
                           _exporting
                               ? '导出中 ${_exportProgress.isEmpty ? '' : _exportProgress}'
@@ -406,7 +404,7 @@ class _ComparePageState extends State<ComparePage> {
                               fontWeight: FontWeight.w600,
                               color: (exportable && _alignedConfirmed)
                                   ? Colors.white
-                                  : AppColors.faint)),
+                                  : DarkSkin.faint)),
                     ),
                   ),
                 ],
@@ -418,7 +416,6 @@ class _ComparePageState extends State<ComparePage> {
     );
   }
 
-  /// 顶部小 tab（原型②③顶部：居中两词，选中点缀色+下划线）。
   Widget _topTabs() {
     return Row(
       mainAxisAlignment: MainAxisAlignment.center,
@@ -444,7 +441,7 @@ class _ComparePageState extends State<ComparePage> {
               style: TextStyle(
                   fontSize: 12,
                   fontWeight: selected ? FontWeight.w700 : FontWeight.w400,
-                  color: selected ? accent : AppColors.faint)),
+                  color: selected ? accent : DarkSkin.faint)),
           const SizedBox(height: 3),
           Container(
             height: 2,
@@ -459,7 +456,6 @@ class _ComparePageState extends State<ComparePage> {
     );
   }
 
-  /// 大 tab 按钮（原型②③：图标+文字、描边圆角10、选中点缀色描边加粗）。
   Widget _bigTab(BuildContext context, IconData icon, String label,
       bool selected, VoidCallback onTap) {
     final accent = Theme.of(context).colorScheme.primary;
@@ -468,31 +464,28 @@ class _ComparePageState extends State<ComparePage> {
       child: Container(
         padding: const EdgeInsets.symmetric(vertical: 9),
         decoration: BoxDecoration(
-          color: Colors.white,
+          color: DarkSkin.card,
           borderRadius: BorderRadius.circular(10),
           border: Border.all(
-              color: selected ? accent : AppColors.hairline,
+              color: selected ? accent : DarkSkin.line,
               width: selected ? 1.5 : 1),
         ),
         child: Row(
           mainAxisAlignment: MainAxisAlignment.center,
           children: [
-            Icon(icon,
-                size: 16,
-                color: selected ? accent : AppColors.faint),
+            Icon(icon, size: 16, color: selected ? accent : DarkSkin.faint),
             const SizedBox(width: 6),
             Text(label,
                 style: TextStyle(
                     fontSize: 12,
                     fontWeight: selected ? FontWeight.w700 : FontWeight.w400,
-                    color: selected ? accent : AppColors.faint)),
+                    color: selected ? accent : DarkSkin.sub)),
           ],
         ),
       ),
     );
   }
 
-  /// 播放行：时间（左）／播放（中）／倍速（右）＋细进度条（原型②③）。
   Widget _playbackRow(BuildContext context, VideoPlayerController t) {
     String fmt(Duration d) {
       final m = d.inMinutes.remainder(60).toString().padLeft(2, '0');
@@ -507,22 +500,23 @@ class _ComparePageState extends State<ComparePage> {
           children: [
             Text('${fmt(t.value.position)} / ${fmt(t.value.duration)}',
                 style: const TextStyle(
-                    fontSize: 11,
-                    color: AppColors.secondary,
-                    fontFeatures: [])),
+                    fontSize: 11, color: DarkSkin.sub)),
             Expanded(
               child: IconButton(
                   onPressed: _togglePlay,
                   icon: Icon(
-                    t.value.isPlaying ? Icons.pause_circle_outline : Icons.play_circle_outline,
-                    color: AppColors.ink,
+                    t.value.isPlaying
+                        ? Icons.pause_circle_outline
+                        : Icons.play_circle_outline,
+                    color: DarkSkin.text,
                     size: 28,
                   )),
             ),
             GestureDetector(
               onTap: () => _showSpeedMenu(context),
               child: Text('$_speed×',
-                  style: TextStyle(fontSize: 12, color: AppColors.secondary)),
+                  style:
+                      TextStyle(fontSize: 12, color: DarkSkin.sub)),
             ),
           ],
         ),
@@ -536,8 +530,8 @@ class _ComparePageState extends State<ComparePage> {
               overlayShape:
                   const RoundSliderOverlayShape(overlayRadius: 10),
               activeTrackColor: accent,
-              inactiveTrackColor: AppColors.hairline,
-              thumbColor: AppColors.ink,
+              inactiveTrackColor: DarkSkin.track,
+              thumbColor: Colors.white,
             ),
             child: Slider(
               value: t.value.position.inMilliseconds
@@ -575,10 +569,11 @@ class _ComparePageState extends State<ComparePage> {
     if (s != null) await _applySpeed(s);
   }
 
-  /// 单侧画面。**两种模式同一固定高度**：
-  /// - 时间微调态：cover 播放；
-  /// - 画面微调态：同样 cover，叠加固定裁剪框（实线=老师、虚线=我的），
-  ///   手势只改框内内容（平移/缩放），框与视频尺寸都不变。
+  /// 单侧画面（暗色）。
+  /// - 时间微调态：cover 播放全画面；
+  /// - 画面微调态：视频 cover 打底＋**比例裁剪框**（1:1/3:4/9:16 跟随该侧
+  ///   transform），框外四块遮罩盖住（溢出不可见，遮罩预览），实线=老师、
+  ///   虚线=我的；手势平移/缩放的是底下的视频，框与遮罩不动。
   Widget _side(
     BuildContext context,
     VideoPlayerController? ctl,
@@ -594,7 +589,7 @@ class _ComparePageState extends State<ComparePage> {
     final frameMode = _adjustingFrame && transform != null;
     final box = Container(
       decoration: BoxDecoration(
-        color: AppColors.ink,
+        color: Colors.black,
         borderRadius: BorderRadius.circular(10),
       ),
       child: ClipRRect(
@@ -611,8 +606,8 @@ class _ComparePageState extends State<ComparePage> {
                   w = b.maxWidth;
                   h = b.maxWidth / va;
                 }
-                final video = SizedBox(width: w, height: h, child: VideoPlayer(ctl));
-                // 画面微调：框内内容平移/缩放（框与视频尺寸不动）
+                final video =
+                    SizedBox(width: w, height: h, child: VideoPlayer(ctl));
                 final transformed = frameMode
                     ? Transform(
                         alignment: Alignment.center,
@@ -628,25 +623,38 @@ class _ComparePageState extends State<ComparePage> {
               })
             else
               const Center(
-                child: Icon(Icons.play_arrow, color: AppColors.bg, size: 30),
+                child: Icon(Icons.play_arrow, color: DarkSkin.faint, size: 30),
               ),
-            // 固定裁剪框（仅画面微调态显示）：实线=老师侧、虚线=我的侧
+            // 遮罩预览：比例框外的部分不可见
             if (frameMode)
               Positioned.fill(
                 child: IgnorePointer(
-                  child: Padding(
-                    padding: const EdgeInsets.all(5),
-                    child: CustomPaint(
-                      painter: _FramePainter(
-                        color: selected
+                  child: LayoutBuilder(builder: (context, b) {
+                    final a = transform.aspect;
+                    final availW = b.maxWidth - 10;
+                    final availH = b.maxHeight - 10;
+                    double bw = availH * a;
+                    double bh = availH;
+                    if (bw > availW) {
+                      bw = availW;
+                      bh = availW / a;
+                    }
+                    final rect = Rect.fromCenter(
+                      center: Offset(b.maxWidth / 2, b.maxHeight / 2),
+                      width: bw,
+                      height: bh,
+                    );
+                    return CustomPaint(
+                      painter: _MaskPainter(
+                        frame: rect,
+                        strokeColor: selected
                             ? accent
-                            : Colors.white.withValues(alpha: .85),
+                            : Colors.white.withValues(alpha: .8),
                         strokeWidth: selected ? 2 : 1.2,
                         dashed: dashed,
-                        radius: 6,
                       ),
-                    ),
-                  ),
+                    );
+                  }),
                 ),
               ),
           ],
@@ -659,8 +667,10 @@ class _ComparePageState extends State<ComparePage> {
         Text(label,
             style: TextStyle(
                 fontSize: 10,
-                fontWeight: frameMode && selected ? FontWeight.w700 : FontWeight.w400,
-                color: frameMode && selected ? accent : AppColors.faint)),
+                fontWeight: frameMode && selected
+                    ? FontWeight.w700
+                    : FontWeight.w400,
+                color: frameMode && selected ? accent : DarkSkin.faint)),
         const SizedBox(height: 4),
         Expanded(
           child: GestureDetector(
@@ -701,29 +711,44 @@ class _ComparePageState extends State<ComparePage> {
   }
 }
 
-/// 裁剪框描边：实线或虚线圆角矩形（原型③：实线框=老师侧、虚线框=我的侧）。
-class _FramePainter extends CustomPainter {
-  _FramePainter({
-    required this.color,
+/// 遮罩预览：比例框外四块黑遮罩＋框描边（实线/虚线）。
+class _MaskPainter extends CustomPainter {
+  _MaskPainter({
+    required this.frame,
+    required this.strokeColor,
     required this.strokeWidth,
     required this.dashed,
-    required this.radius,
   });
 
-  final Color color;
+  final Rect frame;
+  final Color strokeColor;
   final double strokeWidth;
   final bool dashed;
-  final double radius;
 
   @override
   void paint(Canvas canvas, Size size) {
+    final maskPaint = Paint()..color = Colors.black.withValues(alpha: .88);
+    final outer = Offset.zero & size;
+    // 四块：上、下、左、右
+    canvas.drawRect(
+        Rect.fromLTRB(outer.left, outer.top, outer.right, frame.top),
+        maskPaint);
+    canvas.drawRect(
+        Rect.fromLTRB(outer.left, frame.bottom, outer.right, outer.bottom),
+        maskPaint);
+    canvas.drawRect(
+        Rect.fromLTRB(outer.left, frame.top, frame.left, frame.bottom),
+        maskPaint);
+    canvas.drawRect(
+        Rect.fromLTRB(frame.right, frame.top, outer.right, frame.bottom),
+        maskPaint);
+
     final path = Path()
-      ..addRRect(RRect.fromRectAndRadius(
-          Offset.zero & size, Radius.circular(radius)));
+      ..addRRect(RRect.fromRectAndRadius(frame, const Radius.circular(4)));
     final paint = Paint()
       ..style = PaintingStyle.stroke
       ..strokeWidth = strokeWidth
-      ..color = color;
+      ..color = strokeColor;
     if (!dashed) {
       canvas.drawPath(path, paint);
       return;
@@ -741,6 +766,8 @@ class _FramePainter extends CustomPainter {
   }
 
   @override
-  bool shouldRepaint(covariant _FramePainter old) =>
-      old.color != color || old.dashed != dashed || old.strokeWidth != strokeWidth;
+  bool shouldRepaint(covariant _MaskPainter old) =>
+      old.frame != frame ||
+      old.strokeColor != strokeColor ||
+      old.dashed != dashed;
 }

@@ -12,6 +12,7 @@ import '../services/exporter.dart';
 import '../services/stats.dart' show StatRange;
 import 'sheets/date_range_sheet.dart';
 import '../theme.dart';
+import 'widgets/media_thumb.dart';
 
 /// 按时间段导出预览页（规格 §3.7）：筛选 → 封面预览列表 → 合计 → 导出。
 class ExportPreviewPage extends StatefulWidget {
@@ -248,20 +249,18 @@ class _ExportPreviewPageState extends State<ExportPreviewPage> {
                               ),
                               child: Row(
                                 children: [
-                                  Container(
+                                  MediaThumb(
+                                    rel: m.isEmpty
+                                        ? null
+                                        : (m.first.type == 'video'
+                                            ? m.first.thumbName
+                                            : m.first.fileName),
+                                    fallbackIcon: m.isNotEmpty &&
+                                            m.first.type == 'video'
+                                        ? Icons.play_arrow
+                                        : Icons.image,
                                     width: 52,
                                     height: 40,
-                                    decoration: BoxDecoration(
-                                      color: AppColors.ink,
-                                      borderRadius: BorderRadius.circular(6),
-                                    ),
-                                    alignment: Alignment.center,
-                                    child: Icon(
-                                        m.isNotEmpty && m.first.type == 'video'
-                                            ? Icons.play_arrow
-                                            : Icons.image,
-                                        color: AppColors.bg,
-                                        size: 16),
                                   ),
                                   const SizedBox(width: 10),
                                   Expanded(

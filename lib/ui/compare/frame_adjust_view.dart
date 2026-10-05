@@ -1,6 +1,5 @@
 import 'package:flutter/material.dart';
 import '../../editing/side_transform.dart';
-import '../../theme.dart';
 
 /// 画面微调面板（规格 §4.1 ②）：每侧比例 1:1/3:4/9:16（默认 3:4）。
 /// 预览与手势在上方放大的双画面上进行（见 compare_page._side），
@@ -33,7 +32,8 @@ class FrameAdjustView extends StatelessWidget {
           mainAxisAlignment: MainAxisAlignment.center,
           children: [
             Text('每侧比例（选中侧）:',
-                style: TextStyle(fontSize: 11, color: AppColors.secondary)),
+                style: TextStyle(
+                    fontSize: 11, color: const Color(0xFF9A9AA0))),
             for (final r in ['1:1', '3:4', '9:16'])
               Padding(
                 padding: const EdgeInsets.symmetric(horizontal: 4),
@@ -42,12 +42,12 @@ class FrameAdjustView extends StatelessWidget {
                   selected:
                       (selectedSide == 0 ? left : right).ratio == r,
                   selectedColor: accent,
-                  backgroundColor: Colors.white,
+                  backgroundColor: const Color(0xFF1C1C1F),
                   labelStyle: TextStyle(
                       fontSize: 11,
                       color: (selectedSide == 0 ? left : right).ratio == r
                           ? Colors.white
-                          : AppColors.ink),
+                          : const Color(0xFF9A9AA0)),
                   onSelected: (_) {
                     if (selectedSide == 0) {
                       left.ratio = r;
@@ -64,7 +64,7 @@ class FrameAdjustView extends StatelessWidget {
         const SizedBox(height: 10),
         Text('点选一侧视频后，可单指拖动、双指缩放（框内内容移动，裁剪框不动）。\n实线框＝老师侧，虚线框＝我的侧，框比例即导出比例',
             textAlign: TextAlign.center,
-            style: TextStyle(fontSize: 10, color: AppColors.faint)),
+            style: TextStyle(fontSize: 10, color: const Color(0xFF6A6A70))),
       ],
     );
   }

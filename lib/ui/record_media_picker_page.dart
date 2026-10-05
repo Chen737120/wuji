@@ -7,6 +7,7 @@ import '../editing/media_source_picker.dart';
 import '../services/abs_path_cache.dart';
 import '../services/archive_fs.dart';
 import '../theme.dart';
+import 'widgets/media_thumb.dart';
 
 /// 课堂记录视频选择页（规格 §4.1 ①「从舞记课堂选」）：
 /// 按课分组列视频（封面缩略图＋时长），点击即选回。
@@ -95,18 +96,8 @@ class _RecordMediaPickerPageState extends State<RecordMediaPickerPage> {
                         ListTile(
                           contentPadding:
                               const EdgeInsets.symmetric(horizontal: 8),
-                          leading: Container(
-                            width: 56,
-                            height: 42,
-                            decoration: BoxDecoration(
-                              color: AppColors.ink,
-                              borderRadius: BorderRadius.circular(6),
-                            ),
-                            alignment: Alignment.center,
-                            child: const Icon(Icons.play_arrow,
-                                color: AppColors.bg, size: 20),
-                          ),
-                          title: Text(v.fileName.split('/').last,
+                          leading: MediaThumb(rel: v.thumbName),
+                          title: Text(_itemTitle(g),
                               maxLines: 1,
                               overflow: TextOverflow.ellipsis,
                               style: const TextStyle(fontSize: 12)),
@@ -121,6 +112,16 @@ class _RecordMediaPickerPageState extends State<RecordMediaPickerPage> {
                   ],
                 ),
     );
+  }
+
+  /// 条目可读标题（uuid 文件名人类读不懂）：M月d日 · 舞种 · 老师
+  String _itemTitle(ClassVideoGroup g) {
+    final parts = [
+      _groupTitle(g),
+      if (g.styleName != null && g.styleName!.isNotEmpty) g.styleName!,
+      if (g.teacherName != null && g.teacherName!.isNotEmpty) g.teacherName!,
+    ];
+    return parts.join(' · ');
   }
 
   String _groupHeader(String date) {

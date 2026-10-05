@@ -35,19 +35,20 @@ class FancamPreviewPage extends StatefulWidget {
 class _FancamPreviewPageState extends State<FancamPreviewPage> {
   bool _exporting = false;
   double _progress = 0;
+  bool _saving = false;
   late final String _command;
   late final int _outHeight;
+  ExportService? _svc;
 
   @override
   void initState() {
     super.initState();
-    // 不放大规则：输出高 = min(720, 最小框像素高)
+    // 不放大规则：输出高 = min(720, 固定框像素高)，偶数化（与导出命令一致）
     var h = 720;
-    for (final f in widget.track.frames) {
-      final ph = (f.box.h * widget.srcH).round();
-      if (ph < h) h = ph;
-    }
-    _outHeight = h.clamp(1, 720);
+    final (_, cropH) = widget.track.fixedCropSize(widget.srcW, widget.srcH);
+    if (cropH < h) h = cropH;
+    h = h & ~0x1;
+    _outHeight = h.clamp(2, 720);
     _command = buildFancamCommand(
       srcPath: widget.sourcePath,
       track: widget.track,
@@ -57,13 +58,15 @@ class _FancamPreviewPageState extends State<FancamPreviewPage> {
     );
   }
 
+  /// 第一步「保存到相册」：先只导出到临时文件并进入成片预览；
+  /// 用户在预览里确认没问题、点「完成」后才真正写入系统相册（[_finish]）。
   Future<void> _export() async {
     if (_exporting) return;
     setState(() => _exporting = true);
     try {
-      final svc = ExportService(runner: FFmpegKitRunner(), mover: GalleryMover());
+      _svc = ExportService(runner: FFmpegKitRunner(), mover: GalleryMover());
       final info = await _probeDur();
-      final rel = await svc.run(
+      final tempPath = await _svc!.run(
         ExportJob(
             command: _command,
             base: '直拍',
@@ -71,13 +74,11 @@ class _FancamPreviewPageState extends State<FancamPreviewPage> {
         onProgress: (p) {
           if (mounted) setState(() => _progress = p);
         },
+        autoSave: false,
       );
       if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('已保存到相册 Movies/wuji/')));
-      // 导出成功：原地预览成片（预览确认环节），完成后返回编辑页
       setState(() {
-        _exportedPath = '/storage/emulated/0/$rel';
+        _exportedPath = tempPath;
         _exporting = false;
       });
     } on ExportCancelled {
@@ -87,6 +88,26 @@ class _FancamPreviewPageState extends State<FancamPreviewPage> {
         ScaffoldMessenger.of(context)
             .showSnackBar(SnackBar(content: Text('导出失败：$e')));
         setState(() => _exporting = false);
+      }
+    }
+  }
+
+  /// 预览确认后的「完成」：此时才把成片写入系统相册，然后返回编辑页。
+  Future<void> _finish() async {
+    if (_saving || _exportedPath == null || _svc == null) return;
+    setState(() => _saving = true);
+    try {
+      final fileName = _exportedPath!.split(Platform.pathSeparator).last;
+      await _svc!.saveToGallery(_exportedPath!, fileName);
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('已保存到相册 Movies/wuji/')));
+      Navigator.of(context).pop(); // 回编辑页
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context)
+            .showSnackBar(SnackBar(content: Text('保存失败：$e')));
+        setState(() => _saving = false);
       }
     }
   }
@@ -132,14 +153,15 @@ class _FancamPreviewPageState extends State<FancamPreviewPage> {
                   width: double.infinity,
                   child: FilledButton(
                     style: FilledButton.styleFrom(
-                      backgroundColor: AppColors.bg,
+                      backgroundColor:
+                          _saving ? AppColors.hairline : AppColors.bg,
                       foregroundColor: AppColors.ink,
                       shape: const StadiumBorder(),
                       padding: const EdgeInsets.symmetric(vertical: 10),
                     ),
-                    onPressed: () => Navigator.pop(context),
-                    child: const Text('完成',
-                        style: TextStyle(
+                    onPressed: _saving ? null : _finish,
+                    child: Text(_saving ? '保存中…' : '完成',
+                        style: const TextStyle(
                             fontSize: 13, fontWeight: FontWeight.w600)),
                   ),
                 ),
@@ -183,7 +205,7 @@ class _FancamPreviewPageState extends State<FancamPreviewPage> {
                 _row('输出分辨率', '$outW × $_outHeight'),
                 _row('音频', widget.hasAudio ? '源视频完整原声' : '静音'),
                 _row('关键帧', '${widget.keyframeCount} 个'),
-                _row('保存位置', '相册 Movies/wuji/'),
+                _row('保存位置', '确认预览后存入相册 Movies/wuji/'),
               ],
             ),
           ),
@@ -237,7 +259,7 @@ class _FancamPreviewPageState extends State<FancamPreviewPage> {
       );
 }
 
-/// 导出成片预览：自动播放，支持暂停/拖动，作为「预览确认环节」。
+/// 导出成片预览：自动播放，播放/暂停＋可拖动进度条（预览确认环节）。
 class _ResultPreview extends StatefulWidget {
   const _ResultPreview({required this.path});
 
@@ -253,7 +275,8 @@ class _ResultPreviewState extends State<_ResultPreview> {
   @override
   void initState() {
     super.initState();
-    _ctl = VideoPlayerController.file(File(widget.path));
+    _ctl = VideoPlayerController.file(File(widget.path),
+        videoPlayerOptions: VideoPlayerOptions(mixWithOthers: true));
     _ctl.initialize().then((_) {
       if (!mounted) return;
       setState(() {});
@@ -274,18 +297,70 @@ class _ResultPreviewState extends State<_ResultPreview> {
           child: Text('成片准备中…',
               style: TextStyle(fontSize: 11, color: Colors.white54)));
     }
-    return Column(
-      children: [
-        AspectRatio(
-          aspectRatio: _ctl.value.aspectRatio,
-          child: VideoPlayer(_ctl),
-        ),
-        VideoProgressIndicator(
-          _ctl,
-          allowScrubbing: true,
-          colors: VideoProgressColors(playedColor: AppColors.bg),
-        ),
-      ],
+    return ValueListenableBuilder<VideoPlayerValue>(
+      valueListenable: _ctl,
+      builder: (context, v, _) {
+        String fmt(Duration d) {
+          final m = d.inMinutes.remainder(60).toString().padLeft(2, '0');
+          final s = d.inSeconds.remainder(60).toString().padLeft(2, '0');
+          return '$m:$s';
+        }
+
+        return Column(
+          children: [
+            AspectRatio(
+              aspectRatio: _ctl.value.aspectRatio,
+              child: VideoPlayer(_ctl),
+            ),
+            Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 10),
+              child: Row(
+                children: [
+                  IconButton(
+                    onPressed: () =>
+                        v.isPlaying ? _ctl.pause() : _ctl.play(),
+                    icon: Icon(
+                      v.isPlaying
+                          ? Icons.pause_circle_outline
+                          : Icons.play_circle_outline,
+                      color: Colors.white,
+                      size: 26,
+                    ),
+                  ),
+                  Text('${fmt(v.position)} / ${fmt(v.duration)}',
+                      style: const TextStyle(
+                          fontSize: 10, color: Colors.white54)),
+                  Expanded(
+                    child: SliderTheme(
+                      data: SliderTheme.of(context).copyWith(
+                        trackHeight: 2,
+                        thumbShape: const RoundSliderThumbShape(
+                            enabledThumbRadius: 5),
+                        overlayShape: const RoundSliderOverlayShape(
+                            overlayRadius: 9),
+                        activeTrackColor: AppColors.bg,
+                        inactiveTrackColor: Colors.white24,
+                        thumbColor: Colors.white,
+                      ),
+                      child: Slider(
+                        value: v.position.inMilliseconds
+                            .clamp(0, v.duration.inMilliseconds)
+                            .toDouble(),
+                        max: v.duration.inMilliseconds
+                            .toDouble()
+                            .clamp(1, double.infinity)
+                            .toDouble(),
+                        onChanged: (ms) =>
+                            _ctl.seekTo(Duration(milliseconds: ms.round())),
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ],
+        );
+      },
     );
   }
 }

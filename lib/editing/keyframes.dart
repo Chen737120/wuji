@@ -1,3 +1,5 @@
+import 'dart:math' as math;
+
 import 'crop_box.dart';
 
 /// 单个关键帧：时间点＋当时的框。
@@ -69,67 +71,68 @@ class KeyframeTrack {
 
   /// FFmpeg crop 逐帧表达式（规格 §5.3）。
   ///
-  /// 输出高 = min(outH, 框像素高) —— 不放大规则（Review Focus #3）；
-  /// 输出宽按当前框比例。单帧：常量 `crop=w:h:x:y`；
-  /// 多帧：`crop='w(t):h(t):x(t):y(t)'` 的分段线性 if(lt(t,..)) 链。
-  String cropExpr(int srcW, int srcH, {required int outH}) {
+  /// FFmpeg 硬限制：crop 的 **w/h 只在初始化时求值一次（不能用 t）**，
+  /// 仅 x/y 支持逐帧表达式。因此多帧方案（v1.5.7）：
+  /// - w/h 取**所有帧框的最大值**作为常量；
+  /// - x/y 用嵌套 if(lt(t,..)) 链分段线性跟随各帧框中心；
+  /// - 「框大小动画」降级为固定最大框，位置跟随完整保留
+  ///   （2026-10-05 真机报错 "Unknown function in 'w(...)'" 的修复）。
+  String cropExpr(int srcW, int srcH) {
+    final (fw, fh) = fixedCropSize(srcW, srcH);
     if (_frames.isEmpty) {
       final b = CropBox.centered('9:16');
-      return _constantExpr(b, srcW, srcH, outH);
+      return 'crop=$fw:$fh:'
+          '${_clampedCenter(b.cx, fw, srcW).round()}:${_clampedCenter(b.cy, fh, srcH).round()}';
     }
     if (_frames.length == 1) {
-      return _constantExpr(_frames.single.box, srcW, srcH, outH);
+      final b = _frames.single.box;
+      return 'crop=$fw:$fh:'
+          '${_clampedCenter(b.cx, fw, srcW).round()}:${_clampedCenter(b.cy, fh, srcH).round()}';
     }
-    // 多关键帧：对 w/h/x/y 各建一条分段线性表达式（像素域）
-    // w/h 必须 clamp 进源尺寸——FFmpeg crop 对 w/h 超界直接报错
-    final wE = _pixelExpr(srcW, srcH, outH, (b) => b.w,
-        (p, v) => (v * srcW).clamp(16.0, srcW.toDouble()));
-    final hE = _pixelExpr(srcW, srcH, outH, (b) => b.h,
-        (p, v) => (v * srcH).clamp(16.0, srcH.toDouble()));
-    final xE = _pixelExpr(srcW, srcH, outH, (b) => b.left,
-        (p, v) => (v * srcW - p / 2).clamp(0.0, srcW.toDouble()));
-    final yE = _pixelExpr(srcW, srcH, outH, (b) => b.top,
-        (p, v) => (v * srcH - p / 2).clamp(0.0, srcH.toDouble()));
-    return "crop='w($wE):h($hE):x($xE):y($yE)'";
+    // 多帧：x/y 表达式内含逗号，参数必须单引号包裹（filtergraph 语法）
+    final xE = _posExpr(fw.toDouble(), srcW, (b) => b.cx);
+    final yE = _posExpr(fh.toDouble(), srcH, (b) => b.cy);
+    return "crop=$fw:$fh:x='$xE':y='$yE'";
   }
 
-  /// 常量 crop 表达式（含不放大缩放建议由命令层处理；这里输出像素 crop）。
-  String _constantExpr(CropBox box, int srcW, int srcH, int outH) {
-    final r = box.toPixelRect(srcW, srcH);
-    return 'crop=${r.width.round()}:${r.height.round()}:${r.left.round()}:${r.top.round()}';
+  /// 固定框像素尺寸（各帧框取最大，clamp 进源、≥16px）。
+  /// cropExpr / 导出输出高 / 预览参数单共用此单一真源。
+  (int, int) fixedCropSize(int srcW, int srcH) {
+    var w = 0.0;
+    var h = 0.0;
+    for (final f in _frames) {
+      w = math.max(w, f.box.w);
+      h = math.max(h, f.box.h);
+    }
+    if (_frames.isEmpty) {
+      final b = CropBox.centered('9:16');
+      w = b.w;
+      h = b.h;
+    }
+    final pw = (w * srcW).round().clamp(16, srcW);
+    final ph = (h * srcH).round().clamp(16, srcH);
+    return (pw, ph);
   }
 
-  /// 把归一化属性 [pick] 映射到像素域表达式（关键帧时间 t 单位秒）。
-  String _pixelExpr(int srcW, int srcH, int outH,
-      double Function(CropBox) pick, double Function(double p, double v) map) {
-    final parts = <String>[];
-    for (var i = 0; i < _frames.length - 1; i++) {
-      final a = _frames[i];
-      final b = _frames[i + 1];
-      final va = map(pick(a.box), pick(a.box));
-      final vb = map(pick(b.box), pick(b.box));
-      final tSec = (a.t.inMilliseconds / 1000).toStringAsFixed(3);
-      parts.add('lt(t,$tSec)*($va+(($vb)-($va))*(t-$tSec)/${((b.t - a.t).inMilliseconds / 1000).toStringAsFixed(3)})');
-    }
-    // 最后一段之后固定为末帧值
-    final last = _frames.last;
-    final vlast = map(pick(last.box), pick(last.box));
-    final expr = parts.join('+');
-    if (expr.isEmpty) return vlast.toStringAsFixed(0);
-    // 上式是"每段贡献"的和式近似：前段在 t 超过后其贡献为满值，需要
-    // 用真正的 if 链才能精确。为精确起见改为从后往前嵌套 if：
-    parts.clear();
-    var nested = vlast.toStringAsFixed(2);
+  double _clampedCenter(double centerNorm, int sizePx, int src) =>
+      (centerNorm * src - sizePx / 2).clamp(0.0, (src - sizePx).toDouble());
+
+  /// x/y 逐帧表达式：嵌套 if 分段线性跟随框中心（结果 clamp 进源内）。
+  String _posExpr(double sizePx, int src, double Function(CropBox) pick) {
+    String nodeOf(CropBox b) =>
+        _clampedCenter(pick(b), sizePx.round(), src).toStringAsFixed(1);
+    var nested = nodeOf(_frames.last.box);
     for (var i = _frames.length - 2; i >= 0; i--) {
-      final a = _frames[i];
-      final b = _frames[i + 1];
-      final va = map(pick(a.box), pick(a.box)).toStringAsFixed(2);
-      final vb = map(pick(b.box), pick(b.box)).toStringAsFixed(2);
-      final tSec = (a.t.inMilliseconds / 1000).toStringAsFixed(3);
-      final span = ((b.t - a.t).inMilliseconds / 1000).toStringAsFixed(3);
-      nested = 'if(lt(t,$tSec),($va+(($vb)-($va))*(t-$tSec)/$span),$nested)';
+      final a = _frames[i].box;
+      final b = _frames[i + 1].box;
+      final tSec = (_frames[i].t.inMilliseconds / 1000).toStringAsFixed(3);
+      final span = ((_frames[i + 1].t - _frames[i].t).inMilliseconds / 1000)
+          .toStringAsFixed(3);
+      final va = nodeOf(a);
+      final vb = nodeOf(b);
+      nested =
+          'if(lt(t,$tSec),($va+($vb-($va))*(t-$tSec)/$span),$nested)';
     }
-    parts.add(nested);
-    return parts.join();
+    return nested;
   }
 }

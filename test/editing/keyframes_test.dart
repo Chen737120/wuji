@@ -69,15 +69,14 @@ void main() {
       expect(track.boxAt(const Duration(seconds: 50)).cx, 0.8);
     });
 
-    test('cropExpr：单帧＝常量 crop；双帧＝分段线性表达式', () {
+    test('cropExpr：单帧＝常量 crop；双帧＝固定最大框 + x/y 逐帧 if 链', () {
       final single = KeyframeTrack(duration: const Duration(seconds: 10));
       single.upsert(const Duration(seconds: 2),
           const CropBox(cx: 0.5, cy: 0.5, w: 0.5, h: 0.5));
-      final singleExpr = single.cropExpr(1080, 1920, outH: 720);
+      final singleExpr = single.cropExpr(1080, 1920);
       expect(singleExpr, startsWith('crop='));
       expect(singleExpr, isNot(contains('if(lt(t,')));
-      // 像素值：w=540, h=960, x=270, y=480；不放大规则 outH=720 < 960 → 720/960=0.75
-      // → 输出高 720？不——规格：框实际高<720 才不放大。框高 960 ≥720 → 缩到 720
+      // 像素值：w=540, h=960, x=270, y=480
       expect(singleExpr, contains('540'));
 
       final dual = KeyframeTrack(duration: const Duration(seconds: 10));
@@ -85,11 +84,36 @@ void main() {
           const CropBox(cx: 0.2, cy: 0.2, w: 0.4, h: 0.4));
       dual.upsert(const Duration(seconds: 10),
           const CropBox(cx: 0.6, cy: 0.6, w: 0.8, h: 0.8));
-      final dualExpr = dual.cropExpr(1080, 1920, outH: 720);
-      expect(dualExpr, contains('if(lt(t,'));
-      // 两个关键帧 → 一次 lerp 段（首段在 if 内、尾段在 else）
-      expect(dualExpr.contains('if(lt(t,'), isTrue);
-      expect(dualExpr.contains(')*('), isTrue); // lerp 结构
+      final dualExpr = dual.cropExpr(1080, 1920);
+      // FFmpeg crop 的 w/h 不支持 t（v1.5.7 真机报错修复）：
+      // w/h 必须是常量，只有 x/y 用嵌套 if(lt(t,..)) 逐帧跟随
+      expect(dualExpr, contains('if(lt(t,')); // 分段 if 链
+      expect(dualExpr, contains(')*(')); // lerp 结构
+      expect(dualExpr, isNot(contains('w(')), reason: dualExpr);
+      expect(dualExpr, isNot(contains('h(')), reason: dualExpr);
+      // x/y 表达式含逗号，必须单引号包裹
+      expect(dualExpr, contains("x='"), reason: dualExpr);
+      expect(dualExpr, contains("y='"), reason: dualExpr);
+      // w/h 取各帧最大：0.8×1080=864、0.8×1920=1536
+      expect(dualExpr, contains('crop=864:1536:'), reason: dualExpr);
+    });
+
+    test('fixedCropSize：取各帧最大框、clamp 进源、≥16', () {
+      final track = KeyframeTrack(duration: const Duration(seconds: 10));
+      track.upsert(Duration.zero,
+          const CropBox(cx: 0.5, cy: 0.5, w: 0.9, h: 0.4));
+      track.upsert(const Duration(seconds: 5),
+          const CropBox(cx: 0.5, cy: 0.5, w: 0.4, h: 0.9));
+      final (w, h) = track.fixedCropSize(1080, 1920);
+      expect(w, 972); // max(0.9, 0.4) × 1080
+      expect(h, 1728); // max(0.4, 0.9) × 1920
+      // 极端：横屏小源下不小于 16px
+      final small = KeyframeTrack(duration: const Duration(seconds: 10));
+      small.upsert(Duration.zero,
+          const CropBox(cx: 0.5, cy: 0.5, w: 0.5, h: 0.5));
+      final (sw, sh) = small.fixedCropSize(200, 20);
+      expect(sw, 100);
+      expect(sh, 16); // 0.5×20=10 → clamp 16
     });
 
     test('reset：还原回单框', () {

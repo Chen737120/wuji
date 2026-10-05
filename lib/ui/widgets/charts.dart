@@ -90,8 +90,8 @@ class _TrendBarsState extends State<TrendBars> {
           ];
           const labelW = 30.0;
           const labelH = 14.0;
-          // 每根柱固定 17px 宽（14 柱体 + 3 间距）→ 内容宽超出视口即可滑动
-          const slotW = 17.0;
+          // 柱宽：按月 30px（12 根可滑动、图一观感），按天 17px
+          final slotW = widget.mode == TrendMode.monthly ? 30.0 : 17.0;
           final contentW = math.max(constraints.maxWidth, points.length * slotW);
           return SizedBox(
             height: barH + labelH,
@@ -169,9 +169,13 @@ class _TrendBarsState extends State<TrendBars> {
                                                                 ? 1
                                                                 : peak)) *
                                                         (barH - 4),
-                                                margin: const EdgeInsets
-                                                    .symmetric(
-                                                    horizontal: 1.5),
+                                                margin: EdgeInsets.symmetric(
+                                                    horizontal:
+                                                        widget.mode ==
+                                                                TrendMode
+                                                                    .monthly
+                                                            ? 4.0
+                                                            : 1.5),
                                                 decoration: BoxDecoration(
                                                   color: p.minutes > 0 &&
                                                           p.minutes == peak

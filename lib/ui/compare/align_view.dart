@@ -1,7 +1,6 @@
 import 'dart:async';
 import 'package:flutter/material.dart';
 import '../../editing/overlap.dart';
-import '../../theme.dart';
 
 /// 时间微调面板（规格 §4.1 ② + 原型②）：提前/延后按钮（0.1s 步进、长按连发）
 /// ＋偏移文案＋双时间条（白卡片内「老师／我」两行、圆角条）＋还原时间。
@@ -78,7 +77,9 @@ class _AlignViewState extends State<AlignView> {
                     maxLines: 1,
                     overflow: TextOverflow.ellipsis,
                     style: const TextStyle(
-                        fontSize: 13, fontWeight: FontWeight.w700))),
+                        fontSize: 13,
+                        fontWeight: FontWeight.w700,
+                        color: Color(0xFFF2F2F2)))),
             const SizedBox(width: 16),
             _StepButton(
               label: '延后',
@@ -92,8 +93,8 @@ class _AlignViewState extends State<AlignView> {
         Container(
           padding: const EdgeInsets.all(10),
           decoration: BoxDecoration(
-            color: Colors.white,
-            border: Border.all(color: AppColors.hairline),
+            color: const Color(0xFF1C1C1F),
+            border: Border.all(color: const Color(0xFF2E2E33)),
             borderRadius: BorderRadius.circular(12),
           ),
           child: Column(
@@ -189,7 +190,7 @@ class _StepButton extends StatelessWidget {
       child: Container(
         padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 8),
         decoration: BoxDecoration(
-          color: Colors.white,
+          color: const Color(0xFF1C1C1F),
           borderRadius: BorderRadius.circular(10),
           border: Border.all(color: accent.withValues(alpha: .5)),
         ),
@@ -224,7 +225,8 @@ class _TimelineRow extends StatelessWidget {
         SizedBox(
           width: 26,
           child: Text(label,
-              style: const TextStyle(fontSize: 10, color: AppColors.faint)),
+              style: const TextStyle(
+                  fontSize: 10, color: Color(0xFF6A6A70))),
         ),
         Expanded(
           child: LayoutBuilder(builder: (context, c) {
@@ -234,7 +236,7 @@ class _TimelineRow extends StatelessWidget {
             return Container(
               height: 8,
               decoration: BoxDecoration(
-                color: AppColors.bg,
+                color: const Color(0xFF2A2A2E),
                 borderRadius: BorderRadius.circular(4),
               ),
               child: Stack(

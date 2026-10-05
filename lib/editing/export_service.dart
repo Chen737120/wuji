@@ -84,7 +84,8 @@ class ExportService {
     _runner.cancel();
   }
 
-  Future<String> run(ExportJob job, {void Function(double p)? onProgress}) async {
+  Future<String> run(ExportJob job,
+      {void Function(double p)? onProgress, bool autoSave = true}) async {
     final now = (_clock ?? DateTime.now)();
     final stamp = DateFormat('yyyyMMdd_HHmmss').format(now);
     final fileName = '${job.base}_$stamp.${job.ext}';
@@ -123,12 +124,22 @@ class ExportService {
         _dumpLines('FAIL', full);
         throw ExportFailed('FFmpeg 退出码 $rc${tail.isEmpty ? '' : '：$tail'}');
       }
+      if (!autoSave) {
+        // 延迟入相册（直拍成片预览确认环节）：返回临时路径，
+        // 由调用方在用户「完成」后调 [saveToGallery]；此处不清理
+        moved = true;
+        return temp;
+      }
       moved = true; // 成功：mover 搬进相册并消费临时文件
       return await _mover.moveToGallery(temp, fileName);
     } finally {
       if (!moved) await _mover.cleanTemp(temp); // 失败/取消：清半成品
     }
   }
+
+  /// 把 [run(autoSave: false)] 产出的临时成片存进相册（预览确认后调用）。
+  Future<String> saveToGallery(String tempPath, String fileName) =>
+      _mover.moveToGallery(tempPath, fileName);
 
   /// 回退发生时把第一轮的完整日志逐行打进 logcat（release 保留 print）。
   Future<void> _dumpLogs(String tag, int rc) async {

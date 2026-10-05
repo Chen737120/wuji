@@ -27,14 +27,13 @@ void main() {
     expect(cmd, isNot(contains('-an')));
   });
 
-  test('480p 源：框像素高 <720 → 不放大（输出=框像素高）(Review Focus #3)', () {
-    // 源 480x854（9:16 附近），框全高 → 像素高 854？不——9:16 框在 854 高上=854*9/16=480 宽
-    // 框 0.5 高 → 像素高 427 < 720 → 输出 427（原分辨率，不放大）
+  test('480p 源：框像素高 <720 → 不放大（输出=框像素高，偶数化）(Review Focus #3)', () {
+    // 源 480x854（9:16 附近），框 0.5 高 → 像素高 427 < 720 → 输出取 427；
+    // v1.5.7 起 h264_mediacodec 要求偶数尺寸 → 偶数化为 426
     final t = track([[0.5, 0.5, 0.9412, 0.5]]);
     final cmd = buildFancamCommand(
         srcPath: '/s.mp4', track: t, srcW: 480, srcH: 854);
-    // scale 高度=框像素高 427（round）
-    expect(cmd, contains('scale=-2:427'));
+    expect(cmd, contains('scale=-2:426'));
   });
 
   test('无声源 → -an（Review Focus #1）', () {

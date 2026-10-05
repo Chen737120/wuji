@@ -31,11 +31,15 @@ class ClassVideoGroup {
     required this.classId,
     required this.date,
     required this.videos,
+    this.styleName,
+    this.teacherName,
   });
 
   final String classId;
   final String date; // yyyy-MM-dd
   final List<MediaAsset> videos; // 仅视频，按创建时间排序
+  final String? styleName; // 舞种（可读标题用，uuid 文件名人类读不懂）
+  final String? teacherName;
 }
 
 /// 纯函数：只含视频附件的课、按日期倒序分组（无视频的课不出现）。
@@ -47,7 +51,13 @@ List<ClassVideoGroup> groupVideosByClass(
     final videos =
         media.where((m) => m.classId == r.id && m.type == 'video').toList();
     if (videos.isEmpty) continue;
-    out.add(ClassVideoGroup(classId: r.id, date: r.date, videos: videos));
+    out.add(ClassVideoGroup(
+      classId: r.id,
+      date: r.date,
+      videos: videos,
+      styleName: r.styleName,
+      teacherName: r.teacherName,
+    ));
   }
   return out;
 }
