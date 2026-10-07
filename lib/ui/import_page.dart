@@ -10,6 +10,7 @@ import '../data/app_repository.dart';
 import '../data/taxonomy_repo.dart';
 import '../reload_bus.dart';
 import '../services/archive_fs.dart';
+import '../services/photo_bridge.dart';
 import '../services/archive_store.dart';
 import '../services/importer.dart';
 import '../services/manifest.dart';
@@ -156,6 +157,8 @@ class _ImportPageState extends State<ImportPage> {
           ? '导入中 0/$total…（大视频需要一些时间，请保持屏幕常亮）'
           : '导入中…';
     });
+    // 大包导入期间屏幕常亮（防止锁屏后进程被冻结中断）
+    await PhotoManagerBridge.setKeepScreenOn(true);
     try {
       final report = await executeImport(_plan!,
           sourceFs: _pendingSourceFs!,
@@ -167,11 +170,13 @@ class _ImportPageState extends State<ImportPage> {
         }
       });
       ReloadBus.instance.bump();
+      await PhotoManagerBridge.setKeepScreenOn(false);
       if (!mounted) return;
       ScaffoldMessenger.of(context)
           .showSnackBar(SnackBar(content: Text(report.toString())));
       Navigator.pop(context);
     } catch (e) {
+      await PhotoManagerBridge.setKeepScreenOn(false);
       setState(() {
         _busy = false;
         _status = '导入失败：$e（可重试，已成功的部分会自动跳过）';

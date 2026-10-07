@@ -1,6 +1,7 @@
 package com.danceapp.wuji
 
 import android.media.MediaScannerConnection
+import android.view.WindowManager
 import io.flutter.embedding.android.FlutterActivity
 import io.flutter.embedding.engine.FlutterEngine
 import io.flutter.plugin.common.MethodChannel
@@ -22,6 +23,18 @@ class MainActivity : FlutterActivity() {
                         MediaScannerConnection.scanFile(this, arrayOf(path), null) { _, uri ->
                             result.success(uri?.toString())
                         }
+                    }
+                    // 导入/导出大文件期间保持屏幕常亮，防止锁屏后进程被冻结中断
+                    "setKeepScreenOn" -> {
+                        val on = call.argument<Boolean>("on") ?: false
+                        runOnUiThread {
+                            if (on) {
+                                window.addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
+                            } else {
+                                window.clearFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
+                            }
+                        }
+                        result.success(null)
                     }
                     else -> result.notImplemented()
                 }

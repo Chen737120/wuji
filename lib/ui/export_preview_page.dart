@@ -9,6 +9,7 @@ import '../data/app_repository.dart' show ClassSaver;
 import '../data/db.dart';
 import '../services/archive_store.dart';
 import '../services/exporter.dart';
+import '../services/photo_bridge.dart';
 import '../services/stats.dart' show StatRange;
 import 'sheets/date_range_sheet.dart';
 import '../theme.dart';
@@ -117,6 +118,8 @@ class _ExportPreviewPageState extends State<ExportPreviewPage> {
       _exporting = true;
       _progress = '准备中…';
     });
+    // 大包导出期间屏幕常亮（防止锁屏后进程被冻结中断）
+    await PhotoManagerBridge.setKeepScreenOn(true);
     try {
       final media = <MediaAsset>[for (final r in records) ...(_media[r.id] ?? const <MediaAsset>[])];
       final exporter = Exporter(_store);
@@ -144,8 +147,10 @@ class _ExportPreviewPageState extends State<ExportPreviewPage> {
       doneMsg ??= '已打包，选择保存位置';
       final file = XFile(localZip);
       if (doneMsg.startsWith('已打包')) {
+        await PhotoManagerBridge.setKeepScreenOn(false);
         await SharePlus.instance.share(ShareParams(files: [file], text: '舞记备份'));
       } else {
+        await PhotoManagerBridge.setKeepScreenOn(false);
         try {
           await File(localZip).delete();
         } catch (_) {}
@@ -156,12 +161,14 @@ class _ExportPreviewPageState extends State<ExportPreviewPage> {
         Navigator.pop(context);
       }
     } on ExportCancelled {
+      await PhotoManagerBridge.setKeepScreenOn(false);
       if (mounted) {
         ScaffoldMessenger.of(context)
             .showSnackBar(const SnackBar(content: Text('已取消导出')));
         setState(() => _exporting = false);
       }
     } catch (e) {
+      await PhotoManagerBridge.setKeepScreenOn(false);
       if (mounted) {
         ScaffoldMessenger.of(context)
             .showSnackBar(SnackBar(content: Text('导出失败：$e')));

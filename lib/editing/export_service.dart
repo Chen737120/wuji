@@ -11,6 +11,8 @@ import 'package:intl/intl.dart';
 import 'package:path_provider/path_provider.dart';
 import 'package:photo_manager/photo_manager.dart';
 
+import '../services/photo_bridge.dart';
+
 /// 导出已取消（用户点取消，或取消请求先于任务启动）。
 class ExportCancelled implements Exception {
   @override
@@ -94,6 +96,8 @@ class ExportService {
     final existed = File(temp);
     if (existed.existsSync()) existed.deleteSync(); // FFmpeg 不覆盖已有文件
     var moved = false;
+    // FFmpeg 导出（直拍/对比）期间屏幕常亮
+    await PhotoManagerBridge.setKeepScreenOn(true);
     try {
       if (_cancelRequested) throw ExportCancelled();
       var cmd = '${job.command} "$temp"';
@@ -133,6 +137,7 @@ class ExportService {
       moved = true; // 成功：mover 搬进相册并消费临时文件
       return await _mover.moveToGallery(temp, fileName);
     } finally {
+      await PhotoManagerBridge.setKeepScreenOn(false);
       if (!moved) await _mover.cleanTemp(temp); // 失败/取消：清半成品
     }
   }

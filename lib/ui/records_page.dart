@@ -937,10 +937,11 @@ class _RecordCardState extends State<RecordCard> {
               _mediaGrid(),
             ],
             const SizedBox(height: 10),
-            // 图标化元数据：三个标签完整显示，放不下自动换行（2026-10-07 调整 #2）
+            // 图标化元数据 + "…"同行（2026-10-07 调整 #3：不额外占一行）
             Wrap(
               spacing: 14,
               runSpacing: 6,
+              crossAxisAlignment: WrapCrossAlignment.center,
               children: [
                 for (final (icon, text) in [
                   (Icons.music_note, style ?? '未设舞种'),
@@ -958,21 +959,17 @@ class _RecordCardState extends State<RecordCard> {
                               fontSize: 10, color: AppColors.secondary)),
                     ],
                   ),
-              ],
-            ),
-            const SizedBox(height: 8),
-            // 右下角"…"快捷菜单：独立一行右对齐，与内容保持距离（调整 #3）
-            Align(
-              alignment: Alignment.bottomRight,
-              child: GestureDetector(
-                behavior: HitTestBehavior.opaque,
-                onTap: _showActions,
-                child: Padding(
-                  padding: const EdgeInsets.only(left: 12, top: 2, bottom: 2),
-                  child: Icon(Icons.more_horiz,
-                      size: 20, color: AppColors.secondary),
+                // "…"快捷菜单（跟在标签尾部同一行）
+                GestureDetector(
+                  behavior: HitTestBehavior.opaque,
+                  onTap: _showActions,
+                  child: const Padding(
+                    padding: EdgeInsets.only(left: 2, right: 2),
+                    child: Icon(Icons.more_horiz,
+                        size: 20, color: AppColors.secondary),
+                  ),
                 ),
-              ),
+              ],
             ),
           ],
         ),

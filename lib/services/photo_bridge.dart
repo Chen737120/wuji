@@ -30,4 +30,12 @@ class PhotoManagerBridge {
       // 非 Android 宿主/测试环境没有原生端：忽略，相册刷新交给系统
     }
   }
+
+  /// 导入/导出期间屏幕常亮（FLAG_KEEP_SCREEN_ON，无需权限）。
+  /// 非 Android 宿主静默忽略。
+  static Future<void> setKeepScreenOn(bool on) async {
+    try {
+      await _native.invokeMethod('setKeepScreenOn', {'on': on});
+    } catch (_) {}
+  }
 }
