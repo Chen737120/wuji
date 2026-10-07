@@ -29,15 +29,60 @@ class ExportFailed implements Exception {
 
 /// FFmpeg 命令执行器（窄接口：宿主测试注入 fake，设备端包 FFmpegKit）。
 abstract class CommandRunner {
-  /// 返回进程退出码，0 = 成功。命令已含输出路径（最后一个参数）。
+  /// 返回进程退出码，0 = 成功。参数已含输出路径（最后一个参数）。
   Future<int> run(
-    String command, {
+    List<String> args, {
     void Function(double progress)? onProgress,
     int? expectedDurationMs,
   });
 
   /// 取消当前/下一个 FFmpeg 会话。
   void cancel();
+}
+
+/// 把命令串按空白拆成参数数组（评审建议：executeWithArguments 数组形式
+/// 天然免注入）。双引号是 shell 级引用、拆完丢弃；单引号是 ffmpeg filter
+/// 层引用（如 x='…'）、原样保留在参数内容里。
+@visibleForTesting
+List<String> tokenizeFfmpeg(String line) {
+  final out = <String>[];
+  final buf = StringBuffer();
+  var inSingle = false;
+  var inDouble = false;
+  var hasToken = false;
+  for (var i = 0; i < line.length; i++) {
+    final c = line[i];
+    if (inSingle) {
+      if (c == '\'') {
+        inSingle = false;
+      } else {
+        buf.write(c);
+      }
+    } else if (inDouble) {
+      if (c == '"') {
+        inDouble = false;
+      } else {
+        buf.write(c);
+      }
+    } else if (c == ' ' || c == '\t') {
+      if (hasToken) {
+        out.add(buf.toString());
+        buf.clear();
+        hasToken = false;
+      }
+    } else if (c == '"') {
+      inDouble = true;
+      hasToken = true;
+    } else if (c == '\'') {
+      inSingle = true;
+      hasToken = true;
+    } else {
+      buf.write(c);
+      hasToken = true;
+    }
+  }
+  if (hasToken) out.add(buf.toString());
+  return out;
 }
 
 /// 产物搬运（窄接口）：成功=搬进相册并消费临时文件；失败/取消=清半成品。
@@ -100,21 +145,23 @@ class ExportService {
     await PhotoManagerBridge.setKeepScreenOn(true);
     try {
       if (_cancelRequested) throw ExportCancelled();
-      var cmd = '${job.command} "$temp"';
-      var rc = await _runner.run(cmd,
+      // 数组形式执行（评审建议）：文件名含引号/特殊字符也不会破坏命令
+      var args = tokenizeFfmpeg('${job.command} $temp');
+      var rc = await _runner.run(args,
           onProgress: onProgress,
           expectedDurationMs: job.expectedDurationMs);
       // 硬件编码器（mediacodec）在部分设备/尺寸上会失败：回退软编码 mpeg4。
       // 回退前必须删掉第一次运行可能写出的半成品——FFmpeg 遇到已存在
       // 输出文件会问 Overwrite? 并以退出码 1 退出
-      if (rc != 0 && cmd.contains('-c:v h264_mediacodec')) {
+      if (rc != 0 && args.contains('h264_mediacodec')) {
         await _dumpLogs('ROUND1(mediacodec)', rc);
         final half = File(temp);
         if (half.existsSync()) half.deleteSync();
-        // cmd 已含输出路径，只换编码器——再次追加会变成两个输出文件，
-        // FFmpeg 打开第二个时报 "File already exists"（历史 bug 根因）
-        cmd = cmd.replaceAll('-c:v h264_mediacodec', '-c:v mpeg4 -q:v 4');
-        rc = await _runner.run(cmd,
+        // args 已含输出路径（最后一个参数），只替换编码器两个 token——
+        // 再次追加会变成两个输出文件（历史 "already exists" 根因）
+        final ci = args.indexOf('h264_mediacodec');
+        args = [...args.sublist(0, ci), '-c:v', 'mpeg4', '-q:v', '4', ...args.sublist(ci + 1)];
+        rc = await _runner.run(args,
             onProgress: onProgress,
             expectedDurationMs: job.expectedDurationMs);
       }
@@ -201,16 +248,17 @@ class ExportService {
   }
 }
 
-/// 设备端实现：包 FFmpegKit 异步会话。
+/// 设备端实现：包 FFmpegKit 异步会话（数组形式，免 shell 拼接注入）。
 class FFmpegKitRunner implements CommandRunner {
   @override
   Future<int> run(
-    String command, {
+    List<String> args, {
     void Function(double progress)? onProgress,
     int? expectedDurationMs,
   }) {
     final completer = Completer<int>();
-    FFmpegKit.executeAsync(command, (FFmpegSession session) async {
+    FFmpegKit.executeWithArgumentsAsync(args.toList(),
+        (FFmpegSession session) async {
       final ReturnCode? rc = await session.getReturnCode();
       completer.complete(rc?.getValue() ?? -1);
     }, null, (Statistics statistics) {

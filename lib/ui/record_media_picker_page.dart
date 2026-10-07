@@ -31,10 +31,11 @@ class _RecordMediaPickerPageState extends State<RecordMediaPickerPage> {
   Future<void> _load() async {
     final saver = context.read<ClassSaver>();
     final records = await saver.allRecords();
-    final media = <MediaAsset>[];
-    for (final r in records) {
-      media.addAll(await saver.mediaOf(r.id));
-    }
+    // 一次查询取回全部附件（评审建议：替代逐课 N+1 查询）
+    final byClass = await saver.mediaByClass();
+    final media = <MediaAsset>[
+      for (final list in byClass.values) ...list,
+    ];
     if (!mounted) return;
     setState(() {
       _groups = groupVideosByClass(records, media);

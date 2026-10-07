@@ -60,8 +60,25 @@ class _ImportPageState extends State<ImportPage> {
       }
       final extractDir = Directory('${tmp.path}/wuji-import-extract');
       if (extractDir.existsSync()) extractDir.deleteSync(recursive: true);
-      await extractArchiveToDisk(
-          ZipDecoder().decodeBuffer(InputFileStream(localZip)), extractDir.path);
+      extractDir.createSync(recursive: true);
+      // zip slip 防护（评审建议）：不用库的 extractArchiveToDisk——
+      // 手动逐条解包，条目名含 ../ 或绝对路径的直接跳过
+      final archive = ZipDecoder().decodeBuffer(InputFileStream(localZip));
+      for (final entry in archive.files) {
+        if (!entry.isFile) continue;
+        final name = entry.name.replaceAll('\\', '/');
+        if (name.contains('../') ||
+            name.contains('/..') ||
+            name.startsWith('/') ||
+            name.contains(':')) {
+          continue; // 可疑路径：跳过（清单解析收不到它，等同缺失文件）
+        }
+        final out = File('${extractDir.path}${Platform.pathSeparator}$name');
+        await out.parent.create(recursive: true);
+        final output = OutputFileStream(out.path);
+        entry.writeContent(output); // archive 3.6.1：同步写
+        output.close();
+      }
       await _prepareSource(LocalArchiveFs(extractDir.path));
     } catch (e) {
       setState(() {

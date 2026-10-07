@@ -27,4 +27,13 @@ class FakeSaver implements ClassSaver {
   @override
   Future<List<MediaAsset>> mediaOf(String classId) async =>
       media.where((m) => m.classId == classId).toList();
+
+  @override
+  Future<Map<String, List<MediaAsset>>> mediaByClass() async {
+    final byClass = <String, List<MediaAsset>>{};
+    for (final m in media) {
+      byClass.putIfAbsent(m.classId, () => []).add(m);
+    }
+    return byClass;
+  }
 }

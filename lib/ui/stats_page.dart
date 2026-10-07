@@ -66,10 +66,11 @@ class _StatsPageState extends State<StatsPage>
 
   Future<void> _load() async {
     final records = await _saver.allRecords();
-    final media = <MediaAsset>[];
-    for (final r in records) {
-      media.addAll(await _saver.mediaOf(r.id));
-    }
+    // 一次查询取回全部附件（评审建议：替代逐课 N+1 查询）
+    final byClass = await _saver.mediaByClass();
+    final media = <MediaAsset>[
+      for (final list in byClass.values) ...list,
+    ];
     if (!mounted) return;
     setState(() {
       _records = records;
@@ -142,7 +143,7 @@ class _StatsPageState extends State<StatsPage>
                   children: [
                     const Text('舞种分布',
                         style: TextStyle(
-                            fontSize: 14,
+                            fontSize: 16,
                             fontWeight: FontWeight.w700,
                             color: AppColors.ink)),
                     const SizedBox(height: 10),

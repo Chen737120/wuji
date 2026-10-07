@@ -37,6 +37,9 @@ class FakeFormRepo implements ClassSaver {
   Future<List<MediaAsset>> mediaOf(String classId) async => mediaRows;
 
   @override
+  Future<Map<String, List<MediaAsset>>> mediaByClass() async => const {};
+
+  @override
   Future<List<ClassRecord>> allRecords() async => const [];
 
   @override

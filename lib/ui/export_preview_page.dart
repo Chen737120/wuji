@@ -45,10 +45,8 @@ class _ExportPreviewPageState extends State<ExportPreviewPage> {
 
   Future<void> _load() async {
     final records = await _saver.allRecords();
-    final media = <String, List<MediaAsset>>{};
-    for (final r in records) {
-      media[r.id] = await _saver.mediaOf(r.id);
-    }
+    // 一次查询取回全部附件（评审建议：替代逐课 N+1 查询）
+    final media = await _saver.mediaByClass();
     if (!mounted) return;
     setState(() {
       _all = records;

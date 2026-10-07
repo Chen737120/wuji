@@ -41,6 +41,9 @@ abstract class ClassSaver {
   AppDatabase get db;
   Future<void> saveDraft(ClassDraft d);
   Future<List<MediaAsset>> mediaOf(String classId);
+
+  /// 全量附件按课分组（一次查询取回，替代逐课 N+1 查询）。
+  Future<Map<String, List<MediaAsset>>> mediaByClass();
   Future<List<ClassRecord>> allRecords();
   Future<void> deleteRecord(String id);
 
@@ -85,6 +88,16 @@ class AppRepository implements ClassSaver {
   Future<List<MediaAsset>> mediaOf(String classId) =>
       (_db.select(_db.mediaAssets)..where((t) => t.classId.equals(classId)))
           .get();
+
+  @override
+  Future<Map<String, List<MediaAsset>>> mediaByClass() async {
+    final all = await _db.select(_db.mediaAssets).get();
+    final byClass = <String, List<MediaAsset>>{};
+    for (final m in all) {
+      byClass.putIfAbsent(m.classId, () => []).add(m);
+    }
+    return byClass;
+  }
 
   Future<List<MediaAsset>> allMedia() => _db.select(_db.mediaAssets).get();
 

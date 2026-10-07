@@ -180,8 +180,10 @@ class _TrendBarsState extends State<TrendBars> {
                                                             ? 4.0
                                                             : 1.5),
                                                 decoration: BoxDecoration(
-                                                  color: p.minutes > 0 &&
-                                                          p.minutes == peak
+                                                  // 2026-10-08 用户反馈：所有
+                                                  // 柱子都用点缀色（不再只有
+                                                  // 峰值一根有色）
+                                                  color: p.minutes > 0
                                                       ? accent
                                                       : AppColors.hairline,
                                                   borderRadius:
@@ -301,14 +303,14 @@ class StyleDonut extends StatelessWidget {
             ],
           ),
         ),
-        const SizedBox(width: 16),
+        const SizedBox(width: 22),
         Expanded(
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
               for (final s in slices)
                 Padding(
-                  padding: const EdgeInsets.symmetric(vertical: 2),
+                  padding: const EdgeInsets.symmetric(vertical: 4),
                   child: Row(
                     children: [
                       Container(
