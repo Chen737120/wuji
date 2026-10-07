@@ -139,25 +139,38 @@ class _RecordsPageState extends State<RecordsPage> {
               padding: const EdgeInsets.fromLTRB(16, 12, 16, 4),
               child: Row(
                 children: [
-                  const Text('记录',
+                  const Text('首页',
                       style: TextStyle(
                           fontSize: 16,
                           fontWeight: FontWeight.w700,
                           letterSpacing: 3)),
                   const Spacer(),
-                  // 搜索（2026-10-07 需求 #11）：按老师/舞种/舞室过滤
+                  // 搜索（需求 #11；#10 放大：圆底按钮更明显）
                   GestureDetector(
                     onTap: () => setState(() {
                       _searching = !_searching;
                       if (!_searching) _query = '';
                     }),
-                    child: Icon(
-                        _searching ? Icons.search_off : Icons.search,
-                        size: 20,
-                        color:
-                            _searching ? accent : AppColors.secondary),
+                    child: Container(
+                      width: 34,
+                      height: 34,
+                      decoration: BoxDecoration(
+                        color: _searching
+                            ? accent.withValues(alpha: .14)
+                            : Colors.white,
+                        shape: BoxShape.circle,
+                        border: Border.all(
+                            color: _searching
+                                ? accent
+                                : AppColors.hairline),
+                      ),
+                      child: Icon(
+                          _searching ? Icons.search_off : Icons.search,
+                          size: 20,
+                          color: _searching ? accent : AppColors.ink),
+                    ),
                   ),
-                  const SizedBox(width: 14),
+                  const SizedBox(width: 12),
                   GestureDetector(
                     onTap: _toggleExpanded,
                     child: Text(_expanded ? '收起日历 ⌃' : '展开日历 ⌄',
@@ -168,7 +181,7 @@ class _RecordsPageState extends State<RecordsPage> {
             ),
             if (_searching)
               Padding(
-                padding: const EdgeInsets.fromLTRB(16, 6, 16, 0),
+                padding: const EdgeInsets.fromLTRB(16, 6, 16, 4),
                 child: TextField(
                   autofocus: true,
                   controller: _searchCtl,
@@ -189,34 +202,10 @@ class _RecordsPageState extends State<RecordsPage> {
                   onChanged: (v) => setState(() => _query = v.trim()),
                 ),
               ),
-            if (_expanded)
-              _Calendar(
-                initialMonth: _calendarMonth,
-                markedDaysFor: _markedDaysIn,
-                coversFor: _coversIn,
-                resolver: context.read<MediaPathResolver?>(),
-                selectedDay: _selectedDay,
-                onMonthChanged: (m) => setState(() {
-                  _calendarMonth = m;
-                  _selectedDay = null;
-                  CalendarSelection.selectedDay = null;
-                }),
-                onDayTap: (d) => setState(() {
-                  _selectedDay = _selectedDay == d ? null : d;
-                  CalendarSelection.selectedDay = _selectedDay;
-                }),
-              )
-            else
-              _WeekStrip(
-                selectedDay: _selectedDay,
-                onDayTap: (d) => setState(() {
-                  _selectedDay = d;
-                  CalendarSelection.selectedDay = d;
-                }),
-                onExpand: () => setState(() => _expanded = true),
-              ),
-            if (_selectedDay != null) _filterBar(),
-            Expanded(child: _stream()),
+            Expanded(
+              // 2026-10-07 需求 #2：日历随列表一起滚动（不再固定顶部）
+              child: _stream(),
+            ),
           ],
         ),
       ),
@@ -309,13 +298,27 @@ class _RecordsPageState extends State<RecordsPage> {
       filtered = filtered.where(hit).toList();
     }
     if (filtered.isEmpty) {
-      return Center(
-          child: Text(
-              _query.isNotEmpty ? '没有匹配的记录' : '这一天还没有课堂记录',
-              style: TextStyle(fontSize: 12, color: AppColors.faint)));
+      // 空态也把日历放进滚动区（需求 #2：日历随页面滚动）
+      return ListView(
+        padding: const EdgeInsets.fromLTRB(16, 4, 16, 90),
+        children: [
+          _calendarWidget(),
+          Center(
+            child: Padding(
+              padding: const EdgeInsets.symmetric(vertical: 30),
+              child: Text(
+                  _query.isNotEmpty ? '没有匹配的记录' : '这一天还没有课堂记录',
+                  style: TextStyle(fontSize: 12, color: AppColors.faint)),
+            ),
+          ),
+        ],
+      );
     }
-    // 时间轴（需求 #10）：按天分组组头 + 左侧竖线圆点
-    final children = <Widget>[];
+    // 时间轴（需求 #10）：日历在最上、随列表滚动；按天分组组头 + 左侧竖线圆点
+    final children = <Widget>[
+      _calendarWidget(),
+      if (_selectedDay != null) _filterBar(),
+    ];
     final groups = groupByDay(filtered);
     for (final g in groups) {
       children.add(Padding(
@@ -375,6 +378,35 @@ class _RecordsPageState extends State<RecordsPage> {
       padding: const EdgeInsets.fromLTRB(16, 4, 16, 90),
       children: children,
     );
+  }
+
+  /// 日历/周条（需求 #2：放进滚动流，随页面滚动）
+  Widget _calendarWidget() {
+    return _expanded
+        ? _Calendar(
+            initialMonth: _calendarMonth,
+            markedDaysFor: _markedDaysIn,
+            coversFor: _coversIn,
+            resolver: context.read<MediaPathResolver?>(),
+            selectedDay: _selectedDay,
+            onMonthChanged: (m) => setState(() {
+              _calendarMonth = m;
+              _selectedDay = null;
+              CalendarSelection.selectedDay = null;
+            }),
+            onDayTap: (d) => setState(() {
+              _selectedDay = _selectedDay == d ? null : d;
+              CalendarSelection.selectedDay = _selectedDay;
+            }),
+          )
+        : _WeekStrip(
+            selectedDay: _selectedDay,
+            onDayTap: (d) => setState(() {
+              _selectedDay = d;
+              CalendarSelection.selectedDay = d;
+            }),
+            onExpand: () => setState(() => _expanded = true),
+          );
   }
 }
 
@@ -778,23 +810,7 @@ class RecordCard extends StatefulWidget {
 }
 
 class _RecordCardState extends State<RecordCard> {
-  bool _noteExpanded = false;
-
   ClassRecord get r => widget.record;
-
-  static const _titleMaxChars = 40;
-
-  /// 感受拆分规则（保证长感受全文可见）：
-  /// - 多行：标题=首行、正文=其余行；
-  /// - 单行且长（>40 字）：标题=前 40 字、正文=完整原文（可展开）；
-  /// - 单行且短：全部当标题。
-  String get _noteBody {
-    final note = r.note?.trim() ?? '';
-    if (note.contains('\n')) {
-      return note.split('\n').skip(1).join('\n').trim();
-    }
-    return note.length > _titleMaxChars ? note : '';
-  }
 
   Future<void> _openMedia(MediaAsset m) async {
     if (m.type != 'video') {
@@ -910,20 +926,15 @@ class _RecordCardState extends State<RecordCard> {
 
   @override
   Widget build(BuildContext context) {
-    final title = recordTitle(r);
-    final body = _noteBody;
-    final bodyLong = body.length > 60 || body.split('\n').length > 3;
     final style = (r.styleName == null || r.styleName!.isEmpty)
         ? null
         : r.styleName;
-    final chips = <String>[
-      if (style != null) '#$style',
-      '#${r.sessionCount}节×${r.minutesEach}分',
-      if (r.teacherName?.isNotEmpty ?? false) '#${r.teacherName}',
-    ];
+    // 感受只显示一遍（2026-10-07 需求 #6/#7）：完整原文、黑色正常字重、
+    // 不折叠；无感受时退回标题（M/D 舞种课）
+    final hasNote = (r.note?.trim() ?? '').isNotEmpty;
+    final noteText = hasNote ? r.note!.trim() : recordTitle(r);
 
     return GestureDetector(
-      onLongPress: _showActions,
       onTap: widget.onTap,
       child: Container(
         margin: const EdgeInsets.only(bottom: 12),
@@ -936,59 +947,10 @@ class _RecordCardState extends State<RecordCard> {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            Text(title,
-                maxLines: _noteExpanded ? null : 2,
-                overflow: _noteExpanded
-                    ? TextOverflow.visible
-                    : TextOverflow.ellipsis,
+            // 感受/标题：完整一遍、黑色正常字重、不折叠（需求 #6/#7）
+            Text(noteText,
                 style: const TextStyle(
-                    fontSize: 14, fontWeight: FontWeight.w700)),
-            if (body.isNotEmpty) ...[
-              const SizedBox(height: 6),
-              // 感受正文：浅灰柔和；长文折叠 + 展开/收起（需求 #10）
-              Text(body,
-                  maxLines: _noteExpanded ? null : 3,
-                  overflow: _noteExpanded
-                      ? TextOverflow.visible
-                      : TextOverflow.ellipsis,
-                  style: const TextStyle(
-                      fontSize: 12.5,
-                      height: 1.6,
-                      color: Color(0xFF757575))),
-              if (bodyLong)
-                GestureDetector(
-                  behavior: HitTestBehavior.opaque,
-                  onTap: () => setState(() => _noteExpanded = !_noteExpanded),
-                  child: Padding(
-                    padding: const EdgeInsets.only(top: 3),
-                    child: Text(_noteExpanded ? '收起 ⌃' : '展开全文 ⌄',
-                        style: TextStyle(
-                            fontSize: 11,
-                            color: Theme.of(context).colorScheme.primary)),
-                  ),
-                ),
-            ],
-            if (chips.isNotEmpty) ...[
-              const SizedBox(height: 8),
-              Wrap(
-                spacing: 6,
-                runSpacing: 4,
-                children: [
-                  for (final c in chips)
-                    Container(
-                      padding: const EdgeInsets.symmetric(
-                          horizontal: 8, vertical: 3),
-                      decoration: BoxDecoration(
-                        color: const Color(0xFFF2F2EE),
-                        borderRadius: BorderRadius.circular(999),
-                      ),
-                      child: Text(c,
-                          style: TextStyle(
-                              fontSize: 10, color: AppColors.secondary)),
-                    ),
-                ],
-              ),
-            ],
+                    fontSize: 13.5, height: 1.6, color: AppColors.ink)),
             if (widget.media.isNotEmpty) ...[
               const SizedBox(height: 10),
               _mediaGrid(),
@@ -1016,6 +978,14 @@ class _RecordCardState extends State<RecordCard> {
                   ),
                   const SizedBox(width: 10),
                 ],
+                const Spacer(),
+                // 右下角"…"快捷菜单（2026-10-07 需求 #5）
+                GestureDetector(
+                  behavior: HitTestBehavior.opaque,
+                  onTap: _showActions,
+                  child: const Icon(Icons.more_horiz,
+                      size: 20, color: AppColors.secondary),
+                ),
               ],
             ),
           ],

@@ -214,12 +214,12 @@ class _AppRootState extends State<AppRoot> {
           theme: AppTheme.light(t.accentPreset),
           home: HomeShell(
             pages: [
-              const StatsPage(),
+              const RecordsPage(), // 首页（默认 tab）
               EditHubPage(
                 onFancam: () => _startFancam(),
                 onCompare: () => _startCompare(),
               ),
-              const RecordsPage(),
+              const StatsPage(), // 统计
             ],
             onFabPressed: () {
               _navigatorKey.currentState?.push(

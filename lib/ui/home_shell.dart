@@ -42,8 +42,9 @@ class RootRouteObserver extends NavigatorObserver {
   }
 }
 
-/// 底部导航骨架（规格 §3）：首页｜剪辑｜记录 三枚"图标＋文字" tab，
-/// 无凹槽；全局可拖动悬浮球替代原中央＋号。
+/// 底部导航骨架（规格 §3；2026-10-07 用户调整）：首页（记录）｜剪辑｜统计
+/// 三枚"图标＋文字" tab，默认落在首页（记录页）；无凹槽；
+/// 全局可拖动悬浮球替代原中央＋号。
 class HomeShell extends StatefulWidget {
   const HomeShell({
     super.key,
@@ -51,7 +52,7 @@ class HomeShell extends StatefulWidget {
     required this.onFabPressed,
   });
 
-  final List<Widget> pages; // [统计页, 剪辑页, 记录页]
+  final List<Widget> pages; // [记录页(首页), 剪辑页, 统计页]
   final VoidCallback? onFabPressed; // 悬浮球点击＝新增课
 
   @override
@@ -59,12 +60,12 @@ class HomeShell extends StatefulWidget {
 }
 
 class _HomeShellState extends State<HomeShell> {
-  int _tab = 0;
+  int _tab = 0; // 默认：首页（记录）
 
   static const _tabs = [
-    (Icons.home_outlined, '首页'),
+    (Icons.calendar_month_outlined, '首页'),
     (Icons.content_cut, '剪辑'),
-    (Icons.calendar_month_outlined, '记录'),
+    (Icons.pie_chart_outline, '统计'),
   ];
 
   @override

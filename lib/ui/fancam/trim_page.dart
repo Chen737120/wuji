@@ -59,6 +59,27 @@ class _TrimPageState extends State<TrimPage> {
     }
   }
 
+  // 串行 seek：拖动胶片条时画面持续跟随（同 fancam_page）
+  Duration? _pendingSeek;
+  bool _seeking = false;
+
+  Future<void> _seekSmooth(Duration t) async {
+    final c = _ctl;
+    if (c == null) return;
+    _pendingSeek = t;
+    if (_seeking) return;
+    _seeking = true;
+    try {
+      while (_pendingSeek != null) {
+        final target = _pendingSeek!;
+        _pendingSeek = null;
+        await c.seekTo(target);
+      }
+    } finally {
+      _seeking = false;
+    }
+  }
+
   /// 播放到终点自动停；起点前开播时先跳到起点。
   void _onTick() {
     final c = _ctl;
@@ -198,7 +219,7 @@ class _TrimPageState extends State<TrimPage> {
                               videoPath: widget.source.path,
                               duration: dur,
                               position: v.position,
-                              onSeek: (t) => _ctl?.seekTo(t),
+                              onSeek: _seekSmooth,
                               maskStart: _start,
                               maskEnd: _end,
                               accent: accent,

@@ -19,6 +19,9 @@ class FilmStrip extends StatefulWidget {
     this.accent = const Color(0xFF3FA26F),
     this.height = 56,
     this.stripCount = 12,
+    this.keyframes = const [],
+    this.onKeyframeTap,
+    this.onKeyframeLongPress,
   });
 
   final String videoPath;
@@ -30,6 +33,12 @@ class FilmStrip extends StatefulWidget {
   final Color accent;
   final double height;
   final int stripCount;
+
+  /// 关键帧（直拍编辑页）：圆点叠加显示在胶片条上（2026-10-07 需求 #8：
+  /// 去掉独立横线轨道，关键帧位置显示在胶片条上）
+  final List<Duration> keyframes;
+  final ValueChanged<Duration>? onKeyframeTap;
+  final ValueChanged<Duration>? onKeyframeLongPress;
 
   @override
   State<FilmStrip> createState() => _FilmStripState();
@@ -160,6 +169,33 @@ class _FilmStripState extends State<FilmStrip> {
                 width: 2,
                 child: Container(color: widget.accent),
               ),
+              // 关键帧圆点（叠加在胶片条上，替代原横线轨道）
+              for (final kf in widget.keyframes)
+                Positioned(
+                  left: (kf.inMilliseconds / totalMs * w)
+                          .clamp(6.0, w - 20) -
+                      7,
+                  top: widget.height - 18,
+                  child: GestureDetector(
+                    behavior: HitTestBehavior.opaque,
+                    onTap: widget.onKeyframeTap == null
+                        ? null
+                        : () => widget.onKeyframeTap!(kf),
+                    onLongPress: widget.onKeyframeLongPress == null
+                        ? null
+                        : () => widget.onKeyframeLongPress!(kf),
+                    child: Container(
+                      width: 14,
+                      height: 14,
+                      decoration: BoxDecoration(
+                        shape: BoxShape.circle,
+                        color: widget.accent,
+                        border:
+                            Border.all(color: Colors.white, width: 1.5),
+                      ),
+                    ),
+                  ),
+                ),
             ],
           ),
         ),

@@ -106,6 +106,29 @@ class _FancamPageState extends State<FancamPage> {
   Duration get _trackTime =>
       (_ctl?.value.position ?? Duration.zero) - widget.trimStart;
 
+  // 串行 seek（2026-10-07 需求 #9）：拖动胶片条时高频 seekTo 会排队堆积、
+  // 画面只在松手后定格——这里保证同一时刻只有一个 seek 在跑，最新的目标
+  // 位置在上一帧渲染完成后立刻执行，画面持续跟随
+  Duration? _pendingSeek;
+  bool _seeking = false;
+
+  Future<void> _seekSmooth(Duration t) async {
+    final c = _ctl;
+    if (c == null) return;
+    _pendingSeek = t;
+    if (_seeking) return;
+    _seeking = true;
+    try {
+      while (_pendingSeek != null) {
+        final target = _pendingSeek!;
+        _pendingSeek = null;
+        await c.seekTo(target);
+      }
+    } finally {
+      _seeking = false;
+    }
+  }
+
 
   void _setRatio(String r) {
     setState(() {
@@ -321,7 +344,9 @@ class _FancamPageState extends State<FancamPage> {
                       ],
                     ),
                     const SizedBox(height: 6),
-                    // 播放/暂停 + 胶片进度条（2026-10-07 需求 #5；播放限制在修剪区间内）
+                    // 播放/暂停 + 胶片进度条（2026-10-07 需求 #8：胶片条
+                    // 移至原横线轨道位置，关键帧圆点叠加在胶片条上；
+                    // seek 串行化让拖动中画面实时跟随——需求 #9）
                     ValueListenableBuilder<VideoPlayerValue>(
                       valueListenable: _ctl!,
                       builder: (context, v, _) => Row(
@@ -351,31 +376,18 @@ class _FancamPageState extends State<FancamPage> {
                               videoPath: widget.source.path,
                               duration: v.duration,
                               position: v.position,
-                              onSeek: (t) => _ctl?.seekTo(t),
+                              onSeek: _seekSmooth,
                               accent: accent,
-                              height: 44,
+                              height: 52,
                               stripCount: 14,
+                              keyframes: [
+                                for (final f in _track!.frames) f.t,
+                              ],
+                              onKeyframeTap: (t) =>
+                                  _seekSmooth(t + widget.trimStart),
                             ),
                           ),
                         ],
-                      ),
-                    ),
-                    const SizedBox(height: 6),
-                    // 关键帧轨道
-                    SizedBox(
-                      height: 28,
-                      child: _KeyframeSlider(
-                        track: _track,
-                        position: _trackTime,
-                        accent: accent,
-                        // 轨道时间（相对修剪起点）→ 播放位置
-                        onSeek: (t) =>
-                            ctl?.seekTo(t + widget.trimStart),
-                        onDelete: (f) {
-                          setState(() {
-                            _track!.upsert(f.t, f.box); // no-op guard
-                          });
-                        },
                       ),
                     ),
                     Row(
@@ -468,57 +480,6 @@ class _FancamPageState extends State<FancamPage> {
 }
 
 enum _GestureMode { move, resize, previewScale }
-
-/// 关键帧轨道：圆点（点跳转、长按删）。位置=时间归一。
-class _KeyframeSlider extends StatelessWidget {
-  const _KeyframeSlider({
-    required this.track,
-    required this.position,
-    required this.accent,
-    required this.onSeek,
-    required this.onDelete,
-  });
-
-  final KeyframeTrack? track;
-  final Duration position;
-  final Color accent;
-  final ValueChanged<Duration> onSeek;
-  final ValueChanged<Keyframe> onDelete;
-
-  @override
-  Widget build(BuildContext context) {
-    final t = track;
-    if (t == null || t.frames.isEmpty) return const SizedBox.shrink();
-    final totalMs = t.duration.inMilliseconds == 0
-        ? 1
-        : t.duration.inMilliseconds;
-    return Stack(
-      children: [
-        Container(height: 2, color: Colors.white24),
-        for (final f in t.frames)
-          Positioned(
-            left: (f.t.inMilliseconds / totalMs) *
-                    (MediaQuery.sizeOf(context).width - 60) +
-                12,
-            top: 6,
-            child: GestureDetector(
-              onTap: () => onSeek(f.t),
-              onLongPress: () => onDelete(f),
-              child: Container(
-                width: 14,
-                height: 14,
-                decoration: BoxDecoration(
-                  shape: BoxShape.circle,
-                  color: accent,
-                  border: Border.all(color: Colors.white, width: 1.5),
-                ),
-              ),
-            ),
-          ),
-      ],
-    );
-  }
-}
 
 /// 裁剪叠加层：框外半透明遮罩＋翠芽边框＋右下角柄。
 class _CropOverlayPainter extends CustomPainter {

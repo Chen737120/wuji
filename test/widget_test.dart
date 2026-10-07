@@ -9,6 +9,6 @@ void main() {
       onFabPressed: null,
     )));
     expect(find.text('首页'), findsOneWidget);
-    expect(find.text('记录'), findsOneWidget);
+    expect(find.text('统计'), findsOneWidget);
   });
 }

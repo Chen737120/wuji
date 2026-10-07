@@ -126,6 +126,7 @@ class _StatsPageState extends State<StatsPage> {
                     StyleDonut(
                       slices: _stats.styleSlices,
                       totalSessions: _stats.sessionCount,
+                      accent: Theme.of(context).colorScheme.primary,
                     ),
                   ],
                 ),
@@ -260,9 +261,9 @@ class _StatsPageState extends State<StatsPage> {
         '节'
       ),
       (
-        Icons.water_drop,
-        const Color(0xFFE3EDFD),
-        const Color(0xFF5B8DEF),
+        Icons.local_fire_department,
+        const Color(0xFFFFEDE3),
+        const Color(0xFFF0641E),
         '跳舞时长',
         _hours(s.totalMinutes),
         '小时'

@@ -27,7 +27,7 @@ void main() {
     expect(compare, isTrue);
   });
 
-  testWidgets('HomeShell 三 tab：首页｜剪辑｜记录，悬浮球可见', (tester) async {
+  testWidgets('HomeShell 三 tab：首页｜剪辑｜统计，悬浮球可见', (tester) async {
     tester.view.physicalSize = const Size(400, 1000);
     tester.view.devicePixelRatio = 1.0;
     addTearDown(tester.view.reset);
@@ -45,7 +45,7 @@ void main() {
 
     expect(find.text('首页'), findsOneWidget);
     expect(find.text('剪辑'), findsOneWidget);
-    expect(find.text('记录'), findsOneWidget);
+    expect(find.text('统计'), findsOneWidget);
     expect(find.byIcon(Icons.content_cut), findsOneWidget);
 
     // 切到剪辑 tab

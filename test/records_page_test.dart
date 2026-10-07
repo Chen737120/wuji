@@ -64,13 +64,14 @@ void main() {
     ], child: const MaterialApp(home: RecordsPage())));
     await tester.pumpAndSettle();
 
-    expect(find.text('2026年9月'), findsWidgets); // 日历头＋分组头
-    expect(find.text('发现一个宝藏老师 ✨'), findsOneWidget);
+    expect(find.text('2026年9月'), findsOneWidget); // 日历头
+    // 感受完整显示一遍（2026-10-07 #6/#7：单遍、不折叠）
+    expect(find.text('发现一个宝藏老师 ✨\n正文'), findsOneWidget);
     expect(find.text('9/24 韩舞课'), findsOneWidget);
     expect(find.text('8/21 爵士课'), findsOneWidget);
-    expect(find.text('#爵士'), findsWidgets); // 两条爵士课各一枚
-    expect(find.text('#1节×90分'), findsWidgets); // 三条课都是 90 分
-    expect(find.text('#小鹿'), findsOneWidget);
+    // 胶囊标签已移除（2026-10-07 #4）
+    expect(find.text('#爵士'), findsNothing);
+    expect(find.byIcon(Icons.more_horiz), findsWidgets); // 右下角"…"按钮
     expect(find.text('9月24日 周四'), findsOneWidget); // 按天分组组头
     expect(find.text('8月21日 周五'), findsOneWidget); // 按天分组组头
   });

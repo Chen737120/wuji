@@ -234,34 +234,63 @@ class _TrendBarsState extends State<TrendBars> {
   }
 }
 
-/// 舞种分布环形图＋图例（点缀色亮度阶梯，最多 6 类＋其他）。
+/// 舞种分布环形图＋图例（2026-10-07 调整：**颜色联动外观点缀色**——
+/// 调色板中选与点缀色最接近的一色给占比最高的舞种，其余按调色板顺序
+/// 循环；"其他"中性灰。中心显示"X种/舞种分布"）。
 class StyleDonut extends StatelessWidget {
-  const StyleDonut({super.key, required this.slices, required this.totalSessions});
+  const StyleDonut({
+    super.key,
+    required this.slices,
+    required this.totalSessions,
+    required this.accent,
+  });
 
   final List<StyleSlice> slices;
   final int totalSessions;
+  final Color accent; // 当前外观点缀色
+
+  /// 各 slice 颜色：占比最高（slices[0]）取调色板中最接近点缀色的颜色，
+  /// 后续按调色板顺序循环。
+  Color sliceColor(StyleSlice s) {
+    if (s.isOther) return kOtherSliceColor;
+    var nearest = 0;
+    var bestDist = double.maxFinite;
+    for (var i = 0; i < kRainbowPalette.length; i++) {
+      final a = kRainbowPalette[i];
+      final d = (a.r - accent.r) * (a.r - accent.r) +
+          (a.g - accent.g) * (a.g - accent.g) +
+          (a.b - accent.b) * (a.b - accent.b);
+      if (d < bestDist) {
+        bestDist = d;
+        nearest = i;
+      }
+    }
+    final nonOtherIdx =
+        slices.where((x) => !x.isOther).toList().indexOf(s);
+    return kRainbowPalette[(nearest + nonOtherIdx) % kRainbowPalette.length];
+  }
 
   @override
   Widget build(BuildContext context) {
-    // 中心文字（2026-10-07 用户需求）："X种 / 舞种分布"
+    // 中心文字："X种 / 舞种分布"；2026-10-07 调大（96px）保证文字完整
     final kinds = slices.where((s) => !s.isOther).length;
     return Row(
       crossAxisAlignment: CrossAxisAlignment.center,
       children: [
         SizedBox(
-          width: 72,
-          height: 72,
+          width: 96,
+          height: 96,
           child: Stack(
             alignment: Alignment.center,
             children: [
               // Stack loose 约束下无 child 的 CustomPaint 尺寸会变 0——必须显式给 size
-              CustomPaint(size: const Size(72, 72), painter: _DonutPainter(slices)),
+              CustomPaint(size: const Size(96, 96), painter: _DonutPainter(slices, sliceColor)),
               Column(
                 mainAxisSize: MainAxisSize.min,
                 children: [
                   Text('$kinds种',
                       style: const TextStyle(
-                          fontSize: 16,
+                          fontSize: 17,
                           fontWeight: FontWeight.w700,
                           color: AppColors.ink)),
                   const Text('舞种分布',
@@ -272,7 +301,7 @@ class StyleDonut extends StatelessWidget {
             ],
           ),
         ),
-        const SizedBox(width: 14),
+        const SizedBox(width: 16),
         Expanded(
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
@@ -286,10 +315,7 @@ class StyleDonut extends StatelessWidget {
                         width: 8,
                         height: 8,
                         decoration: BoxDecoration(
-                            color: s.isOther
-                                ? kOtherSliceColor
-                                : kRainbowPalette[
-                                    s.colorIndex % kRainbowPalette.length],
+                            color: sliceColor(s),
                             shape: BoxShape.circle),
                       ),
                       const SizedBox(width: 6),
@@ -315,8 +341,9 @@ class StyleDonut extends StatelessWidget {
 }
 
 class _DonutPainter extends CustomPainter {
-  _DonutPainter(this.slices);
+  _DonutPainter(this.slices, this.colorOf);
   final List<StyleSlice> slices;
+  final Color Function(StyleSlice) colorOf;
 
   @override
   void paint(Canvas canvas, Size size) {
@@ -333,32 +360,30 @@ class _DonutPainter extends CustomPainter {
     final rect = Rect.fromCircle(
         center: Offset(size.width / 2, size.height / 2), radius: size.width / 2 - 6);
     var start = -math.pi / 2;
-    // 彩虹七色：每个舞种一色（超过 7 个循环），「其他」中性灰
     for (var i = 0; i < slices.length; i++) {
       final sweep = slices[i].sessions / total * 2 * math.pi;
-      final color = slices[i].isOther
-          ? kOtherSliceColor
-          : kRainbowPalette[slices[i].colorIndex % kRainbowPalette.length];
-      canvas.drawArc(rect, start, sweep, true, Paint()..color = color);
+      canvas.drawArc(rect, start, sweep, true, Paint()..color = colorOf(slices[i]));
       start += sweep;
     }
-    // 中孔
-    canvas.drawCircle(rect.center, rect.width / 2 - 12,
+    // 中孔（半径随 96px 环放大，留足中心文字空间）
+    canvas.drawCircle(rect.center, rect.width / 2 - 14,
         Paint()..color = AppColors.bg);
   }
 
   @override
-  bool shouldRepaint(covariant _DonutPainter old) => old.slices != slices;
+  bool shouldRepaint(covariant _DonutPainter old) =>
+      old.slices != slices || old.colorOf != colorOf;
 }
 
-/// 老师/舞室水平条：第一名点缀色，其余墨色；默认前 3＋展开全部。
+/// 老师/舞室水平条（2026-10-07 调整）：**超过 8 条只显示前 8 条**，
+/// 底部居中"加载更多 ∨"胶囊按钮展开/收起（替代原右上角小字，参考图一）。
 class NameBars extends StatefulWidget {
   const NameBars({
     super.key,
     required this.title,
     required this.items,
     required this.totalSessions,
-    this.collapsedTop = 3,
+    this.collapsedTop = 8,
   });
 
   final String title;
@@ -385,25 +410,17 @@ class _NameBarsState extends State<NameBars> {
     final items = widget.items;
     final totalSessions = widget.totalSessions;
     final visible = _expanded ? items : items.take(widget.collapsedTop).toList();
+    final overflow = items.length > widget.collapsedTop;
+    final accent = Theme.of(context).colorScheme.primary;
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        Row(
-          mainAxisAlignment: MainAxisAlignment.spaceBetween,
-          children: [
-            Text(widget.title,
-                style: const TextStyle(
-                    fontSize: 14,
-                    fontWeight: FontWeight.w700,
-                    color: AppColors.ink)),
-            if (items.length > widget.collapsedTop)
-              GestureDetector(
-                onTap: () => setState(() => _expanded = !_expanded),
-                child: Text(_expanded ? '收起 ↑' : '展开全部 ↓',
-                    style: TextStyle(fontSize: 10, color: AppColors.faint)),
-              ),
-          ],
-        ),
+        Text(widget.title,
+            style: const TextStyle(
+                fontSize: 14,
+                fontWeight: FontWeight.w700,
+                color: AppColors.ink)),
+        const SizedBox(height: 10),
         const SizedBox(height: 8),
         for (final item in visible)
           Padding(
@@ -447,6 +464,36 @@ class _NameBarsState extends State<NameBars> {
                         style: TextStyle(
                             fontSize: 11, color: AppColors.secondary))),
               ],
+            ),
+          ),
+        if (overflow)
+          // 底部居中"加载更多 ∨"胶囊按钮（参考图一）
+          Center(
+            child: GestureDetector(
+              behavior: HitTestBehavior.opaque,
+              onTap: () => setState(() => _expanded = !_expanded),
+              child: Container(
+                margin: const EdgeInsets.only(top: 10),
+                padding:
+                    const EdgeInsets.symmetric(horizontal: 22, vertical: 8),
+                decoration: BoxDecoration(
+                  color: accent.withValues(alpha: .12),
+                  borderRadius: BorderRadius.circular(999),
+                ),
+                child: Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Text(_expanded ? '收起' : '加载更多',
+                        style: TextStyle(
+                            fontSize: 12,
+                            fontWeight: FontWeight.w600,
+                            color: accent)),
+                    const SizedBox(width: 4),
+                    Icon(_expanded ? Icons.expand_less : Icons.expand_more,
+                        size: 16, color: accent),
+                  ],
+                ),
+              ),
             ),
           ),
       ],
