@@ -4,16 +4,15 @@ import 'package:shared_preferences/shared_preferences.dart';
 import 'package:wuji/theme.dart';
 
 void main() {
-  test('preset hexes: jade kept + rainbow seven (v1.5.9, 8 total)', () {
+  test('preset hexes: jade kept + rainbow six (v1.5.11, 7 total)', () {
     expect(AccentPreset.jade.value, 0xFF3FA26F);
     expect(AccentPreset.red.value, 0xFFE5484D);
     expect(AccentPreset.orange.value, 0xFFF08C1E);
     expect(AccentPreset.yellow.value, 0xFFD9A514);
-    expect(AccentPreset.green.value, 0xFF34B04A);
     expect(AccentPreset.cyan.value, 0xFF14A8B8);
     expect(AccentPreset.blue.value, 0xFF3B6FE0);
     expect(AccentPreset.purple.value, 0xFF8B5CF6);
-    expect(AccentPreset.values, hasLength(8));
+    expect(AccentPreset.values, hasLength(7)); // 2026-10-07：草绿移除
   });
   test('legacy stored preset name falls back to jade', () async {
     SharedPreferences.setMockInitialValues({'accentPreset': 'matcha'});

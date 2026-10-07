@@ -114,7 +114,19 @@ class _MyPageState extends State<MyPage> {
                       sub: null, onTap: () => showDialog(context: context, builder: (ctx) => AlertDialog(
                         backgroundColor: Colors.white,
                         title: const Text('舞记', style: TextStyle(fontSize: 16)),
-                        content: const Text('v1.0.0\n\n一个纯个人的舞蹈课记录本。\n数据全部保存在你的手机上，没有账号，没有云端。', style: TextStyle(fontSize: 13, height: 1.7)),
+                        content: const Text(
+                            'v1.5.11\n\n'
+                            '一个纯个人的舞蹈课记录本：数据全部保存在你的手机上，'
+                            '没有账号，没有云端。\n\n'
+                            '· 记录：课堂视频/图片 + 感受 + 日期舞种老师舞室\n'
+                            '· 统计：节数/时长/天数、趋势、舞种与老师舞室分布\n'
+                            '· 剪辑：舞蹈直拍（圈选区域+关键帧跟框）、同屏对比'
+                            '（时间/画面微调）\n'
+                            '· 导出：整包/按时间段 zip（视频+感受+总表），'
+                            '成片存相册 Movies/wuji/\n'
+                            '· 备份：换手机一键恢复\n\n'
+                            '卸载 App 存档不丢；导出的 zip 就是异地备份。',
+                            style: TextStyle(fontSize: 13, height: 1.7)),
                         actions: [TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('好的'))],
                       ))),
                 ]),

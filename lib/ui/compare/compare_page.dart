@@ -74,6 +74,8 @@ class _ComparePageState extends State<ComparePage> {
     });
   }
 
+  double _scaleAtStart = 1.0; // 双指手势开始时的缩放基准
+
   VideoPlayerController? get ctl => _teacherCtl;
   Duration get teacherDur =>
       _teacherCtl?.value.duration ?? widget.teacher.duration ?? Duration.zero;
@@ -678,13 +680,20 @@ class _ComparePageState extends State<ComparePage> {
           child: GestureDetector(
             behavior: HitTestBehavior.opaque,
             onTap: frameMode ? onSelect : null,
-            onScaleStart: frameMode ? (_) => onSelect?.call() : null,
+            onScaleStart: frameMode
+                ? (d) {
+                    onSelect?.call();
+                    // 记录手势开始时的缩放基准——d.scale 是相对手势开始的
+                    // 累计比例，旧实现每帧再乘一次导致指数跳变（一捏就过大）
+                    _scaleAtStart = transform.scale;
+                  }
+                : null,
             onScaleUpdate: frameMode
                 ? (d) {
                     if (d.pointerCount >= 2) {
-                      // 双指缩放：放大画面框下的视频
+                      // 双指缩放：以手势开始时的缩放为基准 × 累计比例
                       transform.scale =
-                          (transform.scale * d.scale).clamp(1.0, 4.0);
+                          (_scaleAtStart * d.scale).clamp(1.0, 4.0);
                     } else {
                       // 单指拖动：移动视频（框像素 → 归一化单位，unit=框高）
                       final unit = _previewH(MediaQuery.sizeOf(context).width);

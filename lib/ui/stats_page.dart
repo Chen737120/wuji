@@ -119,9 +119,9 @@ class _StatsPageState extends State<StatsPage> {
                   children: [
                     const Text('舞种分布',
                         style: TextStyle(
-                            fontSize: 11,
-                            letterSpacing: 2,
-                            color: AppColors.secondary)),
+                            fontSize: 14,
+                            fontWeight: FontWeight.w700,
+                            color: AppColors.ink)),
                     const SizedBox(height: 10),
                     StyleDonut(
                       slices: _stats.styleSlices,
@@ -249,14 +249,43 @@ class _StatsPageState extends State<StatsPage> {
 
   Widget _statCards() {
     final s = _stats;
+    // 顶部图标（2026-10-07 用户需求 #6，借鉴软件样式：浅色圆底+彩色图标）
     final cards = [
-      ('跳舞节数', '${s.sessionCount}', '节'),
-      ('跳舞时长', _hours(s.totalMinutes), '小时'),
-      ('跳舞天数', '${s.activeDays}', '天'),
-      ('视频·图片', '${s.mediaCount}', '个'),
+      (
+        Icons.music_note,
+        const Color(0xFFFDE7EF),
+        const Color(0xFFEC6FA5),
+        '跳舞节数',
+        '${s.sessionCount}',
+        '节'
+      ),
+      (
+        Icons.water_drop,
+        const Color(0xFFE3EDFD),
+        const Color(0xFF5B8DEF),
+        '跳舞时长',
+        _hours(s.totalMinutes),
+        '小时'
+      ),
+      (
+        Icons.calendar_month,
+        const Color(0xFFFDEFDD),
+        const Color(0xFFF08C1E),
+        '跳舞天数',
+        '${s.activeDays}',
+        '天'
+      ),
+      (
+        Icons.videocam,
+        const Color(0xFFE2F5E7),
+        const Color(0xFF34B04A),
+        '视频·图片',
+        '${s.mediaCount}',
+        '个'
+      ),
     ];
     return Container(
-      padding: const EdgeInsets.symmetric(vertical: 12),
+      padding: const EdgeInsets.symmetric(vertical: 14),
       decoration: _cardDecoration(),
       child: Row(
         children: [
@@ -264,30 +293,40 @@ class _StatsPageState extends State<StatsPage> {
             if (i > 0)
               Container(
                 width: 1,
-                height: 30,
+                height: 44,
                 color: AppColors.hairline,
               ),
             Expanded(
               child: Column(
                 children: [
+                  Container(
+                    width: 38,
+                    height: 38,
+                    decoration: BoxDecoration(
+                      color: cards[i].$2,
+                      shape: BoxShape.circle,
+                    ),
+                    child: Icon(cards[i].$1, size: 20, color: cards[i].$3),
+                  ),
+                  const SizedBox(height: 6),
                   Row(
                     mainAxisAlignment: MainAxisAlignment.center,
                     crossAxisAlignment: CrossAxisAlignment.baseline,
                     textBaseline: TextBaseline.alphabetic,
                     children: [
-                      Text(cards[i].$2,
+                      Text(cards[i].$5,
                           style: const TextStyle(
-                              fontSize: 20,
+                              fontSize: 18,
                               fontWeight: FontWeight.w700,
                               fontFeatures: [FontFeature.tabularFigures()])),
                       const SizedBox(width: 2),
-                      Text(cards[i].$3,
+                      Text(cards[i].$6,
                           style: TextStyle(
                               fontSize: 10, color: AppColors.faint)),
                     ],
                   ),
                   const SizedBox(height: 2),
-                  Text(cards[i].$1,
+                  Text(cards[i].$4,
                       style: TextStyle(
                           fontSize: 10,
                           letterSpacing: 1,

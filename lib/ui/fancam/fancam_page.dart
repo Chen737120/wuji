@@ -6,6 +6,7 @@ import '../../editing/keyframes.dart';
 import '../../editing/media_source_picker.dart';
 import 'fancam_preview_page.dart';
 import '../widgets/app_route.dart';
+import '../widgets/film_strip.dart';
 
 /// 舞蹈直拍页（规格 §5.1）：画面最大化＋比例锁定框＋关键帧轨道。
 /// 手势分工：单指拖框体=移动；拖翠芽角柄（右下）=缩放（比例锁定）；
@@ -320,39 +321,44 @@ class _FancamPageState extends State<FancamPage> {
                       ],
                     ),
                     const SizedBox(height: 6),
-                    // 播放/暂停 + 可拖进度条（播放限制在修剪区间内）
-                    Row(
-                      children: [
-                        IconButton(
-                          onPressed: () async {
-                            final c = _ctl;
-                            if (c == null) return;
-                            if (c.value.isPlaying) {
-                              await c.pause();
-                            } else {
-                              if (c.value.position < widget.trimStart ||
-                                  c.value.position >= widget.trimmedEnd) {
-                                await c.seekTo(widget.trimStart);
+                    // 播放/暂停 + 胶片进度条（2026-10-07 需求 #5；播放限制在修剪区间内）
+                    ValueListenableBuilder<VideoPlayerValue>(
+                      valueListenable: _ctl!,
+                      builder: (context, v, _) => Row(
+                        crossAxisAlignment: CrossAxisAlignment.center,
+                        children: [
+                          IconButton(
+                            onPressed: () async {
+                              final c = _ctl;
+                              if (c == null) return;
+                              if (c.value.isPlaying) {
+                                await c.pause();
+                              } else {
+                                if (c.value.position < widget.trimStart ||
+                                    c.value.position >= widget.trimmedEnd) {
+                                  await c.seekTo(widget.trimStart);
+                                }
+                                await c.play();
                               }
-                              await c.play();
-                            }
-                            setState(() {});
-                          },
-                          icon: Icon(
-                              (ctl?.value.isPlaying ?? false)
-                                  ? Icons.pause
-                                  : Icons.play_arrow,
-                              color: Colors.white),
-                        ),
-                        Expanded(
-                          child: VideoProgressIndicator(
-                            _ctl!,
-                            allowScrubbing: true,
-                            colors: VideoProgressColors(
-                                playedColor: accent),
+                              setState(() {});
+                            },
+                            icon: Icon(
+                                v.isPlaying ? Icons.pause : Icons.play_arrow,
+                                color: Colors.white),
                           ),
-                        ),
-                      ],
+                          Expanded(
+                            child: FilmStrip(
+                              videoPath: widget.source.path,
+                              duration: v.duration,
+                              position: v.position,
+                              onSeek: (t) => _ctl?.seekTo(t),
+                              accent: accent,
+                              height: 44,
+                              stripCount: 14,
+                            ),
+                          ),
+                        ],
+                      ),
                     ),
                     const SizedBox(height: 6),
                     // 关键帧轨道

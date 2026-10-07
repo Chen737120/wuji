@@ -68,8 +68,11 @@ void main() {
     expect(find.text('发现一个宝藏老师 ✨'), findsOneWidget);
     expect(find.text('9/24 韩舞课'), findsOneWidget);
     expect(find.text('8/21 爵士课'), findsOneWidget);
-    expect(find.text('爵士 · 1节×90分 · 小鹿'), findsOneWidget);
-    expect(find.text('2026年8月'), findsOneWidget);
+    expect(find.text('#爵士'), findsWidgets); // 两条爵士课各一枚
+    expect(find.text('#1节×90分'), findsWidgets); // 三条课都是 90 分
+    expect(find.text('#小鹿'), findsOneWidget);
+    expect(find.text('9月24日 周四'), findsOneWidget); // 按天分组组头
+    expect(find.text('8月21日 周五'), findsOneWidget); // 按天分组组头
   });
 
   testWidgets('tapping a calendar day filters the stream', (tester) async {

@@ -64,7 +64,10 @@ class _TrendBarsState extends State<TrendBars> {
           mainAxisAlignment: MainAxisAlignment.spaceBetween,
           children: [
             const Text('跳舞趋势（分钟）',
-                style: TextStyle(fontSize: 11, letterSpacing: 2, color: AppColors.secondary)),
+                style: TextStyle(
+                    fontSize: 14,
+                    fontWeight: FontWeight.w700,
+                    color: AppColors.ink)),
             Row(
               mainAxisSize: MainAxisSize.min,
               children: [
@@ -240,13 +243,34 @@ class StyleDonut extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    // 中心文字（2026-10-07 用户需求）："X种 / 舞种分布"
+    final kinds = slices.where((s) => !s.isOther).length;
     return Row(
       crossAxisAlignment: CrossAxisAlignment.center,
       children: [
         SizedBox(
           width: 72,
           height: 72,
-          child: CustomPaint(painter: _DonutPainter(slices)),
+          child: Stack(
+            alignment: Alignment.center,
+            children: [
+              // Stack loose 约束下无 child 的 CustomPaint 尺寸会变 0——必须显式给 size
+              CustomPaint(size: const Size(72, 72), painter: _DonutPainter(slices)),
+              Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Text('$kinds种',
+                      style: const TextStyle(
+                          fontSize: 16,
+                          fontWeight: FontWeight.w700,
+                          color: AppColors.ink)),
+                  const Text('舞种分布',
+                      style: TextStyle(
+                          fontSize: 9, color: AppColors.faint)),
+                ],
+              ),
+            ],
+          ),
         ),
         const SizedBox(width: 14),
         Expanded(
@@ -368,8 +392,10 @@ class _NameBarsState extends State<NameBars> {
           mainAxisAlignment: MainAxisAlignment.spaceBetween,
           children: [
             Text(widget.title,
-                style: TextStyle(
-                    fontSize: 11, letterSpacing: 2, color: AppColors.secondary)),
+                style: const TextStyle(
+                    fontSize: 14,
+                    fontWeight: FontWeight.w700,
+                    color: AppColors.ink)),
             if (items.length > widget.collapsedTop)
               GestureDetector(
                 onTap: () => setState(() => _expanded = !_expanded),
@@ -405,9 +431,9 @@ class _NameBarsState extends State<NameBars> {
                           : item.sessions / totalSessions,
                       child: Container(
                         decoration: BoxDecoration(
-                          // 彩虹七色：每个条目一色（第 i 项取 i%7），不再单色系
-                          color: kRainbowPalette[
-                              items.indexOf(item) % kRainbowPalette.length],
+                          // 前十色循环 + 整体调亮一档（2026-10-07：轻松活泼）
+                          color: brightenChartColor(kRainbowPalette[
+                              items.indexOf(item) % kRainbowPalette.length]),
                           borderRadius: BorderRadius.circular(4.5),
                         ),
                       ),

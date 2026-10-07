@@ -1,12 +1,11 @@
 import 'dart:io';
-import 'dart:typed_data';
 
 import 'package:flutter/material.dart';
 import 'package:video_player/video_player.dart';
-import 'package:video_thumbnail/video_thumbnail.dart';
 
 import '../../editing/media_source_picker.dart';
 import '../widgets/app_route.dart';
+import '../widgets/film_strip.dart';
 
 Duration _clampDur(Duration d, Duration lo, Duration hi) =>
     d < lo ? lo : (d > hi ? hi : d);
@@ -29,9 +28,6 @@ class _TrimPageState extends State<TrimPage> {
   Duration _start = Duration.zero;
   Duration _end = Duration.zero;
   bool _initialized = false;
-  // 胶片条缩略图（index → 帧图，渐进生成）
-  static const _stripCount = 12;
-  final Map<int, Uint8List?> _strip = {};
 
   VideoPlayerController? get ctl => _ctl;
 
@@ -56,33 +52,10 @@ class _TrimPageState extends State<TrimPage> {
         _initialized = true;
       });
       c.addListener(_onTick);
-      _buildFilmstrip();
     } catch (_) {
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(content: Text('视频加载失败')));
-    }
-  }
-
-  /// 渐进生成胶片条：全片均匀采样 [_stripCount] 帧。
-  Future<void> _buildFilmstrip() async {
-    final dur = _ctl?.value.duration ?? Duration.zero;
-    if (dur <= Duration.zero) return;
-    for (var i = 0; i < _stripCount; i++) {
-      final ms = dur.inMilliseconds * (2 * i + 1) ~/ (2 * _stripCount);
-      try {
-        final bytes = await VideoThumbnail.thumbnailData(
-          video: widget.source.path,
-          imageFormat: ImageFormat.JPEG,
-          quality: 50,
-          timeMs: ms,
-        );
-        if (!mounted) return;
-        setState(() => _strip[i] = bytes);
-      } catch (_) {
-        if (!mounted) return;
-        setState(() => _strip[i] = null);
-      }
     }
   }
 
@@ -211,111 +184,28 @@ class _TrimPageState extends State<TrimPage> {
                                   fontSize: 11, color: Colors.white70)),
                         ],
                       ),
-                      // 修剪轨道 = 视频缩略图胶片条（2026-10-07 #2）：
-                      // 拖动/点按胶片条 → 上方视频 seek 到对应帧跟随；
-                      // 起点/终点手柄叠加拖动设区间。
+                      // 修剪轨道 = 胶片条（FilmStrip 公共组件）：
+                      // 拖动/点按 → 视频帧跟随；手柄叠加设区间。
                       LayoutBuilder(builder: (context, box) {
                         final w = box.maxWidth;
                         const trackH = 56.0;
                         final leftX = _start.inMilliseconds / totalMs * w;
                         final rightX = _end.inMilliseconds / totalMs * w;
-                        void seekToX(double x) {
-                          final ms = (x.clamp(0.0, w) / w * totalMs).round();
-                          _ctl?.seekTo(Duration(milliseconds: ms));
-                        }
-
-                        return Column(
+                        return Stack(
+                          clipBehavior: Clip.none,
                           children: [
-                            GestureDetector(
-                              behavior: HitTestBehavior.opaque,
-                              onHorizontalDragUpdate: (d) =>
-                                  seekToX(d.localPosition.dx),
-                              onTapUp: (d) => seekToX(d.localPosition.dx),
-                              child: SizedBox(
-                                height: trackH,
-                                child: LayoutBuilder(builder: (context, b) {
-                                  final w2 = b.maxWidth;
-                                  // Positioneds 只能做 Stack 直接子级
-                                  return Stack(
-                                    clipBehavior: Clip.none,
-                                    children: [
-                                      // 胶片条：连续帧缩略图
-                                      Positioned.fill(
-                                        child: Row(
-                                          children: [
-                                            for (var i = 0; i < _stripCount; i++)
-                                              Expanded(
-                                                child: _strip[i] != null
-                                                    ? Image.memory(
-                                                        _strip[i]!,
-                                                        fit: BoxFit.cover,
-                                                        gaplessPlayback: true,
-                                                      )
-                                                    : Container(
-                                                        color: const Color(
-                                                            0xFF2A2A2E),
-                                                      ),
-                                              ),
-                                          ],
-                                        ),
-                                      ),
-                                      // 区间外暗化（起点前/终点后）
-                                      Positioned(
-                                        left: 0,
-                                        top: 0,
-                                        bottom: 0,
-                                        width: leftX,
-                                        child: Container(
-                                            color: Colors.black
-                                                .withValues(alpha: .62)),
-                                      ),
-                                      Positioned(
-                                        left: rightX,
-                                        top: 0,
-                                        bottom: 0,
-                                        width: (w2 - rightX)
-                                            .clamp(0.0, w2 - rightX),
-                                        child: Container(
-                                            color: Colors.black
-                                                .withValues(alpha: .62)),
-                                      ),
-                                      // 保留区间白描边
-                                      Positioned(
-                                        left: leftX,
-                                        width:
-                                            (rightX - leftX).clamp(2.0, w2),
-                                        top: 0,
-                                        bottom: 0,
-                                        child: DecoratedBox(
-                                          decoration: BoxDecoration(
-                                            border: Border.all(
-                                                color: Colors.white,
-                                                width: 1.5),
-                                          ),
-                                        ),
-                                      ),
-                                      // 播放头指示
-                                      Positioned(
-                                        top: 0,
-                                        bottom: 0,
-                                        left: (v.position.inMilliseconds /
-                                                    totalMs *
-                                                    w2)
-                                                .clamp(0.0, w2 - 2) -
-                                            1,
-                                        width: 2,
-                                        child: Container(color: accent),
-                                      ),
-                                      // 起点/终点手柄
-                                      _trimHandle(
-                                          trackH, leftX, true, w2, totalMs),
-                                      _trimHandle(
-                                          trackH, rightX, false, w2, totalMs),
-                                    ],
-                                  );
-                                }),
-                              ),
+                            FilmStrip(
+                              videoPath: widget.source.path,
+                              duration: dur,
+                              position: v.position,
+                              onSeek: (t) => _ctl?.seekTo(t),
+                              maskStart: _start,
+                              maskEnd: _end,
+                              accent: accent,
+                              height: trackH,
                             ),
+                            _trimHandle(trackH, leftX, true, w, totalMs),
+                            _trimHandle(trackH, rightX, false, w, totalMs),
                           ],
                         );
                       }),

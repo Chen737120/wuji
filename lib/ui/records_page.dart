@@ -1,5 +1,4 @@
 import 'package:flutter/material.dart';
-import 'package:intl/intl.dart';
 import 'package:provider/provider.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'dart:io';
@@ -10,6 +9,8 @@ import '../services/abs_path_cache.dart';
 import '../services/archive_fs.dart' show MediaPathResolver;
 import '../theme.dart';
 import 'detail_page.dart';
+import 'player_page.dart';
+import 'record_form_page.dart';
 import 'widgets/app_route.dart';
 import 'sheets/date_sheet.dart';
 
@@ -39,6 +40,22 @@ List<MapEntry<String, List<ClassRecord>>> groupByMonth(
   return map.entries.toList();
 }
 
+/// 按天分组（key：10月7日 周五，2026-10-07 需求 #10 时间轴组头），
+/// 日期倒序、组内按日期倒序。
+List<MapEntry<String, List<ClassRecord>>> groupByDay(
+    List<ClassRecord> records) {
+  const weekdays = ['周一', '周二', '周三', '周四', '周五', '周六', '周日'];
+  final sorted = [...records]..sort((a, b) => b.date.compareTo(a.date));
+  final map = <String, List<ClassRecord>>{};
+  for (final r in sorted) {
+    final d = r.dateAsDateTime;
+    final key =
+        '${d.month}月${d.day}日 ${weekdays[d.weekday - 1]}';
+    map.putIfAbsent(key, () => []).add(r);
+  }
+  return map.entries.toList();
+}
+
 /// 记录页（规格 §3.3）：日历（默认展开、记住状态）＋按月分组时间流。
 class RecordsPage extends StatefulWidget {
   const RecordsPage({super.key});
@@ -55,6 +72,10 @@ class _RecordsPageState extends State<RecordsPage> {
   bool _calendarMonthInitialized = false;
   DateTime? _selectedDay;
   late DateTime _calendarMonth;
+  // 搜索（需求 #11）
+  bool _searching = false;
+  String _query = '';
+  final TextEditingController _searchCtl = TextEditingController();
 
   ClassSaver get _saver => context.read<ClassSaver>();
 
@@ -70,6 +91,7 @@ class _RecordsPageState extends State<RecordsPage> {
   @override
   void dispose() {
     ReloadBus.instance.removeListener(_load);
+    _searchCtl.dispose();
     super.dispose();
   }
 
@@ -106,6 +128,7 @@ class _RecordsPageState extends State<RecordsPage> {
 
   @override
   Widget build(BuildContext context) {
+    final accent = Theme.of(context).colorScheme.primary;
     return Scaffold(
       backgroundColor: AppColors.bg,
       body: SafeArea(
@@ -115,13 +138,26 @@ class _RecordsPageState extends State<RecordsPage> {
             Padding(
               padding: const EdgeInsets.fromLTRB(16, 12, 16, 4),
               child: Row(
-                mainAxisAlignment: MainAxisAlignment.spaceBetween,
                 children: [
                   const Text('记录',
                       style: TextStyle(
                           fontSize: 16,
                           fontWeight: FontWeight.w700,
                           letterSpacing: 3)),
+                  const Spacer(),
+                  // 搜索（2026-10-07 需求 #11）：按老师/舞种/舞室过滤
+                  GestureDetector(
+                    onTap: () => setState(() {
+                      _searching = !_searching;
+                      if (!_searching) _query = '';
+                    }),
+                    child: Icon(
+                        _searching ? Icons.search_off : Icons.search,
+                        size: 20,
+                        color:
+                            _searching ? accent : AppColors.secondary),
+                  ),
+                  const SizedBox(width: 14),
                   GestureDetector(
                     onTap: _toggleExpanded,
                     child: Text(_expanded ? '收起日历 ⌃' : '展开日历 ⌄',
@@ -130,6 +166,29 @@ class _RecordsPageState extends State<RecordsPage> {
                 ],
               ),
             ),
+            if (_searching)
+              Padding(
+                padding: const EdgeInsets.fromLTRB(16, 6, 16, 0),
+                child: TextField(
+                  autofocus: true,
+                  controller: _searchCtl,
+                  decoration: InputDecoration(
+                    isDense: true,
+                    hintText: '搜索老师 / 舞种 / 舞室',
+                    hintStyle:
+                        const TextStyle(fontSize: 12, color: AppColors.faint),
+                    prefixIcon:
+                        const Icon(Icons.search, size: 18, color: AppColors.faint),
+                    contentPadding: const EdgeInsets.symmetric(vertical: 8),
+                    border: OutlineInputBorder(
+                      borderRadius: BorderRadius.circular(10),
+                      borderSide: const BorderSide(color: AppColors.hairline),
+                    ),
+                  ),
+                  style: const TextStyle(fontSize: 13),
+                  onChanged: (v) => setState(() => _query = v.trim()),
+                ),
+              ),
             if (_expanded)
               _Calendar(
                 initialMonth: _calendarMonth,
@@ -231,7 +290,7 @@ class _RecordsPageState extends State<RecordsPage> {
               height: 20,
               child: CircularProgressIndicator(strokeWidth: 2)));
     }
-    final filtered = _selectedDay == null
+    var filtered = _selectedDay == null
         ? _records
         : _records
             .where((r) =>
@@ -239,24 +298,76 @@ class _RecordsPageState extends State<RecordsPage> {
                 r.dateAsDateTime.month == _selectedDay!.month &&
                 r.dateAsDateTime.day == _selectedDay!.day)
             .toList();
+    // 搜索过滤（需求 #11）：老师/舞种/舞室/感受
+    if (_query.isNotEmpty) {
+      final q = _query.toLowerCase();
+      bool hit(ClassRecord r) =>
+          (r.styleName ?? '').toLowerCase().contains(q) ||
+          (r.teacherName ?? '').toLowerCase().contains(q) ||
+          (r.studioName ?? '').toLowerCase().contains(q) ||
+          (r.note ?? '').toLowerCase().contains(q);
+      filtered = filtered.where(hit).toList();
+    }
     if (filtered.isEmpty) {
       return Center(
-          child: Text('这一天还没有课堂记录',
+          child: Text(
+              _query.isNotEmpty ? '没有匹配的记录' : '这一天还没有课堂记录',
               style: TextStyle(fontSize: 12, color: AppColors.faint)));
     }
+    // 时间轴（需求 #10）：按天分组组头 + 左侧竖线圆点
     final children = <Widget>[];
-    for (final g in groupByMonth(filtered)) {
+    final groups = groupByDay(filtered);
+    for (final g in groups) {
       children.add(Padding(
-        padding: const EdgeInsets.only(top: 10, bottom: 6),
+        padding: const EdgeInsets.only(top: 14, bottom: 8),
         child: Text(g.key,
-            style: TextStyle(fontSize: 12, color: AppColors.secondary)),
+            style: const TextStyle(
+                fontSize: 16, fontWeight: FontWeight.w800)),
       ));
-      for (final r in g.value) {
-        children.add(RecordCard(
-          record: r,
-          media: _mediaByClass[r.id] ?? const [],
-          onTap: () => Navigator.push(
-              context, AppRoute(builder: (_) => DetailPage(classId: r.id))),
+      for (var i = 0; i < g.value.length; i++) {
+        final r = g.value[i];
+        final isLast = i == g.value.length - 1;
+        children.add(Padding(
+          padding: const EdgeInsets.only(bottom: 2),
+          // IntrinsicHeight：让时间轴竖线随卡片实际高度拉伸
+          child: IntrinsicHeight(
+            child: Row(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                // 时间轴列：圆点 + 竖线（最后一张线到卡底即止）
+                SizedBox(
+                  width: 20,
+                  child: Column(
+                    children: [
+                      Container(
+                        width: 8,
+                        height: 8,
+                        margin: const EdgeInsets.only(top: 24),
+                        decoration: BoxDecoration(
+                            color: AppColors.faint, shape: BoxShape.circle),
+                      ),
+                      if (!isLast)
+                        Expanded(
+                          child:
+                              Container(width: 1.5, color: AppColors.hairline),
+                        ),
+                    ],
+                  ),
+                ),
+                const SizedBox(width: 8),
+                Expanded(
+                  child: RecordCard(
+                    record: r,
+                    media: _mediaByClass[r.id] ?? const [],
+                    onTap: () => Navigator.push(
+                        context,
+                        AppRoute(
+                            builder: (_) => DetailPage(classId: r.id))),
+                  ),
+                ),
+              ],
+            ),
+          ),
         ));
       }
     }
@@ -646,77 +757,11 @@ class _WeekStrip extends StatelessWidget {
   }
 }
 
-/// 封面缩略图（规格 §3.3）：有缩略图文件则渲染，否则回退图标；右下角 ×N 角标。
-class _CoverThumb extends StatelessWidget {
-  const _CoverThumb({required this.cover, required this.resolver});
-
-  final MediaAsset? cover;
-  final MediaPathResolver? resolver;
-
-  @override
-  Widget build(BuildContext context) {
-    final thumb = cover?.thumbName;
-    return SizedBox(
-      width: 56,
-      height: 56,
-      child: Stack(
-        children: [
-          ClipRRect(
-            borderRadius: BorderRadius.circular(8),
-            child: SizedBox(
-              width: 56,
-              height: 56,
-              child: (thumb != null)
-                  ? FutureBuilder<String?>(
-                      future: AbsPathCache.resolve(resolver, thumb),
-                      builder: (context, snap) {
-                        final path = snap.data;
-                        if (path == null || !File(path).existsSync()) {
-                          return _fallback();
-                        }
-                        return Image.file(File(path),
-                            fit: BoxFit.cover,
-                            errorBuilder: (_, _, _) => _fallback());
-                      },
-                    )
-                  : _fallback(),
-            ),
-          ),
-          if (cover != null)
-            Positioned(
-              right: 4,
-              bottom: 4,
-              child: Container(
-                padding:
-                    const EdgeInsets.symmetric(horizontal: 5, vertical: 1),
-                decoration: BoxDecoration(
-                  color: Colors.black54,
-                  borderRadius: BorderRadius.circular(6),
-                ),
-                child: Text('▶',
-                    style: TextStyle(
-                        fontSize: 8, color: AppColors.bg)),
-              ),
-            ),
-        ],
-      ),
-    );
-  }
-
-  Widget _fallback() => Container(
-        color: AppColors.ink,
-        alignment: Alignment.center,
-        child: Icon(
-          cover == null || cover!.type == 'video'
-              ? Icons.play_arrow
-              : Icons.image,
-          color: AppColors.bg,
-          size: 22,
-        ),
-      );
-}
-
-class RecordCard extends StatelessWidget {
+/// 记录卡片（2026-10-07 需求 #10 重做）：
+/// 标题（感受首行）→ 感受全文（折叠/展开）→ 胶囊标签（#舞种 #节数×分 #老师）
+/// → 媒体网格（1 个 16:9、2 个 1:1 并排、≥3 个三列胶卷感）→ 图标化元数据行。
+/// 长按弹快捷菜单（查看完整感受/编辑记录/删除记录）；点媒体直接全屏播放。
+class RecordCard extends StatefulWidget {
   const RecordCard({
     super.key,
     required this.record,
@@ -729,72 +774,342 @@ class RecordCard extends StatelessWidget {
   final VoidCallback onTap;
 
   @override
+  State<RecordCard> createState() => _RecordCardState();
+}
+
+class _RecordCardState extends State<RecordCard> {
+  bool _noteExpanded = false;
+
+  ClassRecord get r => widget.record;
+
+  static const _titleMaxChars = 40;
+
+  /// 感受拆分规则（保证长感受全文可见）：
+  /// - 多行：标题=首行、正文=其余行；
+  /// - 单行且长（>40 字）：标题=前 40 字、正文=完整原文（可展开）；
+  /// - 单行且短：全部当标题。
+  String get _noteBody {
+    final note = r.note?.trim() ?? '';
+    if (note.contains('\n')) {
+      return note.split('\n').skip(1).join('\n').trim();
+    }
+    return note.length > _titleMaxChars ? note : '';
+  }
+
+  Future<void> _openMedia(MediaAsset m) async {
+    if (m.type != 'video') {
+      Navigator.push(
+          context, AppRoute(builder: (_) => DetailPage(classId: r.id)));
+      return;
+    }
+    final messenger = ScaffoldMessenger.of(context);
+    try {
+      final path = await AbsPathCache.resolve(
+              context.read<MediaPathResolver?>(), m.fileName) ??
+          m.fileName;
+      if (!mounted) return;
+      Navigator.push(
+          context, AppRoute(builder: (_) => PlayerPage(fileName: path)));
+    } catch (e) {
+      messenger.showSnackBar(SnackBar(content: Text('视频打开失败：$e')));
+    }
+  }
+
+  void _showActions() {
+    showModalBottomSheet(
+      context: context,
+      backgroundColor: Colors.white,
+      shape: const RoundedRectangleBorder(
+          borderRadius: BorderRadius.vertical(top: Radius.circular(16))),
+      builder: (ctx) => SafeArea(
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            ListTile(
+              leading: const Icon(Icons.notes, size: 20),
+              title: const Text('查看完整感受', style: TextStyle(fontSize: 13)),
+              onTap: () {
+                Navigator.pop(ctx);
+                showDialog(
+                    context: context,
+                    builder: (dctx) => AlertDialog(
+                          backgroundColor: Colors.white,
+                          title: Text(recordTitle(r),
+                              style: const TextStyle(fontSize: 15)),
+                          content: SingleChildScrollView(
+                            child: Text(r.note?.trim() ?? '（未写感受）',
+                                style: const TextStyle(
+                                    fontSize: 13, height: 1.7)),
+                          ),
+                          actions: [
+                            TextButton(
+                                onPressed: () => Navigator.pop(dctx),
+                                child: const Text('关闭')),
+                          ],
+                        ));
+              },
+            ),
+            ListTile(
+              leading: const Icon(Icons.edit_outlined, size: 20),
+              title: const Text('编辑记录', style: TextStyle(fontSize: 13)),
+              onTap: () {
+                Navigator.pop(ctx);
+                Navigator.push(context,
+                    AppRoute(builder: (_) => RecordFormPage(existing: r)));
+              },
+            ),
+            ListTile(
+              leading: Icon(Icons.delete_outline,
+                  size: 20, color: Theme.of(context).colorScheme.error),
+              title: Text('删除记录',
+                  style: TextStyle(
+                      fontSize: 13,
+                      color: Theme.of(context).colorScheme.error)),
+              onTap: () async {
+                Navigator.pop(ctx);
+                final n = widget.media.length;
+                final ok = await showDialog<bool>(
+                  context: context,
+                  builder: (dctx) => AlertDialog(
+                    backgroundColor: Colors.white,
+                    title:
+                        const Text('删除这节课？', style: TextStyle(fontSize: 16)),
+                    content: Text('将删除 $n 个视频/图片，不可恢复。',
+                        style: const TextStyle(fontSize: 13)),
+                    actions: [
+                      TextButton(
+                          onPressed: () => Navigator.pop(dctx, false),
+                          child: const Text('取消')),
+                      TextButton(
+                          onPressed: () => Navigator.pop(dctx, true),
+                          child: Text('确认删除',
+                              style: TextStyle(
+                                  color:
+                                      Theme.of(context).colorScheme.error))),
+                    ],
+                  ),
+                );
+                if (ok != true) return;
+                if (!mounted) return;
+                try {
+                  await context.read<ClassSaver>().deleteRecord(r.id);
+                  ReloadBus.instance.bump();
+                } catch (e) {
+                  if (mounted) {
+                    ScaffoldMessenger.of(context).showSnackBar(
+                        SnackBar(content: Text('删除失败：$e')));
+                  }
+                }
+              },
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  @override
   Widget build(BuildContext context) {
-    final tags = [
-      if (record.styleName?.isNotEmpty ?? false) record.styleName!,
-      '${record.sessionCount}节×${record.minutesEach}分',
-      if (record.teacherName?.isNotEmpty ?? false) record.teacherName!,
-      if (record.studioName?.isNotEmpty ?? false) record.studioName!,
-    ].join(' · ');
-    final cover = media.isNotEmpty ? media.first : null;
-    final d = record.dateAsDateTime;
+    final title = recordTitle(r);
+    final body = _noteBody;
+    final bodyLong = body.length > 60 || body.split('\n').length > 3;
+    final style = (r.styleName == null || r.styleName!.isEmpty)
+        ? null
+        : r.styleName;
+    final chips = <String>[
+      if (style != null) '#$style',
+      '#${r.sessionCount}节×${r.minutesEach}分',
+      if (r.teacherName?.isNotEmpty ?? false) '#${r.teacherName}',
+    ];
 
     return GestureDetector(
-      onTap: onTap,
+      onLongPress: _showActions,
+      onTap: widget.onTap,
       child: Container(
-        margin: const EdgeInsets.only(bottom: 10),
-        padding: const EdgeInsets.all(12),
+        margin: const EdgeInsets.only(bottom: 12),
+        padding: const EdgeInsets.all(14),
         decoration: BoxDecoration(
           color: Colors.white,
           borderRadius: BorderRadius.circular(14),
           border: Border.all(color: AppColors.hairline),
         ),
-        child: Row(
+        child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            Expanded(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Row(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Expanded(
-                        child: Text(recordTitle(record),
-                            maxLines: 2,
-                            overflow: TextOverflow.ellipsis,
-                            style: const TextStyle(
-                                fontSize: 14, fontWeight: FontWeight.w700)),
-                      ),
-                      const SizedBox(width: 6),
-                      Text(DateFormat('M/d').format(d),
-                          style: TextStyle(fontSize: 11, color: AppColors.faint)),
-                    ],
+            Text(title,
+                maxLines: _noteExpanded ? null : 2,
+                overflow: _noteExpanded
+                    ? TextOverflow.visible
+                    : TextOverflow.ellipsis,
+                style: const TextStyle(
+                    fontSize: 14, fontWeight: FontWeight.w700)),
+            if (body.isNotEmpty) ...[
+              const SizedBox(height: 6),
+              // 感受正文：浅灰柔和；长文折叠 + 展开/收起（需求 #10）
+              Text(body,
+                  maxLines: _noteExpanded ? null : 3,
+                  overflow: _noteExpanded
+                      ? TextOverflow.visible
+                      : TextOverflow.ellipsis,
+                  style: const TextStyle(
+                      fontSize: 12.5,
+                      height: 1.6,
+                      color: Color(0xFF757575))),
+              if (bodyLong)
+                GestureDetector(
+                  behavior: HitTestBehavior.opaque,
+                  onTap: () => setState(() => _noteExpanded = !_noteExpanded),
+                  child: Padding(
+                    padding: const EdgeInsets.only(top: 3),
+                    child: Text(_noteExpanded ? '收起 ⌃' : '展开全文 ⌄',
+                        style: TextStyle(
+                            fontSize: 11,
+                            color: Theme.of(context).colorScheme.primary)),
                   ),
-                  if (media.length > 1)
-                    Padding(
-                      padding: const EdgeInsets.only(top: 2),
-                      child: Text('共 ${media.length} 个附件',
-                          style: TextStyle(fontSize: 9, color: AppColors.faint)),
+                ),
+            ],
+            if (chips.isNotEmpty) ...[
+              const SizedBox(height: 8),
+              Wrap(
+                spacing: 6,
+                runSpacing: 4,
+                children: [
+                  for (final c in chips)
+                    Container(
+                      padding: const EdgeInsets.symmetric(
+                          horizontal: 8, vertical: 3),
+                      decoration: BoxDecoration(
+                        color: const Color(0xFFF2F2EE),
+                        borderRadius: BorderRadius.circular(999),
+                      ),
+                      child: Text(c,
+                          style: TextStyle(
+                              fontSize: 10, color: AppColors.secondary)),
                     ),
-                  const SizedBox(height: 6),
-                  Text(tags,
-                      style: TextStyle(fontSize: 11, color: AppColors.secondary)),
                 ],
               ),
+            ],
+            if (widget.media.isNotEmpty) ...[
+              const SizedBox(height: 10),
+              _mediaGrid(),
+            ],
+            const SizedBox(height: 10),
+            // 图标化元数据（需求 #10 底部）
+            Row(
+              children: [
+                for (final (icon, text) in [
+                  (Icons.music_note, style ?? '未设舞种'),
+                  (Icons.schedule, '${r.sessionCount}节×${r.minutesEach}分'),
+                  if (r.teacherName?.isNotEmpty ?? false)
+                    (Icons.person, r.teacherName!),
+                  if (r.studioName?.isNotEmpty ?? false)
+                    (Icons.location_on_outlined, r.studioName!),
+                ]) ...[
+                  Icon(icon, size: 12, color: AppColors.faint),
+                  const SizedBox(width: 3),
+                  Flexible(
+                    child: Text(text,
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: TextStyle(
+                            fontSize: 10, color: AppColors.secondary)),
+                  ),
+                  const SizedBox(width: 10),
+                ],
+              ],
             ),
-            const SizedBox(width: 10),
-            // 无附件的课：卡片右侧留白（不显示黑色占位块）
-            if (cover != null)
-              // Hero：卡片封面 → 详情页首图，点击时"卡片展开成详情页"
-              Hero(
-                tag: 'record-cover-${record.id}',
-                child: _CoverThumb(
-                    cover: cover, resolver: context.read<MediaPathResolver?>()),
-              ),
           ],
         ),
       ),
     );
+  }
+
+  /// 媒体网格：1 个 16:9 大图；2 个 1:1 并排；≥3 个三列胶卷感（最多 6 格）。
+  Widget _mediaGrid() {
+    final list = widget.media.take(6).toList();
+    Widget cell(MediaAsset m) {
+      final rel = m.thumbName ?? (m.type == 'image' ? m.fileName : null);
+      final first = m == widget.media.first;
+      final inner = rel == null
+          ? Container(
+              color: AppColors.ink,
+              alignment: Alignment.center,
+              child: Icon(
+                  m.type == 'video' ? Icons.play_arrow : Icons.image_outlined,
+                  color: AppColors.bg,
+                  size: 22))
+          : FutureBuilder<String?>(
+              future: AbsPathCache.resolve(
+                  context.read<MediaPathResolver?>(), rel),
+              builder: (context, snap) {
+                final path = snap.data;
+                if (path == null || !File(path).existsSync()) {
+                  return Container(
+                      color: AppColors.ink,
+                      alignment: Alignment.center,
+                      child: Icon(
+                          m.type == 'video'
+                              ? Icons.play_arrow
+                              : Icons.image_outlined,
+                          color: AppColors.bg,
+                          size: 22));
+                }
+                return Image.file(File(path),
+                    fit: BoxFit.cover, errorBuilder: (_, _, _) => Container());
+              },
+            );
+      final core = GestureDetector(
+        behavior: HitTestBehavior.opaque,
+        onTap: () => _openMedia(m),
+        child: ClipRRect(
+            borderRadius: BorderRadius.circular(8),
+            child: SizedBox.expand(child: inner)),
+      );
+      // 首图与详情页首图共用 Hero tag（卡片"展开成详情页"）
+      return first ? Hero(tag: 'record-cover-${r.id}', child: core) : core;
+    }
+
+    final count = list.length;
+    if (count == 1) {
+      return ClipRRect(
+        borderRadius: BorderRadius.circular(8),
+        child: AspectRatio(
+            aspectRatio: 16 / 9, child: cell(list.first)),
+      );
+    }
+    if (count == 2) {
+      return Row(
+        children: [
+          for (final m in list)
+            Expanded(
+                child: AspectRatio(
+                    aspectRatio: 1,
+                    child: Padding(
+                        padding: const EdgeInsets.symmetric(horizontal: 2),
+                        child: cell(m)))),
+        ],
+      );
+    }
+    // ≥3：每行 3 格 16:9（胶卷感）
+    final rows = <Widget>[];
+    for (var i = 0; i < count; i += 3) {
+      final chunk = list.skip(i).take(3).toList();
+      rows.add(Row(
+        children: [
+          for (var j = 0; j < 3; j++)
+            Expanded(
+              child: AspectRatio(
+                aspectRatio: 16 / 9,
+                child: Padding(
+                    padding: const EdgeInsets.all(2),
+                    child: j < chunk.length
+                        ? cell(chunk[j])
+                        : const SizedBox.shrink()),
+              ),
+            ),
+        ],
+      ));
+    }
+    return Column(children: rows);
   }
 }

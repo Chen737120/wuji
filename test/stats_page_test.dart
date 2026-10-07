@@ -69,12 +69,12 @@ void main() {
     expect(find.text('视频·图片'), findsOneWidget);
     expect(find.text('3'), findsWidgets); // 节数（趋势柱上无文字，卡片区 1 处）
     final hoursCard = find.byWidgetPredicate(
-        (w) => w is Text && w.data == '4' && w.style?.fontSize == 20.0);
+        (w) => w is Text && w.data == '4' && w.style?.fontSize == 18.0);
     expect(hoursCard, findsOneWidget); // 120+120 分钟 = 4 小时
     expect(find.text('小时'), findsOneWidget);
     expect(find.text('2'), findsWidgets); // 天数
     expect(find.text('跳舞趋势（分钟）'), findsOneWidget);
-    expect(find.text('舞种分布'), findsOneWidget);
+    expect(find.text('舞种分布'), findsWidgets); // 卡片标题＋环形图中心小字
     expect(find.text('老师统计'), findsOneWidget);
     expect(find.text('按天'), findsOneWidget);
     expect(find.text('按月'), findsOneWidget);
@@ -90,7 +90,7 @@ void main() {
 
     expect(find.text('还没有课堂记录，点下方 ＋ 记录第一节课'), findsOneWidget);
     expect(find.text('跳舞趋势（分钟）'), findsOneWidget);
-    expect(find.text('舞种分布'), findsOneWidget);
+    expect(find.text('舞种分布'), findsWidgets); // 卡片标题＋环形图中心小字
     expect(find.text('老师统计'), findsOneWidget);
     expect(find.text('舞室统计'), findsOneWidget);
   });
@@ -119,7 +119,7 @@ void main() {
     await tester.pumpAndSettle();
     expect(find.text('3'), findsWidgets);
     final totalCard = find.byWidgetPredicate(
-        (w) => w is Text && w.data == '4' && w.style?.fontSize == 20.0);
+        (w) => w is Text && w.data == '4' && w.style?.fontSize == 18.0);
     expect(totalCard, findsOneWidget); // 时长 60 + 2节×90 = 4 小时
     // 切回近1月
     await tester.tap(find.text('近1月'));

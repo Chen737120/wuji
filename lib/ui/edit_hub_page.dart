@@ -34,7 +34,7 @@ class EditHubPage extends StatelessWidget {
               subtitle: '在课堂视频上圈选一块区域，裁出竖版直拍。\n框可以跟随动作打关键帧，导出平滑跟框。',
               onTap: onFancam,
             ),
-            const SizedBox(height: 12),
+            const SizedBox(height: 16),
             _EntryCard(
               icon: Icons.compare,
               title: '同屏对比',
@@ -71,45 +71,47 @@ class _EntryCard extends StatelessWidget {
     final accent = Theme.of(context).colorScheme.primary;
     return Material(
       color: Colors.white,
-      borderRadius: BorderRadius.circular(14),
+      borderRadius: BorderRadius.circular(16),
       child: InkWell(
-        borderRadius: BorderRadius.circular(14),
+        borderRadius: BorderRadius.circular(16),
         onTap: onTap,
         child: Container(
-          padding: const EdgeInsets.all(16),
+          // 2026-10-07 用户需求 #9：卡片调大，减少页面下部空旷感
+          padding: const EdgeInsets.all(22),
           decoration: BoxDecoration(
-            borderRadius: BorderRadius.circular(14),
+            borderRadius: BorderRadius.circular(16),
             border: Border.all(color: AppColors.hairline),
           ),
           child: Row(
             children: [
               Container(
-                width: 44,
-                height: 44,
+                width: 60,
+                height: 60,
                 decoration: BoxDecoration(
                   color: accent.withValues(alpha: .12),
-                  borderRadius: BorderRadius.circular(12),
+                  borderRadius: BorderRadius.circular(16),
                 ),
-                child: Icon(icon, color: accent, size: 24),
+                child: Icon(icon, color: accent, size: 32),
               ),
-              const SizedBox(width: 14),
+              const SizedBox(width: 16),
               Expanded(
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
                     Text(title,
                         style: const TextStyle(
-                            fontSize: 15, fontWeight: FontWeight.w700)),
-                    const SizedBox(height: 4),
+                            fontSize: 18, fontWeight: FontWeight.w800)),
+                    const SizedBox(height: 6),
                     Text(subtitle,
                         style: TextStyle(
-                            fontSize: 11,
+                            fontSize: 13,
                             height: 1.6,
                             color: AppColors.secondary)),
                   ],
                 ),
               ),
-              const Icon(Icons.chevron_right, size: 18, color: Color(0xFFC9C9C5)),
+              const Icon(Icons.chevron_right,
+                  size: 22, color: Color(0xFFC9C9C5)),
             ],
           ),
         ),

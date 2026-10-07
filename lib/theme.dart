@@ -2,13 +2,12 @@ import 'package:flutter/material.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 /// 全 App 唯一的彩色：点缀色预设（规格 §9/§3.6）。
-/// 2026-10-05 用户反馈：保留翠芽，其余换为彩虹七色（共 8 档）。
+/// 2026-10-07 用户反馈：去掉草绿（保留翠芽+彩虹六色，共 7 档）。
 enum AccentPreset {
   jade(0xFF3FA26F, '翠芽'),
   red(0xFFE5484D, '绯红'),
   orange(0xFFF08C1E, '暖橙'),
   yellow(0xFFD9A514, '明黄'),
-  green(0xFF34B04A, '草绿'),
   cyan(0xFF14A8B8, '湖青'),
   blue(0xFF3B6FE0, '宝蓝'),
   purple(0xFF8B5CF6, '紫罗兰');
@@ -36,6 +35,16 @@ const List<Color> kRainbowPalette = [
 ];
 
 const Color kOtherSliceColor = Color(0xFFB8B8B4); // 「其他」/兜底中性灰
+
+/// 图表色调亮（2026-10-07 用户反馈：老师/舞室条形整体调亮一档，
+/// 显得轻松活泼——同色相提高亮度，舞种环形图保持原色）。
+Color brightenChartColor(Color c) {
+  final hsl = HSLColor.fromColor(c);
+  return hsl
+      .withLightness((hsl.lightness + 0.10).clamp(0.0, 0.78))
+      .withSaturation((hsl.saturation - 0.05).clamp(0.0, 1.0))
+      .toColor();
+}
 
 class AppColors {
   static const bg = Color(0xFFFAFAF8);
