@@ -12,6 +12,7 @@ import 'reload_bus.dart';
 import 'services/archive_fs.dart';
 import 'services/archive_store.dart';
 import 'services/saf_archive.dart';
+import 'services/temp_cleanup.dart';
 import 'services/thumb_service.dart';
 import 'theme.dart';
 import 'ui/edit_hub_page.dart';
@@ -28,6 +29,7 @@ import 'ui/widgets/app_route.dart';
 
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
+  cleanupStaleTemp(); // 陈旧临时文件清理（fire-and-forget，不阻塞启动）
   final db = AppDatabase();
   final theme = ThemeController();
   await theme.load();

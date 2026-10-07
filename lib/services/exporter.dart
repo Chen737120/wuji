@@ -39,26 +39,48 @@ class Exporter {
           '舞记数据.json', manifestForExport(records, media)));
 
       // 2) 逐课：媒体（保留原文件名，重名加序号）＋ 感受.txt
+      // 流式导出（评审重要项 #1）：媒体从存档流式拷到临时文件，再交给
+      // ZipFileEncoder.addFile（内部分块读）——单个大视频不再整读进内存
       var done = 0;
       final total = records.length + 2;
       final usedMediaNames = <String, int>{};
-      for (final r in records) {
-        final folder = names[r.id] ?? folderBaseName(r);
-        for (final m in byClass[r.id] ?? const <MediaAsset>[]) {
-          final original = m.fileName.split('/').last;
-          final key = '$folder/$original';
-          final n = (usedMediaNames[key] ?? 0) + 1;
-          usedMediaNames[key] = n;
-          final name = n == 1 ? original : _withSeq(original, n);
-          final bytes = await _store.readBytes(m.fileName);
+      final tmpMedia = Directory('$targetPath.tmp-media');
+      if (tmpMedia.existsSync()) tmpMedia.deleteSync(recursive: true);
+      tmpMedia.createSync(recursive: true);
+      var tmpSeq = 0;
+      try {
+        for (final r in records) {
+          final folder = names[r.id] ?? folderBaseName(r);
+          for (final m in byClass[r.id] ?? const <MediaAsset>[]) {
+            final original = m.fileName.split('/').last;
+            final key = '$folder/$original';
+            final n = (usedMediaNames[key] ?? 0) + 1;
+            usedMediaNames[key] = n;
+            final name = n == 1 ? original : _withSeq(original, n);
+            final tmpFile =
+                File('${tmpMedia.path}/m${tmpSeq++}.${m.fileName.split('.').last}');
+            final sink = tmpFile.openWrite();
+            try {
+              await sink.addStream(_store.fs.read(m.fileName));
+              await sink.flush();
+            } finally {
+              await sink.close();
+            }
+            encoder.addFile(tmpFile, '$folder/$name');
+            try {
+              tmpFile.deleteSync();
+            } catch (_) {}
+          }
           encoder.addArchiveFile(
-              ar.ArchiveFile('$folder/$name', bytes.length, bytes));
+              ar.ArchiveFile.string('$folder/感受.txt', feelingsTxt(r)));
+          done++;
+          onProgress?.call(done, total);
+          if (cancelled?.call() ?? false) throw ExportCancelled();
         }
-        encoder.addArchiveFile(
-            ar.ArchiveFile.string('$folder/感受.txt', feelingsTxt(r)));
-        done++;
-        onProgress?.call(done, total);
-        if (cancelled?.call() ?? false) throw ExportCancelled();
+      } finally {
+        try {
+          tmpMedia.deleteSync(recursive: true);
+        } catch (_) {}
       }
 
       // 2.5) 封面：thumbs/<uuid>.jpg 原相对路径入包（清单 thumbName 可直接命中，

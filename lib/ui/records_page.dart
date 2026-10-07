@@ -702,13 +702,18 @@ class _CalendarState extends State<_Calendar> {
                 ),
               ),
             ),
+          // 2026-10-07 调整 #2：去掉黑色圆角底（黑阴影感），只留底图+白色数字
           Center(
             child: Container(
-              padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 2),
-              decoration: BoxDecoration(
-                color: isSelected ? accent : Colors.black54,
-                borderRadius: BorderRadius.circular(9),
-              ),
+              padding: isSelected
+                  ? const EdgeInsets.symmetric(horizontal: 7, vertical: 2)
+                  : EdgeInsets.zero,
+              decoration: isSelected
+                  ? BoxDecoration(
+                      color: accent,
+                      borderRadius: BorderRadius.circular(9),
+                    )
+                  : null,
               child: Text('$day',
                   style: const TextStyle(
                       fontSize: 11,

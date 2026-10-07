@@ -65,14 +65,14 @@ class _TrendBarsState extends State<TrendBars> {
           children: [
             const Text('跳舞趋势（分钟）',
                 style: TextStyle(
-                    fontSize: 14,
+                    fontSize: 16,
                     fontWeight: FontWeight.w700,
                     color: AppColors.ink)),
             Row(
               mainAxisSize: MainAxisSize.min,
               children: [
                 _modeBtn(context, '按天', TrendMode.daily),
-                Text(' · ', style: TextStyle(fontSize: 10, color: AppColors.faint)),
+                Text(' · ', style: TextStyle(fontSize: 11, color: AppColors.faint)),
                 _modeBtn(context, '按月', TrendMode.monthly),
               ],
             ),
@@ -80,9 +80,9 @@ class _TrendBarsState extends State<TrendBars> {
         ),
         const SizedBox(height: 10),
         LayoutBuilder(builder: (context, constraints) {
-          // 柱区高度随卡片宽度自适应（夹在 56~112 之间），下方留 14 标签行
+          // 柱区高度随卡片宽度自适应（夹在 72~132 之间），下方留 18 标签行
           final barH =
-              (constraints.maxWidth * 0.30).clamp(56.0, 108.0).toDouble();
+              (constraints.maxWidth * 0.36).clamp(72.0, 132.0).toDouble();
           // 纵轴刻度（分钟）：0 与峰值均分 4 段，左侧标签 + 横向网格线
           final ticks = <int>[
             0,
@@ -91,10 +91,10 @@ class _TrendBarsState extends State<TrendBars> {
             (peak * 0.75).round(),
             peak,
           ];
-          const labelW = 30.0;
-          const labelH = 14.0;
+          const labelW = 40.0;
+          const labelH = 18.0;
           // 柱宽：按月 30px（12 根可滑动、图一观感），按天 17px
-          final slotW = widget.mode == TrendMode.monthly ? 30.0 : 17.0;
+          final slotW = widget.mode == TrendMode.monthly ? 36.0 : 20.0;
           final contentW = math.max(constraints.maxWidth, points.length * slotW);
           return SizedBox(
             height: barH + labelH,
@@ -110,7 +110,7 @@ class _TrendBarsState extends State<TrendBars> {
                       for (final t in ticks.reversed)
                         Text('$t',
                             style: TextStyle(
-                                fontSize: 8, color: AppColors.faint)),
+                                fontSize: 10, color: AppColors.faint)),
                       const SizedBox(height: labelH),
                     ],
                   ),
@@ -197,7 +197,7 @@ class _TrendBarsState extends State<TrendBars> {
                                           child: Center(
                                             child: Text(p.label,
                                                 style: TextStyle(
-                                                    fontSize: 8,
+                                                    fontSize: 10,
                                                     color:
                                                         AppColors.faint)),
                                           ),
@@ -227,7 +227,7 @@ class _TrendBarsState extends State<TrendBars> {
       onTap: () => widget.onModeChanged(m),
       child: Text(label,
           style: TextStyle(
-              fontSize: 10,
+              fontSize: 13,
               fontWeight: selected ? FontWeight.w700 : FontWeight.w400,
               color: selected ? AppColors.ink : AppColors.faint)),
     );
@@ -284,18 +284,18 @@ class StyleDonut extends StatelessWidget {
             alignment: Alignment.center,
             children: [
               // Stack loose 约束下无 child 的 CustomPaint 尺寸会变 0——必须显式给 size
-              CustomPaint(size: const Size(96, 96), painter: _DonutPainter(slices, sliceColor)),
+              CustomPaint(size: const Size(116, 116), painter: _DonutPainter(slices, sliceColor)),
               Column(
                 mainAxisSize: MainAxisSize.min,
                 children: [
                   Text('$kinds种',
                       style: const TextStyle(
-                          fontSize: 17,
+                          fontSize: 20,
                           fontWeight: FontWeight.w700,
                           color: AppColors.ink)),
                   const Text('舞种分布',
                       style: TextStyle(
-                          fontSize: 9, color: AppColors.faint)),
+                          fontSize: 11, color: AppColors.faint)),
                 ],
               ),
             ],
@@ -312,8 +312,8 @@ class StyleDonut extends StatelessWidget {
                   child: Row(
                     children: [
                       Container(
-                        width: 8,
-                        height: 8,
+                        width: 10,
+                        height: 10,
                         decoration: BoxDecoration(
                             color: sliceColor(s),
                             shape: BoxShape.circle),
@@ -323,7 +323,7 @@ class StyleDonut extends StatelessWidget {
                         child: Text(
                           '${s.name} ${_pct(s.sessions)}%（${s.sessions}节）',
                           style: TextStyle(
-                              fontSize: 11, color: AppColors.secondary),
+                              fontSize: 13, color: AppColors.secondary),
                         ),
                       ),
                     ],
@@ -352,21 +352,21 @@ class _DonutPainter extends CustomPainter {
       final paint = Paint()
         ..color = AppColors.hairline
         ..style = PaintingStyle.stroke
-        ..strokeWidth = 12;
+        ..strokeWidth = 15;
       canvas.drawCircle(Offset(size.width / 2, size.height / 2),
-          size.width / 2 - 6, paint);
+          size.width / 2 - 8, paint);
       return;
     }
     final rect = Rect.fromCircle(
-        center: Offset(size.width / 2, size.height / 2), radius: size.width / 2 - 6);
+        center: Offset(size.width / 2, size.height / 2), radius: size.width / 2 - 8);
     var start = -math.pi / 2;
     for (var i = 0; i < slices.length; i++) {
       final sweep = slices[i].sessions / total * 2 * math.pi;
       canvas.drawArc(rect, start, sweep, true, Paint()..color = colorOf(slices[i]));
       start += sweep;
     }
-    // 中孔（半径随 96px 环放大，留足中心文字空间）
-    canvas.drawCircle(rect.center, rect.width / 2 - 14,
+    // 中孔（半径随 116px 环放大，留足中心文字空间）
+    canvas.drawCircle(rect.center, rect.width / 2 - 17,
         Paint()..color = AppColors.bg);
   }
 
@@ -417,29 +417,28 @@ class _NameBarsState extends State<NameBars> {
       children: [
         Text(widget.title,
             style: const TextStyle(
-                fontSize: 14,
+                fontSize: 16,
                 fontWeight: FontWeight.w700,
                 color: AppColors.ink)),
-        const SizedBox(height: 10),
-        const SizedBox(height: 8),
+        const SizedBox(height: 12),
         for (final item in visible)
           Padding(
-            padding: const EdgeInsets.only(bottom: 7),
+            padding: const EdgeInsets.only(bottom: 9),
             child: Row(
               children: [
                 SizedBox(
-                    width: 72,
+                    width: 88,
                     child: Text(item.name,
                         maxLines: 1,
                         overflow: TextOverflow.ellipsis,
-                        style: const TextStyle(fontSize: 12))),
+                        style: const TextStyle(fontSize: 14))),
                 Expanded(
                   child: Container(
-                    // 2026-10-05 用户反馈：条形增粗、整体圆润
-                    height: 9,
+                    // 条形增粗（随整体调大一档）
+                    height: 12,
                     decoration: BoxDecoration(
                       color: AppColors.hairline,
-                      borderRadius: BorderRadius.circular(4.5),
+                      borderRadius: BorderRadius.circular(6),
                     ),
                     child: FractionallySizedBox(
                       alignment: Alignment.centerLeft,
@@ -451,18 +450,18 @@ class _NameBarsState extends State<NameBars> {
                           // 前十色循环 + 整体调亮一档（2026-10-07：轻松活泼）
                           color: brightenChartColor(kRainbowPalette[
                               items.indexOf(item) % kRainbowPalette.length]),
-                          borderRadius: BorderRadius.circular(4.5),
+                          borderRadius: BorderRadius.circular(6),
                         ),
                       ),
                     ),
                   ),
                 ),
                 SizedBox(
-                    width: 88,
+                    width: 96,
                     child: Text(_countLabel(item.sessions, totalSessions),
                         textAlign: TextAlign.right,
                         style: TextStyle(
-                            fontSize: 11, color: AppColors.secondary))),
+                            fontSize: 13, color: AppColors.secondary))),
               ],
             ),
           ),
@@ -485,7 +484,7 @@ class _NameBarsState extends State<NameBars> {
                   children: [
                     Text(_expanded ? '收起' : '加载更多',
                         style: TextStyle(
-                            fontSize: 12,
+                            fontSize: 13,
                             fontWeight: FontWeight.w600,
                             color: accent)),
                     const SizedBox(width: 4),
