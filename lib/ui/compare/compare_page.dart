@@ -40,10 +40,6 @@ abstract final class DarkSkin {
 }
 
 class _ComparePageState extends State<ComparePage> {
-  /// 双画面预览容器高（逻辑像素）——SideTransform.frameInContainer 的
-  /// 边距折算与导出 containerAspect 都依赖此值，改动需同步。
-  static const double previewH = 210;
-
   VideoPlayerController? _teacherCtl;
   VideoPlayerController? _mineCtl;
 
@@ -57,8 +53,26 @@ class _ComparePageState extends State<ComparePage> {
   String? _audioChoice = 'teacher';
   ExportService? _exportSvc;
   int _selectedSide = 0;
+  // 方案一（2026-10-05 用户确认）：画面框＝裁剪框，**比例全局共享**，
+  // 切换时老师/我的画面框同时变形；平移/缩放仍每侧独立。
+  String _ratio = '3:4';
   final SideTransform _left = SideTransform(ratio: '3:4');
   final SideTransform _right = SideTransform(ratio: '3:4');
+
+  /// 画面框高度＝每侧宽 / 比例（框即裁剪区，比例切换时框变形）。
+  /// 每侧宽 = (屏宽 - 页边距 28 - 列间距 6) / 2。
+  double _previewH(double screenW) {
+    final sideW = (screenW - 34) / 2;
+    return (sideW / _left.aspect).clamp(160.0, 340.0);
+  }
+
+  void _setRatio(String r) {
+    setState(() {
+      _ratio = r;
+      _left.ratio = r;
+      _right.ratio = r;
+    });
+  }
 
   VideoPlayerController? get ctl => _teacherCtl;
   Duration get teacherDur =>
@@ -152,6 +166,21 @@ class _ComparePageState extends State<ComparePage> {
       await m?.pause();
       return;
     }
+    // 播放预览 = 时间微调后的效果（2026-10-05 用户反馈）：
+    // offset>0（我的延后）→ 老师从 offset 处先播、我的从 0；
+    // offset<0 → 我的从 |offset| 先播、老师从 0；同刻两路保持错位。
+    final offMs = _offset.inMilliseconds;
+    if (offMs > 0 && t.value.position < _offset) {
+      await t.seekTo(_offset);
+      final wantMine =
+          t.value.position - _offset;
+      await m?.seekTo(wantMine < Duration.zero ? Duration.zero : wantMine);
+    } else if (offMs < 0 && m != null && m.value.position < -_offset) {
+      await m.seekTo(-_offset);
+      final wantTeacher = m.value.position + _offset;
+      await t.seekTo(
+          wantTeacher < Duration.zero ? Duration.zero : wantTeacher);
+    }
     await _syncMineToTeacher();
     await t.play();
     await m?.play();
@@ -161,16 +190,18 @@ class _ComparePageState extends State<ComparePage> {
     setState(() => _offset = v);
     final t = _teacherCtl;
     if (t != null && !t.value.isPlaying) {
+      // 暂停态即时预览偏移：offset>0 时老师至少走到 offset（模拟导出起点）
+      if (v > Duration.zero && t.value.position < v) {
+        t.seekTo(v);
+      }
       _syncMineToTeacher(force: true);
     }
   }
 
   Future<void> _export() async {
     if (_exporting || _teacherCtl == null || _mineCtl == null) return;
-    // 预览容器宽高比（与 _side 的 LayoutBuilder 实际容器一致）：
-    // 页面左右 Padding 14×2、两列间距 6 → 容器宽=(屏宽-34)/2，高=210
-    final screenW = MediaQuery.sizeOf(context).width;
-    final containerAspect = (screenW - 34) / 2 / previewH;
+    // 画面框＝裁剪框（方案一）：两侧同比例，containerAspect = 所选比例
+    final containerAspect = _left.aspect;
     setState(() => _exporting = true);
     try {
       _exportSvc ??= ExportService(
@@ -256,7 +287,8 @@ class _ComparePageState extends State<ComparePage> {
           Padding(
             padding: const EdgeInsets.symmetric(horizontal: 14),
             child: SizedBox(
-              height: previewH,
+              // 画面框＝裁剪框：高度随比例变（3:4≈244、9:16≈325、1:1≈183）
+              height: _previewH(MediaQuery.sizeOf(context).width),
               child: Row(
                 children: [
                   Expanded(
@@ -308,12 +340,9 @@ class _ComparePageState extends State<ComparePage> {
                 ? Padding(
                     padding: const EdgeInsets.all(14),
                     child: FrameAdjustView(
-                      left: _left,
-                      right: _right,
-                      selectedSide: _selectedSide,
-                      onSelect: (s) => setState(() => _selectedSide = s),
-                      onLeftChanged: () => setState(() {}),
-                      onRightChanged: () => setState(() {})),
+                      ratio: _ratio,
+                      onRatioChanged: _setRatio,
+                    ),
                   )
                 : Padding(
                     padding: const EdgeInsets.fromLTRB(14, 8, 14, 0),
@@ -578,24 +607,23 @@ class _ComparePageState extends State<ComparePage> {
     if (s != null) await _applySpeed(s);
   }
 
-  /// 单侧画面（暗色）。**遮罩裁剪语义（2026-10-05 用户反馈重做）**：
-  /// 视频以正常大小完整打底（contain，不变形不预裁切）；
-  /// 画面微调态叠加固定比例裁剪框（实线=老师、虚线=我的），
-  /// **框外遮住不可见**；单指拖/双指缩放移动的是框下面的视频画面；
-  /// 切换比例=改变框的大小；框内即导出画面。
+  /// 单侧画面（暗色，方案一：**画面框＝裁剪框**）：
+  /// 容器本身按所选比例呈现，视频 cover 填满画面框（溢出即被裁掉，
+  /// 所见即所得，无叠加框/遮罩）；时间微调与画面微调两个 tab 用同一呈现。
+  /// 画面微调态：单指拖动/双指缩放框下的视频；选中侧描边高亮。
   Widget _side(
     BuildContext context,
     VideoPlayerController? ctl,
     String label, {
     required bool dashed,
-    SideTransform? transform,
+    required SideTransform transform,
     bool selected = false,
     VoidCallback? onSelect,
     VoidCallback? onTransformed,
   }) {
     final ready = ctl != null && ctl.value.isInitialized;
     final accent = Theme.of(context).colorScheme.primary;
-    final frameMode = _adjustingFrame && transform != null;
+    final frameMode = _adjustingFrame;
     final box = Container(
       decoration: BoxDecoration(
         color: Colors.black,
@@ -608,39 +636,16 @@ class _ComparePageState extends State<ComparePage> {
           children: [
             if (ready)
               LayoutBuilder(builder: (context, b) {
-                // 容器归一化坐标（高=1）→ 像素
+                // 容器（画面框）归一化坐标：高=1、宽=比例 aspect
                 final unit = b.maxHeight;
-                final ca = b.maxWidth / b.maxHeight;
+                final ca = transform.aspect;
                 final src = ctl.value.size;
                 Rect px(Rect r) => Rect.fromLTWH(
                     r.left * unit, r.top * unit, r.width * unit, r.height * unit);
-                final videoRect = frameMode
-                    ? transform.videoRectInContainer(src, ca)
-                    : _containRect(src, ca);
-                final frameRect =
-                    frameMode ? transform.frameInContainer(ca) : null;
-                return Stack(
-                  children: [
-                    Positioned.fromRect(
-                      rect: px(videoRect),
-                      child: VideoPlayer(ctl),
-                    ),
-                    if (frameRect != null)
-                      Positioned.fill(
-                        child: IgnorePointer(
-                          child: CustomPaint(
-                            painter: _MaskPainter(
-                              frame: px(frameRect),
-                              strokeColor: selected
-                                  ? accent
-                                  : Colors.white.withValues(alpha: .8),
-                              strokeWidth: selected ? 2 : 1.2,
-                              dashed: dashed,
-                            ),
-                          ),
-                        ),
-                      ),
-                  ],
+                final videoRect = transform.videoRectInContainer(src, ca);
+                return Positioned.fromRect(
+                  rect: px(videoRect),
+                  child: VideoPlayer(ctl),
                 );
               })
             else
@@ -670,12 +675,12 @@ class _ComparePageState extends State<ComparePage> {
             onScaleUpdate: frameMode
                 ? (d) {
                     if (d.pointerCount >= 2) {
-                      // 双指缩放：放大框下面的视频画面
+                      // 双指缩放：放大画面框下的视频
                       transform.scale =
                           (transform.scale * d.scale).clamp(1.0, 4.0);
                     } else {
-                      // 单指拖动：移动视频（容器像素 → 归一化单位）
-                      final unit = previewH;
+                      // 单指拖动：移动视频（框像素 → 归一化单位，unit=框高）
+                      final unit = _previewH(MediaQuery.sizeOf(context).width);
                       transform.pan = Offset(
                         transform.pan.dx +
                             d.focalPointDelta.dx / unit,
@@ -702,80 +707,4 @@ class _ComparePageState extends State<ComparePage> {
       ],
     );
   }
-
-  /// 非微调态：完整画面 contain 打底（与画面微调态同一视觉基准）。
-  Rect _containRect(Size src, double containerAspect) {
-    final sa = src.width / src.height;
-    double w, h;
-    if (sa > containerAspect) {
-      w = containerAspect;
-      h = containerAspect / sa;
-    } else {
-      h = 1.0;
-      w = sa;
-    }
-    return Rect.fromCenter(
-        center: Offset(containerAspect / 2, 0.5), width: w, height: h);
-  }
-}
-
-/// 遮罩预览：比例框外四块黑遮罩＋框描边（实线/虚线）。
-class _MaskPainter extends CustomPainter {
-  _MaskPainter({
-    required this.frame,
-    required this.strokeColor,
-    required this.strokeWidth,
-    required this.dashed,
-  });
-
-  final Rect frame;
-  final Color strokeColor;
-  final double strokeWidth;
-  final bool dashed;
-
-  @override
-  void paint(Canvas canvas, Size size) {
-    final maskPaint = Paint()..color = Colors.black.withValues(alpha: .88);
-    final outer = Offset.zero & size;
-    // 四块：上、下、左、右
-    canvas.drawRect(
-        Rect.fromLTRB(outer.left, outer.top, outer.right, frame.top),
-        maskPaint);
-    canvas.drawRect(
-        Rect.fromLTRB(outer.left, frame.bottom, outer.right, outer.bottom),
-        maskPaint);
-    canvas.drawRect(
-        Rect.fromLTRB(outer.left, frame.top, frame.left, frame.bottom),
-        maskPaint);
-    canvas.drawRect(
-        Rect.fromLTRB(frame.right, frame.top, outer.right, frame.bottom),
-        maskPaint);
-
-    final path = Path()
-      ..addRRect(RRect.fromRectAndRadius(frame, const Radius.circular(4)));
-    final paint = Paint()
-      ..style = PaintingStyle.stroke
-      ..strokeWidth = strokeWidth
-      ..color = strokeColor;
-    if (!dashed) {
-      canvas.drawPath(path, paint);
-      return;
-    }
-    for (final metric in path.computeMetrics()) {
-      const dashLen = 7.0;
-      const gapLen = 5.0;
-      var dist = 0.0;
-      while (dist < metric.length) {
-        final next = (dist + dashLen).clamp(0.0, metric.length);
-        canvas.drawPath(metric.extractPath(dist, next), paint);
-        dist = next + gapLen;
-      }
-    }
-  }
-
-  @override
-  bool shouldRepaint(covariant _MaskPainter old) =>
-      old.frame != frame ||
-      old.strokeColor != strokeColor ||
-      old.dashed != dashed;
 }

@@ -18,6 +18,8 @@ class FancamPreviewPage extends StatefulWidget {
     required this.ratio,
     required this.keyframeCount,
     this.hasAudio = true,
+    this.trimStart = Duration.zero,
+    this.trimEnd,
   });
 
   final String sourcePath;
@@ -27,6 +29,10 @@ class FancamPreviewPage extends StatefulWidget {
   final String ratio;
   final int keyframeCount;
   final bool hasAudio;
+
+  /// 修剪区间（关键帧时间轴相对 trimStart）
+  final Duration trimStart;
+  final Duration? trimEnd;
 
   @override
   State<FancamPreviewPage> createState() => _FancamPreviewPageState();
@@ -55,6 +61,8 @@ class _FancamPreviewPageState extends State<FancamPreviewPage> {
       srcW: widget.srcW,
       srcH: widget.srcH,
       hasAudio: widget.hasAudio,
+      trimStart: widget.trimStart,
+      trimEnd: widget.trimEnd,
     );
   }
 
@@ -112,7 +120,10 @@ class _FancamPreviewPageState extends State<FancamPreviewPage> {
     }
   }
 
-  Future<int?> _probeDur() async => null; // 时长进度由 T3 选择器补挂；预留
+  /// 导出进度分母 = 修剪后时长（未修剪时 null 不显示进度）
+  Future<int?> _probeDur() async => widget.trimEnd == null
+      ? null
+      : (widget.trimEnd! - widget.trimStart).inMilliseconds;
 
   String? _exportedPath; // 导出成功后的成片路径（预览确认环节）
 
@@ -205,6 +216,9 @@ class _FancamPreviewPageState extends State<FancamPreviewPage> {
                 _row('输出分辨率', '$outW × $_outHeight'),
                 _row('音频', widget.hasAudio ? '源视频完整原声' : '静音'),
                 _row('关键帧', '${widget.keyframeCount} 个'),
+                if (widget.trimEnd != null)
+                  _row('时长',
+                      '${((widget.trimEnd! - widget.trimStart).inMilliseconds / 1000).toStringAsFixed(1)} 秒（已修剪）'),
                 _row('保存位置', '确认预览后存入相册 Movies/wuji/'),
               ],
             ),

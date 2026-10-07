@@ -10,6 +10,7 @@ import '../services/abs_path_cache.dart';
 import '../services/archive_fs.dart' show MediaPathResolver;
 import '../theme.dart';
 import 'detail_page.dart';
+import 'widgets/app_route.dart';
 import 'sheets/date_sheet.dart';
 
 /// 卡片标题：感受第一行；未写则「M/D 舞种课」（无舞种「M/D 舞蹈课」）。
@@ -255,7 +256,7 @@ class _RecordsPageState extends State<RecordsPage> {
           record: r,
           media: _mediaByClass[r.id] ?? const [],
           onTap: () => Navigator.push(
-              context, MaterialPageRoute(builder: (_) => DetailPage(classId: r.id))),
+              context, AppRoute(builder: (_) => DetailPage(classId: r.id))),
         ));
       }
     }
@@ -785,8 +786,12 @@ class RecordCard extends StatelessWidget {
             const SizedBox(width: 10),
             // 无附件的课：卡片右侧留白（不显示黑色占位块）
             if (cover != null)
-              _CoverThumb(
-                  cover: cover, resolver: context.read<MediaPathResolver?>()),
+              // Hero：卡片封面 → 详情页首图，点击时"卡片展开成详情页"
+              Hero(
+                tag: 'record-cover-${record.id}',
+                child: _CoverThumb(
+                    cover: cover, resolver: context.read<MediaPathResolver?>()),
+              ),
           ],
         ),
       ),

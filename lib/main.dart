@@ -20,9 +20,11 @@ import 'ui/fancam/fancam_page.dart';
 import 'ui/compare/compare_page.dart';
 import 'ui/compare/compare_pick_page.dart';
 import 'editing/media_source_picker.dart';
+import 'ui/fancam/trim_page.dart';
 import 'ui/record_form_page.dart';
 import 'ui/records_page.dart';
 import 'ui/stats_page.dart';
+import 'ui/widgets/app_route.dart';
 
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -234,7 +236,7 @@ class _AppRootState extends State<AppRoot> {
     );
   }
 
-  /// 舞蹈直拍：先选视频（相册/课堂记录），选中进编辑器。
+  /// 舞蹈直拍：先选视频（相册/课堂记录）→ 修剪长度 → 进圈选框编辑器。
   Future<void> _startFancam() async {
     final nav = _navigatorKey.currentState;
     if (nav == null) return;
@@ -244,8 +246,11 @@ class _AppRootState extends State<AppRoot> {
       archivePicker: showRecordMediaPicker,
     );
     if (src == null || !mounted) return;
-    nav.push(MaterialPageRoute(
-        builder: (_) => FancamPage(source: src)));
+    final trim = await pushFancamTrim(nav.context, src);
+    if (trim == null || !mounted) return;
+    nav.push(AppRoute(
+        builder: (_) => FancamPage(
+            source: src, trimStart: trim.start, trimEnd: trim.end)));
   }
 
   /// 同屏对比：先进入双卡片选择页（图五原型），选定两段后进编辑。

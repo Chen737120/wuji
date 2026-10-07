@@ -2,14 +2,16 @@ import 'package:flutter/material.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 /// 全 App 唯一的彩色：点缀色预设（规格 §9/§3.6）。
-/// 黛蓝/琥珀橘取自配色方案评审定稿；旧值 matcha/pine 用户回退默认翠芽。
+/// 2026-10-05 用户反馈：保留翠芽，其余换为彩虹七色（共 8 档）。
 enum AccentPreset {
   jade(0xFF3FA26F, '翠芽'),
-  mint(0xFF6FCF9F, '薄荷'),
-  indigo(0xFF3E5AA8, '黛蓝'),
-  violet(0xFF7A66B8, '暮紫'),
-  amber(0xFFE8842E, '琥珀橘'),
-  rose(0xFFC25B72, '莓红');
+  red(0xFFE5484D, '绯红'),
+  orange(0xFFF08C1E, '暖橙'),
+  yellow(0xFFD9A514, '明黄'),
+  green(0xFF34B04A, '草绿'),
+  cyan(0xFF14A8B8, '湖青'),
+  blue(0xFF3B6FE0, '宝蓝'),
+  purple(0xFF8B5CF6, '紫罗兰');
 
   const AccentPreset(this.value, this.label);
   final int value;
@@ -17,6 +19,21 @@ enum AccentPreset {
 
   Color get color => Color(value);
 }
+
+/// 彩虹七色调色板（2026-10-05 用户需求：舞种分布/老师/舞室统计
+/// 每一项一个颜色，不再单色系）。浅色底上取中等饱和、明度相近的七色；
+/// 超过 7 项循环使用；「其他」类用中性灰。
+const List<Color> kRainbowPalette = [
+  Color(0xFFE5484D), // 红
+  Color(0xFFF08C1E), // 橙
+  Color(0xFFD9A514), // 黄
+  Color(0xFF34B04A), // 绿
+  Color(0xFF14A8B8), // 青
+  Color(0xFF3B6FE0), // 蓝
+  Color(0xFF8B5CF6), // 紫
+];
+
+const Color kOtherSliceColor = Color(0xFFB8B8B4); // 「其他」/兜底中性灰
 
 class AppColors {
   static const bg = Color(0xFFFAFAF8);

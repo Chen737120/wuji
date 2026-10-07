@@ -319,7 +319,7 @@ class _DetailPageState extends State<DetailPage> {
             itemBuilder: (context, i) {
               final m = _media[i];
               final missing = _missing.contains(m.fileName);
-              return GestureDetector(
+              final mediaCell = GestureDetector(
                 onTap: (m.type == 'video' && !missing)
                     ? () async {
                         final nav = Navigator.of(context);
@@ -372,6 +372,10 @@ class _DetailPageState extends State<DetailPage> {
                           : _coverImage(m.fileName, Icons.image),
                 ),
               );
+              // 首图与记录卡片封面共用 Hero tag（卡片"展开成详情页"）
+              return i == 0 && _record != null
+                  ? Hero(tag: 'record-cover-${_record!.id}', child: mediaCell)
+                  : mediaCell;
             },
           ),
         ),

@@ -104,6 +104,9 @@ class _AlignViewState extends State<AlignView> {
                 color: accent,
                 startFrac: _teacherStartFrac,
                 widthFrac: _teacherWidthFrac,
+                onDragStart: () => _dragSpan = _maxSpan,
+                // 拖老师条向右 = 老师延后 = 我的相对提前 → offset 减
+                onDrag: (dx, w) => _onRowDrag(false, dx, w),
               ),
               const SizedBox(height: 6),
               _TimelineRow(
@@ -111,7 +114,14 @@ class _AlignViewState extends State<AlignView> {
                 color: _myColor,
                 startFrac: _mineStartFrac,
                 widthFrac: _mineWidthFrac,
+                onDragStart: () => _dragSpan = _maxSpan,
+                // 拖我的条向右 = 我的延后 → offset 加
+                onDrag: (dx, w) => _onRowDrag(true, dx, w),
               ),
+              const SizedBox(height: 6),
+              Text('← 左右拖动时间条也可调节偏移 →',
+                  style: const TextStyle(
+                      fontSize: 9, color: Color(0xFF6A6A70))),
             ],
           ),
         ),
@@ -121,6 +131,16 @@ class _AlignViewState extends State<AlignView> {
             child: const Text('还原时间', style: TextStyle(fontSize: 12))),
       ],
     );
+  }
+
+  Duration _dragSpan = Duration.zero;
+
+  /// 拖动时间条改偏移：拖动像素 → 时间（以拖动开始时的总跨度换算）。
+  void _onRowDrag(bool isMine, double dxPx, double rowW) {
+    if (_dragSpan <= Duration.zero || rowW <= 0) return;
+    final deltaMs = dxPx / rowW * _dragSpan.inMilliseconds;
+    final delta = Duration(milliseconds: deltaMs.round());
+    widget.onStep(isMine ? widget.offset + delta : widget.offset - delta);
   }
 
   // 双时间条归一化（原型②：老师条按偏移右移，我的条从 0 起）
@@ -204,19 +224,23 @@ class _StepButton extends StatelessWidget {
   }
 }
 
-/// 单行时间条：左标签＋圆角条（在底轨上按归一化位置/宽度摆放）。
+/// 单行时间条：左标签＋圆角条（可左右拖动改偏移，触摸热区加高）。
 class _TimelineRow extends StatelessWidget {
   const _TimelineRow({
     required this.label,
     required this.color,
     required this.startFrac,
     required this.widthFrac,
+    required this.onDragStart,
+    required this.onDrag,
   });
 
   final String label;
   final Color color;
   final double startFrac;
   final double widthFrac;
+  final VoidCallback onDragStart;
+  final void Function(double dxPx, double rowWidth) onDrag;
 
   @override
   Widget build(BuildContext context) {
@@ -233,27 +257,37 @@ class _TimelineRow extends StatelessWidget {
             final w = c.maxWidth;
             final left = (startFrac * w).clamp(0.0, w);
             final barW = (widthFrac * w).clamp(0.0, w - left);
-            return Container(
-              height: 8,
-              decoration: BoxDecoration(
-                color: const Color(0xFF2A2A2E),
-                borderRadius: BorderRadius.circular(4),
-              ),
-              child: Stack(
-                children: [
-                  Positioned(
-                    left: left,
-                    width: barW,
-                    top: 0,
-                    bottom: 0,
-                    child: Container(
+            return GestureDetector(
+              behavior: HitTestBehavior.opaque,
+              onHorizontalDragStart: (_) => onDragStart(),
+              onHorizontalDragUpdate: (d) => onDrag(d.delta.dx, w),
+              child: Container(
+                height: 22,
+                alignment: Alignment.center,
+                child: Stack(
+                  clipBehavior: Clip.none,
+                  children: [
+                    Container(
+                      height: 8,
                       decoration: BoxDecoration(
-                        color: color,
+                        color: const Color(0xFF2A2A2E),
                         borderRadius: BorderRadius.circular(4),
                       ),
                     ),
-                  ),
-                ],
+                    Positioned(
+                      left: left,
+                      width: barW,
+                      top: (22 - 8) / 2,
+                      height: 8,
+                      child: Container(
+                        decoration: BoxDecoration(
+                          color: color,
+                          borderRadius: BorderRadius.circular(4),
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
               ),
             );
           }),

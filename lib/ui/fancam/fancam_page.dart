@@ -5,14 +5,27 @@ import '../../editing/crop_box.dart';
 import '../../editing/keyframes.dart';
 import '../../editing/media_source_picker.dart';
 import 'fancam_preview_page.dart';
+import '../widgets/app_route.dart';
 
 /// 舞蹈直拍页（规格 §5.1）：画面最大化＋比例锁定框＋关键帧轨道。
 /// 手势分工：单指拖框体=移动；拖翠芽角柄（右下）=缩放（比例锁定）；
 /// 双指捏合=缩放预览（仅查看 1×~4×）；双击=复位预览；点画面=隐藏控件。
 class FancamPage extends StatefulWidget {
-  const FancamPage({super.key, required this.source});
+  const FancamPage({
+    super.key,
+    required this.source,
+    this.trimStart = Duration.zero,
+    this.trimEnd,
+  });
 
   final PickedSource source;
+
+  /// 修剪区间（来自修剪长度页）；关键帧时间轴以修剪后（起点=0）计。
+  final Duration trimStart;
+  final Duration? trimEnd;
+
+  Duration get trimmedEnd =>
+      trimEnd ?? source.duration ?? const Duration(seconds: 10);
 
   @override
   State<FancamPage> createState() => _FancamPageState();
@@ -57,9 +70,12 @@ class _FancamPageState extends State<FancamPage> {
         await ctl.dispose();
         return;
       }
+      ctl.addListener(_onTick);
       setState(() {
         _ctl = ctl;
-        _track = KeyframeTrack(duration: ctl.value.duration);
+        // 关键帧轨道 = 修剪后时间轴（起点=0）
+        _track = KeyframeTrack(
+            duration: widget.trimmedEnd - widget.trimStart);
         _box = CropBox.centered(_ratio);
         _track!.reset(_box);
         // video_player 的 size 已应用 rotation，与 FFmpeg 默认 autorotate
@@ -67,12 +83,27 @@ class _FancamPageState extends State<FancamPage> {
         _srcW = ctl.value.size.width.round();
         _srcH = ctl.value.size.height.round();
       });
-      // 不自动播放：先停在首帧让用户选区/加关键帧，控制条可手动播放
+      await ctl.seekTo(widget.trimStart);
+      // 不自动播放：先停在修剪起点让用户选区/加关键帧，控制条可手动播放
     } catch (_) {
       if (!mounted) return;
       setState(() => _error = '视频加载失败');
     }
   }
+
+  /// 播放超出修剪终点时自动停住（保留区间外不可播）。
+  void _onTick() {
+    final c = _ctl;
+    if (c == null || !c.value.isPlaying) return;
+    if (c.value.position >= widget.trimmedEnd) {
+      c.pause();
+      c.seekTo(widget.trimmedEnd);
+    }
+  }
+
+  /// 关键帧时刻 = 播放位置 - 修剪起点（轨道时间轴）。
+  Duration get _trackTime =>
+      (_ctl?.value.position ?? Duration.zero) - widget.trimStart;
 
 
   void _setRatio(String r) {
@@ -88,7 +119,7 @@ class _FancamPageState extends State<FancamPage> {
         h = w / newAspect;
       }
       _box = CropBox(cx: _box.cx, cy: _box.cy, w: w, h: h).clamped();
-      _track!.upsert(_ctl?.value.position ?? Duration.zero, _box);
+      _track!.upsert(_trackTime, _box);
     });
   }
 
@@ -106,7 +137,7 @@ class _FancamPageState extends State<FancamPage> {
   }
 
   void _addKeyframe() {
-    final t = _ctl?.value.position ?? Duration.zero;
+    final t = _trackTime;
     final ok = _track!.upsert(t, _box);
     if (!ok && mounted) {
       ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
@@ -118,6 +149,7 @@ class _FancamPageState extends State<FancamPage> {
 
   @override
   void dispose() {
+    _ctl?.removeListener(_onTick);
     _ctl?.dispose();
     super.dispose();
   }
@@ -236,7 +268,7 @@ class _FancamPageState extends State<FancamPage> {
               },
               onPanEnd: (_) {
                 _mode = null;
-                _track!.upsert(ctl.value.position, _box);
+                _track!.upsert(_trackTime, _box);
               },
               child: CustomPaint(
                 painter: _CropOverlayPainter(
@@ -288,14 +320,22 @@ class _FancamPageState extends State<FancamPage> {
                       ],
                     ),
                     const SizedBox(height: 6),
-                    // 播放/暂停 + 可拖进度条
+                    // 播放/暂停 + 可拖进度条（播放限制在修剪区间内）
                     Row(
                       children: [
                         IconButton(
-                          onPressed: () {
+                          onPressed: () async {
                             final c = _ctl;
                             if (c == null) return;
-                            c.value.isPlaying ? c.pause() : c.play();
+                            if (c.value.isPlaying) {
+                              await c.pause();
+                            } else {
+                              if (c.value.position < widget.trimStart ||
+                                  c.value.position >= widget.trimmedEnd) {
+                                await c.seekTo(widget.trimStart);
+                              }
+                              await c.play();
+                            }
                             setState(() {});
                           },
                           icon: Icon(
@@ -320,9 +360,11 @@ class _FancamPageState extends State<FancamPage> {
                       height: 28,
                       child: _KeyframeSlider(
                         track: _track,
-                        position: ctl?.value.position ?? Duration.zero,
+                        position: _trackTime,
                         accent: accent,
-                        onSeek: (t) => ctl?.seekTo(t),
+                        // 轨道时间（相对修剪起点）→ 播放位置
+                        onSeek: (t) =>
+                            ctl?.seekTo(t + widget.trimStart),
                         onDelete: (f) {
                           setState(() {
                             _track!.upsert(f.t, f.box); // no-op guard
@@ -360,14 +402,16 @@ class _FancamPageState extends State<FancamPage> {
                           if (_srcW <= 0 || _srcH <= 0) return;
                           Navigator.push(
                             context,
-                            MaterialPageRoute(
+                            AppRoute(
                                 builder: (_) => FancamPreviewPage(
                                     sourcePath: widget.source.path,
                                     track: _track!,
                                     srcW: _srcW,
                                     srcH: _srcH,
                                     ratio: _ratio,
-                                    keyframeCount: _track!.frames.length)),
+                                    keyframeCount: _track!.frames.length,
+                                    trimStart: widget.trimStart,
+                                    trimEnd: widget.trimmedEnd)),
                           );
                         },
                           child: const Text('下一步',

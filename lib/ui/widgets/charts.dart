@@ -240,14 +240,13 @@ class StyleDonut extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final accent = Theme.of(context).colorScheme.primary;
     return Row(
       crossAxisAlignment: CrossAxisAlignment.center,
       children: [
         SizedBox(
           width: 72,
           height: 72,
-          child: CustomPaint(painter: _DonutPainter(slices, accent)),
+          child: CustomPaint(painter: _DonutPainter(slices)),
         ),
         const SizedBox(width: 14),
         Expanded(
@@ -257,9 +256,27 @@ class StyleDonut extends StatelessWidget {
               for (final s in slices)
                 Padding(
                   padding: const EdgeInsets.symmetric(vertical: 2),
-                  child: Text(
-                    '● ${s.name} ${_pct(s.sessions)}%（${s.sessions}节）',
-                    style: TextStyle(fontSize: 11, color: AppColors.secondary),
+                  child: Row(
+                    children: [
+                      Container(
+                        width: 8,
+                        height: 8,
+                        decoration: BoxDecoration(
+                            color: s.isOther
+                                ? kOtherSliceColor
+                                : kRainbowPalette[
+                                    s.colorIndex % kRainbowPalette.length],
+                            shape: BoxShape.circle),
+                      ),
+                      const SizedBox(width: 6),
+                      Expanded(
+                        child: Text(
+                          '${s.name} ${_pct(s.sessions)}%（${s.sessions}节）',
+                          style: TextStyle(
+                              fontSize: 11, color: AppColors.secondary),
+                        ),
+                      ),
+                    ],
                   ),
                 ),
             ],
@@ -274,9 +291,8 @@ class StyleDonut extends StatelessWidget {
 }
 
 class _DonutPainter extends CustomPainter {
-  _DonutPainter(this.slices, this.accent);
+  _DonutPainter(this.slices);
   final List<StyleSlice> slices;
-  final Color accent;
 
   @override
   void paint(Canvas canvas, Size size) {
@@ -293,12 +309,12 @@ class _DonutPainter extends CustomPainter {
     final rect = Rect.fromCircle(
         center: Offset(size.width / 2, size.height / 2), radius: size.width / 2 - 6);
     var start = -math.pi / 2;
+    // 彩虹七色：每个舞种一色（超过 7 个循环），「其他」中性灰
     for (var i = 0; i < slices.length; i++) {
       final sweep = slices[i].sessions / total * 2 * math.pi;
-      final hsl = HSLColor.fromColor(accent);
       final color = slices[i].isOther
-          ? AppColors.hairline
-          : hsl.withLightness((0.62 - i * 0.08).clamp(0.25, 0.62)).toColor();
+          ? kOtherSliceColor
+          : kRainbowPalette[slices[i].colorIndex % kRainbowPalette.length];
       canvas.drawArc(rect, start, sweep, true, Paint()..color = color);
       start += sweep;
     }
@@ -342,7 +358,6 @@ class _NameBarsState extends State<NameBars> {
 
   @override
   Widget build(BuildContext context) {
-    final accent = Theme.of(context).colorScheme.primary;
     final items = widget.items;
     final totalSessions = widget.totalSessions;
     final visible = _expanded ? items : items.take(widget.collapsedTop).toList();
@@ -390,10 +405,9 @@ class _NameBarsState extends State<NameBars> {
                           : item.sessions / totalSessions,
                       child: Container(
                         decoration: BoxDecoration(
-                          // 2026-10-05 用户反馈：黑色进度条突兀 → 点缀色淡化
-                          color: item == items.first
-                              ? accent
-                              : accent.withValues(alpha: .40),
+                          // 彩虹七色：每个条目一色（第 i 项取 i%7），不再单色系
+                          color: kRainbowPalette[
+                              items.indexOf(item) % kRainbowPalette.length],
                           borderRadius: BorderRadius.circular(4.5),
                         ),
                       ),

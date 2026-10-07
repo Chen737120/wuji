@@ -107,7 +107,7 @@ void main() {
     // 顶部小 tab 与大按钮都有「画面微调」——点大按钮（树中靠后）
     await tester.tap(find.text('画面微调').last);
     await tester.pumpAndSettle();
-    expect(find.text('每侧比例（选中侧）:'), findsOneWidget);
+    expect(find.text('比例：'), findsOneWidget);
     expect(find.text('老师视频'), findsWidgets);
   });
 }
