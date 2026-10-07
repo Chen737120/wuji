@@ -264,16 +264,11 @@ class _TimelineRow extends StatelessWidget {
               child: Container(
                 height: 22,
                 alignment: Alignment.center,
+                // 扁平化（2026-10-07 用户反馈）：去掉底轨——那层比背景亮的
+                // 轨道就是"浮雕/阴影"感的来源；只留彩色条本身，纯二维平面
                 child: Stack(
                   clipBehavior: Clip.none,
                   children: [
-                    Container(
-                      height: 8,
-                      decoration: BoxDecoration(
-                        color: const Color(0xFF2A2A2E),
-                        borderRadius: BorderRadius.circular(4),
-                      ),
-                    ),
                     Positioned(
                       left: left,
                       width: barW,

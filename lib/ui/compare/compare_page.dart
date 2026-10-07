@@ -636,16 +636,23 @@ class _ComparePageState extends State<ComparePage> {
           children: [
             if (ready)
               LayoutBuilder(builder: (context, b) {
-                // 容器（画面框）归一化坐标：高=1、宽=比例 aspect
+                // 容器（画面框）归一化坐标：高=1、宽=比例 aspect。
+                // 注意：Positioned 必须是 Stack 直接子级——LayoutBuilder
+                // 内要再套一层本地 Stack，否则渲染树构建失败 → 灰色占位
+                // （v1.5.9 灰块 bug 根因）。
                 final unit = b.maxHeight;
                 final ca = transform.aspect;
                 final src = ctl.value.size;
                 Rect px(Rect r) => Rect.fromLTWH(
                     r.left * unit, r.top * unit, r.width * unit, r.height * unit);
                 final videoRect = transform.videoRectInContainer(src, ca);
-                return Positioned.fromRect(
-                  rect: px(videoRect),
-                  child: VideoPlayer(ctl),
+                return Stack(
+                  children: [
+                    Positioned.fromRect(
+                      rect: px(videoRect),
+                      child: VideoPlayer(ctl),
+                    ),
+                  ],
                 );
               })
             else

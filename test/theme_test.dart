@@ -42,8 +42,10 @@ void main() {
     expect(t.scaffoldBackgroundColor, AppColors.bg);
     expect(t.colorScheme.primary, const Color(0xFF3FA26F));
   });
-  test('rainbow palette has 7 distinct colors', () {
-    expect(kRainbowPalette, hasLength(7));
-    expect(kRainbowPalette.toSet(), hasLength(7));
+  test('chart palette: 10 colors from reference app (v1.5.10)', () {
+    expect(kRainbowPalette, hasLength(10));
+    expect(kRainbowPalette.toSet(), hasLength(10));
+    expect(kRainbowPalette.first, const Color(0xFFEC6FA5)); // 粉（第 1 色）
+    expect(kRainbowPalette[9], const Color(0xFFA8D04A)); // 黄绿（第 10 色）
   });
 }

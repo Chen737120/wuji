@@ -20,17 +20,19 @@ enum AccentPreset {
   Color get color => Color(value);
 }
 
-/// 彩虹七色调色板（2026-10-05 用户需求：舞种分布/老师/舞室统计
-/// 每一项一个颜色，不再单色系）。浅色底上取中等饱和、明度相近的七色；
-/// 超过 7 项循环使用；「其他」类用中性灰。
+/// 统计图表调色板（2026-10-07 用户需求：取借鉴软件老师统计前十色，
+/// 类别 ≤10 各一色、**第 11 个类别起循环前十个**；「其他」类用中性灰）。
 const List<Color> kRainbowPalette = [
-  Color(0xFFE5484D), // 红
-  Color(0xFFF08C1E), // 橙
-  Color(0xFFD9A514), // 黄
-  Color(0xFF34B04A), // 绿
-  Color(0xFF14A8B8), // 青
-  Color(0xFF3B6FE0), // 蓝
-  Color(0xFF8B5CF6), // 紫
+  Color(0xFFEC6FA5), // 1 粉
+  Color(0xFF5B8DEF), // 2 蓝
+  Color(0xFF4CC98A), // 3 绿
+  Color(0xFF8E6BE8), // 4 紫
+  Color(0xFFE8B33C), // 5 黄
+  Color(0xFFE96A78), // 6 红粉
+  Color(0xFF2FC4D9), // 7 青
+  Color(0xFF5A78E8), // 8 蓝紫
+  Color(0xFFE8506B), // 9 玫红
+  Color(0xFFA8D04A), // 10 黄绿
 ];
 
 const Color kOtherSliceColor = Color(0xFFB8B8B4); // 「其他」/兜底中性灰
