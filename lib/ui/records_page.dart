@@ -1,6 +1,5 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
-import 'package:shared_preferences/shared_preferences.dart';
 import 'dart:io';
 import '../data/app_repository.dart' show ClassSaver;
 import '../data/db.dart' show ClassRecord, ClassRecordRowX, MediaAsset;
@@ -8,7 +7,6 @@ import '../reload_bus.dart';
 import '../services/abs_path_cache.dart';
 import '../services/archive_fs.dart' show MediaPathResolver;
 import '../theme.dart';
-import 'detail_page.dart';
 import 'player_page.dart';
 import 'record_form_page.dart';
 import 'widgets/app_route.dart';
@@ -64,7 +62,8 @@ class RecordsPage extends StatefulWidget {
   State<RecordsPage> createState() => _RecordsPageState();
 }
 
-class _RecordsPageState extends State<RecordsPage> {
+class _RecordsPageState extends State<RecordsPage>
+    with WidgetsBindingObserver {
   List<ClassRecord> _records = [];
   Map<String, List<MediaAsset>> _mediaByClass = {};
   bool _expanded = true;
@@ -79,32 +78,47 @@ class _RecordsPageState extends State<RecordsPage> {
 
   ClassSaver get _saver => context.read<ClassSaver>();
 
+  // 2026-10-07 需求 #5：每次重新打开软件，选择状态恢复默认——
+  // 监听生命周期，从后台回到前台（即"重新打开"）时统一重置
+  bool _wasPaused = false;
+
   @override
   void initState() {
     super.initState();
+    WidgetsBinding.instance.addObserver(this);
     _calendarMonth = DateTime.now();
-    _restoreExpanded();
     _load();
     ReloadBus.instance.addListener(_load);
   }
 
   @override
   void dispose() {
+    WidgetsBinding.instance.removeObserver(this);
     ReloadBus.instance.removeListener(_load);
     _searchCtl.dispose();
     super.dispose();
   }
 
-  Future<void> _restoreExpanded() async {
-    final sp = await SharedPreferences.getInstance();
-    if (!mounted) return;
-    setState(() => _expanded = sp.getBool('calendarExpanded') ?? true);
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    if (state == AppLifecycleState.paused) {
+      _wasPaused = true;
+    } else if (state == AppLifecycleState.resumed && _wasPaused) {
+      _wasPaused = false;
+      if (!mounted) return;
+      setState(() {
+        _selectedDay = null;
+        CalendarSelection.selectedDay = null;
+        _searching = false;
+        _query = '';
+        _searchCtl.clear();
+        _expanded = true; // 日历展开为默认
+      });
+    }
   }
 
   Future<void> _toggleExpanded() async {
     setState(() => _expanded = !_expanded);
-    final sp = await SharedPreferences.getInstance();
-    await sp.setBool('calendarExpanded', _expanded);
   }
 
   Future<void> _load() async {
@@ -362,10 +376,6 @@ class _RecordsPageState extends State<RecordsPage> {
                   child: RecordCard(
                     record: r,
                     media: _mediaByClass[r.id] ?? const [],
-                    onTap: () => Navigator.push(
-                        context,
-                        AppRoute(
-                            builder: (_) => DetailPage(classId: r.id))),
                   ),
                 ),
               ],
@@ -798,12 +808,10 @@ class RecordCard extends StatefulWidget {
     super.key,
     required this.record,
     required this.media,
-    required this.onTap,
   });
 
   final ClassRecord record;
   final List<MediaAsset> media;
-  final VoidCallback onTap;
 
   @override
   State<RecordCard> createState() => _RecordCardState();
@@ -813,11 +821,8 @@ class _RecordCardState extends State<RecordCard> {
   ClassRecord get r => widget.record;
 
   Future<void> _openMedia(MediaAsset m) async {
-    if (m.type != 'video') {
-      Navigator.push(
-          context, AppRoute(builder: (_) => DetailPage(classId: r.id)));
-      return;
-    }
+    // 图片不跳转（2026-10-07：旧详情查看页已从记录卡移除）；视频直接播放
+    if (m.type != 'video') return;
     final messenger = ScaffoldMessenger.of(context);
     try {
       final path = await AbsPathCache.resolve(
@@ -841,30 +846,6 @@ class _RecordCardState extends State<RecordCard> {
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
-            ListTile(
-              leading: const Icon(Icons.notes, size: 20),
-              title: const Text('查看完整感受', style: TextStyle(fontSize: 13)),
-              onTap: () {
-                Navigator.pop(ctx);
-                showDialog(
-                    context: context,
-                    builder: (dctx) => AlertDialog(
-                          backgroundColor: Colors.white,
-                          title: Text(recordTitle(r),
-                              style: const TextStyle(fontSize: 15)),
-                          content: SingleChildScrollView(
-                            child: Text(r.note?.trim() ?? '（未写感受）',
-                                style: const TextStyle(
-                                    fontSize: 13, height: 1.7)),
-                          ),
-                          actions: [
-                            TextButton(
-                                onPressed: () => Navigator.pop(dctx),
-                                child: const Text('关闭')),
-                          ],
-                        ));
-              },
-            ),
             ListTile(
               leading: const Icon(Icons.edit_outlined, size: 20),
               title: const Text('编辑记录', style: TextStyle(fontSize: 13)),
@@ -935,7 +916,7 @@ class _RecordCardState extends State<RecordCard> {
     final noteText = hasNote ? r.note!.trim() : recordTitle(r);
 
     return GestureDetector(
-      onTap: widget.onTap,
+      // 2026-10-07 需求 #2：点卡片不再进入旧详情查看页（媒体格/…按钮各自响应）
       child: Container(
         margin: const EdgeInsets.only(bottom: 12),
         padding: const EdgeInsets.all(14),
@@ -964,8 +945,6 @@ class _RecordCardState extends State<RecordCard> {
                   (Icons.schedule, '${r.sessionCount}节×${r.minutesEach}分'),
                   if (r.teacherName?.isNotEmpty ?? false)
                     (Icons.person, r.teacherName!),
-                  if (r.studioName?.isNotEmpty ?? false)
-                    (Icons.location_on_outlined, r.studioName!),
                 ]) ...[
                   Icon(icon, size: 12, color: AppColors.faint),
                   const SizedBox(width: 3),

@@ -17,28 +17,51 @@ class StatsPage extends StatefulWidget {
   State<StatsPage> createState() => _StatsPageState();
 }
 
-class _StatsPageState extends State<StatsPage> {
+class _StatsPageState extends State<StatsPage>
+    with WidgetsBindingObserver {
   List<ClassRecord> _records = [];
   List<MediaAsset> _media = [];
   bool _loaded = false;
-  StatRange _range = StatRange.last30; // 默认看近 1 个月
+  // 2026-10-07 需求 #4：默认显示全部数据
+  StatRange _range = StatRange.all;
   DateTime? _customStart;
   DateTime? _customEnd;
   TrendMode _trendMode = TrendMode.daily;
+
+  // 2026-10-07 需求 #5：每次重新打开软件，选择状态恢复默认
+  bool _wasPaused = false;
 
   ClassSaver get _saver => context.read<ClassSaver>();
 
   @override
   void initState() {
     super.initState();
+    WidgetsBinding.instance.addObserver(this);
     _load();
     ReloadBus.instance.addListener(_load);
   }
 
   @override
   void dispose() {
+    WidgetsBinding.instance.removeObserver(this);
     ReloadBus.instance.removeListener(_load);
     super.dispose();
+  }
+
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    if (state == AppLifecycleState.paused) {
+      _wasPaused = true;
+    } else if (state == AppLifecycleState.resumed && _wasPaused) {
+      _wasPaused = false;
+      if (!mounted) return;
+      setState(() {
+        _range = StatRange.all;
+        _customStart = null;
+        _customEnd = null;
+        _trendMode = TrendMode.daily;
+      });
+    }
   }
 
   Future<void> _load() async {
