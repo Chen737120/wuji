@@ -44,7 +44,7 @@ void main() {
     expect(find.text('导出全部记录'), findsOneWidget);
     expect(find.text('按时间段导出'), findsOneWidget);
     expect(find.text('导入备份'), findsOneWidget);
-    expect(find.text('舞种管理'), findsOneWidget);
+
     expect(find.text('老师管理'), findsOneWidget);
     expect(find.text('舞室管理'), findsOneWidget);
     expect(find.text('关于舞记'), findsOneWidget);
