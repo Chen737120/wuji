@@ -126,7 +126,9 @@ class _StatsPageState extends State<StatsPage>
               _statCards(),
               const SizedBox(height: 16),
               Container(
-                padding: const EdgeInsets.all(14),
+                // 2026-10-08 需求 #4-1：卡片纵向拉高——上方留白加大，
+                // 减少标题与柱区的拥挤感
+                padding: const EdgeInsets.fromLTRB(14, 18, 14, 16),
                 decoration: _cardDecoration(),
                 child: TrendBars(
                   points: _stats.trend,

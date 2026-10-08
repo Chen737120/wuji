@@ -23,6 +23,15 @@ ClassRecord rec(String id, String date,
   );
 }
 
+String iso(DateTime d) =>
+    '${d.year}-${d.month.toString().padLeft(2, '0')}-${d.day.toString().padLeft(2, '0')}';
+
+/// 按天分组组头文案（与 groupByDay 一致）
+String dayHeader(DateTime d) {
+  const weekdays = ['周一', '周二', '周三', '周四', '周五', '周六', '周日'];
+  return '${d.month}月${d.day}日 ${weekdays[d.weekday - 1]}';
+}
+
 void main() {
   test('recordTitle prefers first note line', () {
     final r = rec('a', '2026-09-30',
@@ -53,27 +62,36 @@ void main() {
     tester.view.physicalSize = const Size(400, 2000); // 放大视口，全量可见
     tester.view.devicePixelRatio = 1.0;
     addTearDown(tester.view.reset);
+    // 2026-10-08 需求 #6：日历默认**当前月份**——种数据用当月日期验证
+    final now = DateTime.now();
+    final d1 = DateTime(now.year, now.month, now.day >= 2 ? now.day - 1 : 1);
+    final d2 = DateTime(now.year, now.month, 1);
+    final lastMonth = DateTime(now.year, now.month, 0); // 上月最后一天
     final saver = FakeSaver(records: [
-      rec('r1', '2026-09-30', style: '爵士', teacher: '小鹿',
+      rec('r1', iso(d1), style: '爵士', teacher: '小鹿',
           note: '发现一个宝藏老师 ✨\n正文'),
-      rec('r2', '2026-09-24', style: '韩舞', teacher: '阿哲'),
-      rec('r3', '2026-08-21', style: '爵士'),
+      rec('r2', iso(d2), style: '韩舞', teacher: '阿哲'),
+      rec('r3', iso(lastMonth), style: '爵士'),
     ]);
     await tester.pumpWidget(MultiProvider(providers: [
       Provider<ClassSaver>.value(value: saver),
     ], child: const MaterialApp(home: RecordsPage())));
     await tester.pumpAndSettle();
 
-    expect(find.text('2026年9月'), findsOneWidget); // 日历头
+    expect(find.text('${now.year}年${now.month}月'), findsOneWidget); // 日历头=当前月
     // 感受完整显示一遍（2026-10-07 #6/#7：单遍、不折叠）
     expect(find.text('发现一个宝藏老师 ✨\n正文'), findsOneWidget);
-    expect(find.text('9/24 韩舞课'), findsOneWidget);
-    expect(find.text('8/21 爵士课'), findsOneWidget);
+    expect(find.text('${d2.month}/${d2.day} 韩舞课'), findsOneWidget);
+    expect(find.text('${lastMonth.month}/${lastMonth.day} 爵士课'), findsOneWidget);
     // 胶囊标签已移除（2026-10-07 #4）
     expect(find.text('#爵士'), findsNothing);
     expect(find.byIcon(Icons.more_horiz), findsWidgets); // 右下角"…"按钮
-    expect(find.text('9月24日 周四'), findsOneWidget); // 按天分组组头
-    expect(find.text('8月21日 周五'), findsOneWidget); // 按天分组组头
+    expect(find.text(dayHeader(d1)), findsOneWidget); // 按天分组组头
+    expect(find.text(dayHeader(lastMonth)), findsOneWidget);
+    // 当前月日历格子可命中（默认页即当前月）
+    expect(
+        find.byKey(ValueKey('day-${now.year}-${now.month}-${d1.day}')),
+        findsOneWidget);
   });
 
   testWidgets('tapping a calendar day filters the stream', (tester) async {
@@ -81,9 +99,12 @@ void main() {
     tester.view.physicalSize = const Size(400, 2000);
     tester.view.devicePixelRatio = 1.0;
     addTearDown(tester.view.reset);
+    final now = DateTime.now();
+    final d1 = DateTime(now.year, now.month, now.day >= 2 ? now.day - 1 : 1);
+    final d2 = DateTime(now.year, now.month, 1);
     final saver = FakeSaver(records: [
-      rec('r1', '2026-09-30', style: '爵士', note: '标题一'),
-      rec('r2', '2026-09-24', style: '韩舞', note: '标题二'),
+      rec('r1', iso(d1), style: '爵士', note: '标题一'),
+      rec('r2', iso(d2), style: '韩舞', note: '标题二'),
     ]);
     await tester.pumpWidget(MultiProvider(providers: [
       Provider<ClassSaver>.value(value: saver),
@@ -93,11 +114,12 @@ void main() {
     expect(find.text('标题一'), findsOneWidget);
     expect(find.text('标题二'), findsOneWidget);
 
-    // 点日历上的 30 号（2026年9月30日是周三）；按 key 精确命中 9 月页
-    await tester.tap(find.byKey(const ValueKey('day-2026-9-30')));
+    // 点日历上 d1 那天；按 key 精确命中当前月页
+    await tester
+        .tap(find.byKey(ValueKey('day-${now.year}-${now.month}-${d1.day}')));
     await tester.pumpAndSettle();
 
-    expect(find.text('9月30日 · 1 节课'), findsOneWidget);
+    expect(find.text('${d1.month}月${d1.day}日 · 1 节课'), findsOneWidget);
     expect(find.text('标题一'), findsOneWidget);
     expect(find.text('标题二'), findsNothing);
 

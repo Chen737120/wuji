@@ -74,9 +74,14 @@ String buildCompareCommand({
     _ => '-an',
   };
 
+  // 视频码率显式给定（2026-10-08 需求 #1，与直拍共用分档）：
+  // mediacodec 默认码率偏低，放大看毛边明显
+  final videoBitrate =
+      outHeight >= 1000 ? '16M' : (outHeight >= 700 ? '10M' : '6M');
+
   return '-y $inputs -filter_complex "$filter" '
       '-map "[v]" $audioMap '
-      '-c:v h264_mediacodec -pix_fmt yuv420p '
+      '-c:v h264_mediacodec -pix_fmt yuv420p -b:v $videoBitrate '
       '-c:a aac -ar 48000 -ac 2 -b:a 128k '
       '-t ${_fmtSec(total)} '
       '-movflags +faststart';

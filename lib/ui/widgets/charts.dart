@@ -3,9 +3,14 @@ import 'package:flutter/material.dart';
 import '../../services/stats.dart';
 import '../../theme.dart';
 
+/// 同色系加深（2026-10-08 需求 #4）：选中柱用点缀色向黑混合加深，
+/// 保留原有色相（深绿），不跳到纯黑。
+Color darkenChartColor(Color c, [double amount = .38]) =>
+    Color.lerp(c, Colors.black, amount)!;
+
 /// 跳舞趋势柱状图：非峰值柱 #ECECE8，峰值柱点缀色；顶部「按天 · 按月」切换。
-/// 2026-10-05 用户需求：柱区可**左右滑动**查看按天（60 天）/按月（12 个月）
-/// 的过往数据，进入/切换时自动定位到最右（最新）。
+/// 柱区可**左右滑动**查看按天（60 天）/按月（12 个月）的过往数据，
+/// 进入/切换时自动定位到最右（最新）。
 class TrendBars extends StatefulWidget {
   const TrendBars({
     super.key,
@@ -83,11 +88,12 @@ class _TrendBarsState extends State<TrendBars> {
             ),
           ],
         ),
-        const SizedBox(height: 10),
+        const SizedBox(height: 14),
         LayoutBuilder(builder: (context, constraints) {
-          // 柱区高度随卡片宽度自适应（夹在 72~132 之间），下方留 18 标签行
+          // 柱区高度随卡片宽度自适应（夹在 96~168 之间，2026-10-08 需求 #4-1
+          // 卡片整体纵向拉高），下方留 18 标签行
           final barH =
-              (constraints.maxWidth * 0.36).clamp(72.0, 132.0).toDouble();
+              (constraints.maxWidth * 0.44).clamp(96.0, 168.0).toDouble();
           // 纵轴刻度（分钟）：0 与峰值均分 4 段，左侧标签 + 横向网格线
           final ticks = <int>[
             0,
@@ -200,11 +206,13 @@ class _TrendBarsState extends State<TrendBars> {
                                                                   : 1.5),
                                                       decoration:
                                                           BoxDecoration(
-                                                        // 选中柱加深；其余柱
+                                                        // 选中柱同色系加深（2026-10-08 需求 #4-3：
+                                                        // 深绿等色相加深，不变纯黑）；其余柱
                                                         // 全部用点缀色
                                                         color: _selected ==
                                                                 i
-                                                            ? AppColors.ink
+                                                            ? darkenChartColor(
+                                                                accent)
                                                             : points[i].minutes >
                                                                     0
                                                                 ? accent
@@ -212,7 +220,7 @@ class _TrendBarsState extends State<TrendBars> {
                                                                     .hairline,
                                                         borderRadius:
                                                             BorderRadius
-                                                                .circular(2),
+                                                                .circular(3),
                                                       ),
                                                     ),
                                                   ],
@@ -235,7 +243,8 @@ class _TrendBarsState extends State<TrendBars> {
                                       ),
                                   ],
                                 ),
-                                // 时长气泡（点击柱子时显示，需求 #9）
+                                // 时长气泡（点击柱子时显示；2026-10-08 需求 #4-2
+                                // 气泡尺寸与文字同步缩小一档）
                                 if (_selected != null &&
                                     _selected! < points.length &&
                                     points[_selected!].minutes > 0)
@@ -244,7 +253,7 @@ class _TrendBarsState extends State<TrendBars> {
                                     // clamp 到可视窗口（滚动到两端时气泡也可见）
                                     left: (_selected! * slotW +
                                             slotW / 2 -
-                                            60)
+                                            44)
                                         .clamp(
                                             _scroll.hasClients
                                                 ? _scroll.offset
@@ -256,30 +265,34 @@ class _TrendBarsState extends State<TrendBars> {
                                                             _scroll.position
                                                                 .viewportDimension
                                                         : contentW) -
-                                                    120)),
-                                    width: 120,
+                                                    88)),
+                                    width: 88,
                                     child: Container(
                                       padding: const EdgeInsets.symmetric(
-                                          horizontal: 8, vertical: 6),
+                                          horizontal: 6, vertical: 4),
                                       decoration: BoxDecoration(
                                         color: AppColors.ink
                                             .withValues(alpha: .88),
                                         borderRadius:
-                                            BorderRadius.circular(8),
+                                            BorderRadius.circular(7),
                                       ),
                                       child: Column(
                                         mainAxisSize: MainAxisSize.min,
                                         children: [
                                           Text(points[_selected!].tooltip,
                                               textAlign: TextAlign.center,
+                                              maxLines: 1,
+                                              overflow: TextOverflow.ellipsis,
                                               style: const TextStyle(
-                                                  fontSize: 10,
+                                                  fontSize: 9,
                                                   color: Colors.white70)),
                                           Text(_minutesText(
                                               points[_selected!].minutes),
                                               textAlign: TextAlign.center,
+                                              maxLines: 1,
+                                              overflow: TextOverflow.ellipsis,
                                               style: const TextStyle(
-                                                  fontSize: 13,
+                                                  fontSize: 11,
                                                   fontWeight:
                                                       FontWeight.w700,
                                                   color: Colors.white)),
@@ -583,17 +596,44 @@ class _NameBarsState extends State<NameBars> {
   }
 }
 
-/// 跳舞热力图（2026-10-08 需求 #8，样式参考 GitHub 提交墙）：
-/// 列=周（周一起）、行=周一..周日，颜色深浅=当天跳舞分钟数；可横向滑动
-/// 查看最近 26 周。空=浅灰；有数据按分钟分四档点缀色深浅。长按格子看详情。
-class DanceHeatmap extends StatelessWidget {
+/// 跳舞热力图（2026-10-08 需求 #3 改版）：**月历形式**——每页一个月，
+/// 默认当前月，左右滑动或点箭头切换月份。格子颜色深浅=当天跳舞分钟数
+/// （四档点缀色），今天描边，点按格子看当天详情；空=浅灰。
+class DanceHeatmap extends StatefulWidget {
   const DanceHeatmap({super.key, required this.minutesByDay});
 
   final Map<String, int> minutesByDay; // 'yyyy-MM-dd' -> 当天分钟
 
-  static const _cell = 13.0;
-  static const _gap = 3.0;
-  static const _weeks = 26;
+  @override
+  State<DanceHeatmap> createState() => _DanceHeatmapState();
+}
+
+class _DanceHeatmapState extends State<DanceHeatmap> {
+  static int _indexOf(DateTime m) => (m.year - 2000) * 12 + (m.month - 1);
+  static DateTime _monthOf(int page) => DateTime(2000, page + 1);
+
+  late DateTime _shown;
+  late PageController _pc;
+
+  @override
+  void initState() {
+    super.initState();
+    final now = DateTime.now();
+    _shown = DateTime(now.year, now.month);
+    _pc = PageController(initialPage: _indexOf(_shown));
+  }
+
+  @override
+  void dispose() {
+    _pc.dispose();
+    super.dispose();
+  }
+
+  void _go(int delta) {
+    final m = DateTime(_shown.year, _shown.month + delta);
+    _pc.animateToPage(_indexOf(m),
+        duration: const Duration(milliseconds: 250), curve: Curves.ease);
+  }
 
   Color _colorFor(int minutes, Color accent) {
     if (minutes <= 0) return AppColors.hairline;
@@ -603,110 +643,140 @@ class DanceHeatmap extends StatelessWidget {
     return accent;
   }
 
+  String _minutesText(int m) =>
+      m >= 60 ? '${(m / 60).toStringAsFixed(1)} 小时' : '$m 分钟';
+
+  String _keyOf(DateTime d) =>
+      '${d.year}-${d.month.toString().padLeft(2, '0')}-${d.day.toString().padLeft(2, '0')}';
+
   @override
   Widget build(BuildContext context) {
     final accent = Theme.of(context).colorScheme.primary;
-    final now = DateTime.now();
-    final today0 = DateTime(now.year, now.month, now.day);
-    final thisMonday = today0.subtract(Duration(days: today0.weekday - 1));
-    final start = thisMonday.subtract(const Duration(days: 7 * (_weeks - 1)));
-
-    String keyOf(DateTime d) =>
-        '${d.year}-${d.month.toString().padLeft(2, '0')}-${d.day.toString().padLeft(2, '0')}';
-
-    // 月份标签行：某列周一的月份与前列不同时，在该列标注「M月」
-    Widget monthLabels() {
-      return SizedBox(
-        height: 14,
-        child: Row(
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        // 年月切换行：‹ 2026年10月 ›（点箭头或直接左右滑动页面）
+        Row(
           children: [
-            for (var c = 0; c < _weeks; c++)
-              SizedBox(
-                width: _cell + _gap,
-                child: Builder(builder: (context) {
-                  final monday = start.add(Duration(days: 7 * c));
-                  final prev = monday.subtract(const Duration(days: 7));
-                  final show = c > 0 && monday.month != prev.month;
-                  return Text(show ? '${monday.month}月' : '',
-                      style: TextStyle(
-                          fontSize: 9, color: AppColors.faint));
-                }),
+            IconButton(
+                visualDensity: VisualDensity.compact,
+                onPressed: () => _go(-1),
+                icon: const Icon(Icons.chevron_left, size: 18)),
+            Expanded(
+              child: Center(
+                child: Text('${_shown.year}年${_shown.month}月',
+                    style: const TextStyle(
+                        fontSize: 14, fontWeight: FontWeight.w700)),
+              ),
+            ),
+            IconButton(
+                visualDensity: VisualDensity.compact,
+                onPressed: () => _go(1),
+                icon: const Icon(Icons.chevron_right, size: 18)),
+          ],
+        ),
+        const SizedBox(height: 2),
+        Row(
+          children: [
+            for (final w in ['一', '二', '三', '四', '五', '六', '日'])
+              Expanded(
+                child: Center(
+                    child: Text(w,
+                        style: TextStyle(fontSize: 10, color: AppColors.faint))),
               ),
           ],
         ),
-      );
-    }
-
-    Widget weekColumn(int c) {
-      return Column(
-        children: [
-          for (var d = 0; d < 7; d++)
-            Builder(builder: (context) {
-              final day = start.add(Duration(days: 7 * c + d));
-              final future = day.isAfter(today0);
-              final minutes =
-                  future ? 0 : (minutesByDay[keyOf(day)] ?? 0);
-              final cell = Container(
-                width: _cell,
-                height: _cell,
-                margin: const EdgeInsets.all(1.5),
-                decoration: BoxDecoration(
-                  color: future
-                      ? Colors.transparent
-                      : _colorFor(minutes, accent),
-                  borderRadius: BorderRadius.circular(3),
-                ),
-              );
-              if (future) return cell;
-              return Tooltip(
-                message:
-                    '${day.month}月${day.day}日 · ${minutes >= 60 ? '${(minutes / 60).toStringAsFixed(1)} 小时' : '$minutes 分钟'}',
-                child: cell,
-              );
-            }),
-        ],
-      );
-    }
-
-    Widget legend() {
-      return Padding(
-        padding: const EdgeInsets.only(top: 8),
-        child: Row(
-          mainAxisAlignment: MainAxisAlignment.end,
-          children: [
-            const Text('少',
-                style: TextStyle(fontSize: 10, color: AppColors.faint)),
-            for (final m in [0, 10, 25, 45, 90])
-              Container(
-                width: 11,
-                height: 11,
-                margin: const EdgeInsets.all(2),
-                decoration: BoxDecoration(
-                  color: _colorFor(m, accent),
-                  borderRadius: BorderRadius.circular(3),
-                ),
-              ),
-            const Text('多',
-                style: TextStyle(fontSize: 10, color: AppColors.faint)),
-          ],
-        ),
-      );
-    }
-
-    return SingleChildScrollView(
-      scrollDirection: Axis.horizontal,
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          monthLabels(),
-          Row(
+        // 月页：高度=6 行格子（最大月行数），格子宽=可用宽/7
+        LayoutBuilder(builder: (context, constraints) {
+          final cell = constraints.maxWidth / 7;
+          return SizedBox(
+            height: cell * 6,
+            child: PageView.builder(
+              controller: _pc,
+              onPageChanged: (page) =>
+                  setState(() => _shown = _monthOf(page)),
+              itemBuilder: (context, page) =>
+                  _monthPage(_monthOf(page), accent),
+            ),
+          );
+        }),
+        // 图例（右对齐）
+        Padding(
+          padding: const EdgeInsets.only(top: 6),
+          child: Row(
+            mainAxisAlignment: MainAxisAlignment.end,
             children: [
-              for (var c = 0; c < _weeks; c++) weekColumn(c),
+              const Text('少',
+                  style: TextStyle(fontSize: 10, color: AppColors.faint)),
+              for (final m in [0, 10, 25, 45, 90])
+                Container(
+                  width: 11,
+                  height: 11,
+                  margin: const EdgeInsets.all(2),
+                  decoration: BoxDecoration(
+                    color: _colorFor(m, accent),
+                    borderRadius: BorderRadius.circular(3),
+                  ),
+                ),
+              const Text('多',
+                  style: TextStyle(fontSize: 10, color: AppColors.faint)),
             ],
           ),
-          legend(),
-        ],
-      ),
+        ),
+      ],
+    );
+  }
+
+  Widget _monthPage(DateTime month, Color accent) {
+    final now = DateTime.now();
+    final today0 = DateTime(now.year, now.month, now.day);
+    final first = DateTime(month.year, month.month, 1);
+    final daysInMonth = DateTime(month.year, month.month + 1, 0).day;
+    // 周一首列：Mon=1..Sun=7
+    final leadingBlanks = (first.weekday + 6) % 7;
+
+    return GridView.count(
+      crossAxisCount: 7,
+      shrinkWrap: true,
+      physics: const NeverScrollableScrollPhysics(),
+      childAspectRatio: 1,
+      padding: EdgeInsets.zero,
+      children: [
+        for (var i = 0; i < leadingBlanks; i++) const SizedBox(),
+        for (var day = 1; day <= daysInMonth; day++)
+          Builder(builder: (context) {
+            final d = DateTime(month.year, month.month, day);
+            final future = d.isAfter(today0);
+            final isToday = d == today0;
+            final minutes = future ? 0 : (widget.minutesByDay[_keyOf(d)] ?? 0);
+            final bg = future ? Colors.transparent : _colorFor(minutes, accent);
+            return Tooltip(
+              message:
+                  '${month.month}月$day日 · ${future ? '还没到' : _minutesText(minutes)}',
+              child: Container(
+                margin: const EdgeInsets.all(2),
+                decoration: BoxDecoration(
+                  color: bg,
+                  borderRadius: BorderRadius.circular(6),
+                  border: isToday
+                      ? Border.all(color: accent, width: 1.5)
+                      : null,
+                ),
+                alignment: Alignment.center,
+                child: Text(
+                  '$day',
+                  style: TextStyle(
+                    fontSize: 10,
+                    color: future
+                        ? AppColors.faint
+                        : (minutes > 60 ? Colors.white : AppColors.ink),
+                    fontWeight: isToday ? FontWeight.w700 : FontWeight.w400,
+                  ),
+                ),
+              ),
+            );
+          }),
+      ],
     );
   }
 }

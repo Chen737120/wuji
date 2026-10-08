@@ -34,6 +34,11 @@ String buildFancamCommand({
   final audioPart =
       hasAudio ? '-c:a aac -ar 48000 -ac 2 -b:a 128k' : '-an';
 
+  // 视频码率显式给定（2026-10-08 需求 #1）：mediacodec 不给 -b:v 时按编码器
+  // 默认低码率出片，放大看毛边明显；按输出高分档给到高质量码率
+  // （1080p≈16Mbps ≈ 0.25bpp@30fps，与相册原图放大观感对齐）
+  final videoBitrate = _videoBitrate(outHeight);
+
   final trimPart = trimStart > Duration.zero
       ? '-ss ${(trimStart.inMilliseconds / 1000).toStringAsFixed(3)} '
       : '';
@@ -43,6 +48,11 @@ String buildFancamCommand({
 
   return '-y $trimPart-i "$srcPath" $durPart'
       '-vf "$cropExpr,scale=-2:$outHeight,setsar=1" '
-      '-c:v h264_mediacodec -pix_fmt yuv420p $audioPart '
+      '-c:v h264_mediacodec -pix_fmt yuv420p -b:v $videoBitrate $audioPart '
       '-movflags +faststart';
 }
+
+/// 按输出高的视频码率分档（直拍/对比共用）：1080p 级 16M，720p 级 10M，
+/// 更小 6M。设了 -b:v 后 mediacodec 才会按高码率编码。
+String _videoBitrate(int outHeight) =>
+    outHeight >= 1000 ? '16M' : (outHeight >= 700 ? '10M' : '6M');

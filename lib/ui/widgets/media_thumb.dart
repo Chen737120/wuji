@@ -30,20 +30,22 @@ class MediaThumb extends StatelessWidget {
       width: width,
       height: height,
       decoration: BoxDecoration(
-        color: AppColors.ink,
+        // 软占位色（2026-10-08 需求 #5）：浅灰替代黑底，图片加载期间
+        // 不再有"黑块→图"的闪现感
+        color: AppColors.hairline,
         borderRadius: BorderRadius.circular(6),
       ),
       clipBehavior: Clip.antiAlias,
       alignment: Alignment.center,
       child: rel == null
-          ? Icon(fallbackIcon, color: AppColors.bg, size: 20)
+          ? Icon(fallbackIcon, color: AppColors.faint, size: 20)
           : FutureBuilder<String?>(
               future:
                   AbsPathCache.resolve(context.read<MediaPathResolver?>(), rel!),
               builder: (context, snap) {
                 final path = snap.data;
                 if (path == null) {
-                  return Icon(fallbackIcon, color: AppColors.bg, size: 20);
+                  return Icon(fallbackIcon, color: AppColors.faint, size: 20);
                 }
                 return Image.file(File(path),
                     fit: BoxFit.cover,
@@ -51,7 +53,7 @@ class MediaThumb extends StatelessWidget {
                     width: double.infinity,
                     height: double.infinity,
                     errorBuilder: (_, _, _) =>
-                        Icon(fallbackIcon, color: AppColors.bg, size: 20));
+                        Icon(fallbackIcon, color: AppColors.faint, size: 20));
               },
             ),
     );

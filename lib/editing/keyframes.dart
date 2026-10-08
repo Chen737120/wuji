@@ -11,7 +11,7 @@ class Keyframe {
 
 /// 关键帧轨道（规格 §5.2）：
 /// - ≤10 个；插入自动排序去重（同刻替换）；t clamp 到 [0, duration]；
-/// - [boxAt] 分段线性插值（cx/cy/w/h 各自 lerp）；
+/// - [boxAt] 分段 smoothstep 缓动插值（cx/cy/w/h 各自 lerp）；
 /// - [cropExpr] 生成 FFmpeg crop 逐帧表达式（单帧退化为常量）。
 class KeyframeTrack {
   KeyframeTrack({required this.duration});
@@ -45,7 +45,8 @@ class KeyframeTrack {
       ..add(Keyframe(t: Duration.zero, box: box));
   }
 
-  /// t 处的框：分段线性插值；区间外取最近端点。
+  /// t 处的框：分段缓动插值（smoothstep，与导出表达式一致，WYSIWYG）；
+  /// 区间外取最近端点。
   CropBox boxAt(Duration t) {
     assert(_frames.isNotEmpty, 'boxAt requires at least one keyframe');
     if (_frames.length == 1) return _frames.single.box;
@@ -57,7 +58,8 @@ class KeyframeTrack {
       if (t >= a.t && t <= b.t) {
         final span = (b.t - a.t).inMilliseconds;
         final f = span == 0 ? 0.0 : (t - a.t).inMilliseconds / span;
-        double lerp(double x, double y) => x + (y - x) * f;
+        final e = _smoothstep(f);
+        double lerp(double x, double y) => x + (y - x) * e;
         return CropBox(
           cx: lerp(a.box.cx, b.box.cx),
           cy: lerp(a.box.cy, b.box.cy),
@@ -121,7 +123,12 @@ class KeyframeTrack {
   ///
   /// 时间轴语义（v1.5.8 修"第一关键帧前画面慢慢移动"）：
   /// t<首帧 → **固定在第一帧位置**（旧实现误用 lerp 外推）；
-  /// [t_i, t_{i+1}) → lerp(v_i, v_{i+1})；t≥末帧 → 固定末帧位置。
+  /// [t_i, t_{i+1}) → 缓动 lerp(v_i, v_{i+1})；t≥末帧 → 固定末帧位置。
+  ///
+  /// 缓动（2026-10-08 需求 #2）：关键帧间用 smoothstep（f²(3-2f)）取代线性
+  /// ——段首段尾速度归零、中段加速，观感是"稳稳摇过去再停住"，消除
+  /// 匀速直线推帧的机械感（也弱化慢速段 crop 取整导致的逐格顿挫）。
+  /// FFmpeg 表达式无变量绑定，p=(t-t0)/span 内联三次。
   String _posExpr(double sizePx, int src, double Function(CropBox) pick) {
     String nodeOf(CropBox b) =>
         _clampedCenter(pick(b), sizePx.round(), src).toStringAsFixed(1);
@@ -139,10 +146,17 @@ class KeyframeTrack {
             (_frames[i - 1].t.inMilliseconds / 1000).toStringAsFixed(3);
         final span = ((_frames[i].t - _frames[i - 1].t).inMilliseconds / 1000)
             .toStringAsFixed(3);
-        branch = '($a+($b-($a))*(t-$t0)/$span)';
+        final p = '((t-$t0)/$span)';
+        branch = '($a+($b-($a))*($p*$p*(3-2*$p)))';
       }
       inner = 'if(lt(t,$tSec),$branch,$inner)';
     }
     return inner;
   }
+}
+
+/// smoothstep 缓动：f∈[0,1] → 3f²-2f³（两端导数为 0）。
+double _smoothstep(double f) {
+  final x = f.clamp(0.0, 1.0);
+  return x * x * (3 - 2 * x);
 }

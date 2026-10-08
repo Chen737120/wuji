@@ -68,9 +68,9 @@ class _RecordsPageState extends State<RecordsPage>
   Map<String, List<MediaAsset>> _mediaByClass = {};
   bool _expanded = true;
   bool _loaded = false;
-  bool _calendarMonthInitialized = false;
   DateTime? _selectedDay;
-  late DateTime _calendarMonth;
+  // 2026-10-08 需求 #6：日历默认显示**当前月份**（不再定位到最新记录月）
+  late DateTime _calendarMonth = DateTime.now();
   // 搜索（需求 #11）
   bool _searching = false;
   String _query = '';
@@ -86,7 +86,6 @@ class _RecordsPageState extends State<RecordsPage>
   void initState() {
     super.initState();
     WidgetsBinding.instance.addObserver(this);
-    _calendarMonth = DateTime.now();
     _load();
     ReloadBus.instance.addListener(_load);
   }
@@ -130,11 +129,6 @@ class _RecordsPageState extends State<RecordsPage>
       _records = records;
       _mediaByClass = media;
       _loaded = true;
-      if (!_calendarMonthInitialized && records.isNotEmpty) {
-        final latest = DateTime.parse(records.first.date); // 已按日期倒序
-        _calendarMonth = DateTime(latest.year, latest.month);
-        _calendarMonthInitialized = true; // 终审 M7：用户翻页后不被拉回
-      }
     });
   }
 
@@ -989,11 +983,12 @@ class _RecordCardState extends State<RecordCard> {
       final first = m == widget.media.first;
       final inner = rel == null
           ? Container(
-              color: AppColors.ink,
+              // 软占位色（2026-10-08 需求 #5）：浅灰替代黑底
+              color: AppColors.hairline,
               alignment: Alignment.center,
               child: Icon(
                   m.type == 'video' ? Icons.play_arrow : Icons.image_outlined,
-                  color: AppColors.bg,
+                  color: AppColors.faint,
                   size: 22))
           : FutureBuilder<String?>(
               future: AbsPathCache.resolve(
@@ -1002,13 +997,13 @@ class _RecordCardState extends State<RecordCard> {
                 final path = snap.data;
                 if (path == null || !File(path).existsSync()) {
                   return Container(
-                      color: AppColors.ink,
+                      color: AppColors.hairline,
                       alignment: Alignment.center,
                       child: Icon(
                           m.type == 'video'
                               ? Icons.play_arrow
                               : Icons.image_outlined,
-                          color: AppColors.bg,
+                          color: AppColors.faint,
                           size: 22));
                 }
                 return Image.file(File(path),

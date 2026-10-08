@@ -48,7 +48,7 @@ void main() {
     expect(cmd, isNot(contains('-c:a aac')));
   });
 
-  test('双帧：命令含分段线性 crop 表达式', () {
+  test('双帧：命令含分段缓动 crop 表达式', () {
     final t = track([
       [0.2, 0.2, 0.4, 0.4],
       [0.6, 0.6, 0.8, 0.8],
@@ -57,5 +57,26 @@ void main() {
         srcPath: '/s.mp4', track: t, srcW: 1080, srcH: 1920);
     expect(cmd, contains('if(lt(t,'));
     expect(cmd, contains('crop='));
+  });
+
+  test('视频码率显式分档（2026-10-08 需求 #1）：1080→16M / 960→10M / 426→6M', () {
+    // 框高 ≥1080 → 输出 1080 → 16M
+    final tall = track([[0.5, 0.5, 0.5625, 1.0]]); // h=1.0×1920=1920≥1080
+    expect(
+        buildFancamCommand(
+            srcPath: '/s.mp4', track: tall, srcW: 1080, srcH: 1920),
+        contains('-b:v 16M'));
+    // 框高 960 → 输出 960 → 10M
+    final mid = track([[0.5, 0.5, 0.5, 0.5]]);
+    expect(
+        buildFancamCommand(
+            srcPath: '/s.mp4', track: mid, srcW: 1080, srcH: 1920),
+        contains('-b:v 10M'));
+    // 框高 426 → 输出 426 → 6M
+    final small = track([[0.5, 0.5, 0.9412, 0.5]]);
+    expect(
+        buildFancamCommand(
+            srcPath: '/s.mp4', track: small, srcW: 480, srcH: 854),
+        contains('-b:v 6M'));
   });
 }

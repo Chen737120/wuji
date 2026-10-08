@@ -12,6 +12,7 @@ import 'reload_bus.dart';
 import 'services/archive_fs.dart';
 import 'services/archive_store.dart';
 import 'services/saf_archive.dart';
+import 'services/startup_warmup.dart';
 import 'services/temp_cleanup.dart';
 import 'services/thumb_service.dart';
 import 'theme.dart';
@@ -89,13 +90,41 @@ class _AppRootState extends State<AppRoot> {
   late bool _hasSaf;
   bool _onboardingShown = false;
 
+  // 2026-10-08 需求 #5：启动加载页——boot 期间（首屏数据+封面预热，
+  // 上限 3 秒）显示品牌启动页，进首页时封面已成图，不再"黑块→图"闪现
+  bool _booting = true;
+
   @override
   void initState() {
     super.initState();
     _repo = widget.repo;
     _store = widget.store;
     _hasSaf = widget.hasSaf;
-    WidgetsBinding.instance.addPostFrameCallback((_) => _maybeOnboard());
+    WidgetsBinding.instance.addPostFrameCallback((_) => _boot());
+  }
+
+  Future<void> _boot() async {
+    try {
+      final nav = _navigatorKey.currentState;
+      if (nav != null && nav.mounted) {
+        final navContext = nav.context;
+        final records = await _repo.allRecords();
+        final media = await _repo.mediaByClass();
+        final resolver =
+            _store.fs is MediaPathResolver ? _store.fs as MediaPathResolver : null;
+        if (!navContext.mounted) throw StateError('splash unmounted');
+        // 超时不中断启动：剩余封面继续后台预热，页面用软占位色兜底
+        await StartupWarmup.warmFirstScreen(
+          navContext,
+          records: records,
+          mediaByClass: media,
+          resolver: resolver,
+        ).timeout(const Duration(seconds: 3));
+      }
+    } catch (_) {}
+    if (!mounted) return;
+    setState(() => _booting = false);
+    _maybeOnboard();
   }
 
   /// 存档位置切换（规格 §5.1）：重选文件夹 → 重建仓库 → 从新存档恢复。
@@ -214,25 +243,27 @@ class _AppRootState extends State<AppRoot> {
           ],
           supportedLocales: const [Locale('zh')],
           theme: AppTheme.light(t.accentPreset),
-          home: HomeShell(
-            pages: [
-              const RecordsPage(), // 首页（默认 tab）
-              EditHubPage(
-                onFancam: () => _startFancam(),
-                onCompare: () => _startCompare(),
-              ),
-              const StatsPage(), // 统计
-            ],
-            onFabPressed: () {
-              _navigatorKey.currentState?.push(
-                MaterialPageRoute(
-                    builder: (_) => RecordFormPage(
-                        // 日历里选中的天直接作为新增默认日期
-                        initialDate: CalendarSelection.selectedDay)),
-              ).then((_) => ReloadBus.instance.bump());
-              // 保存/取消都可能改变数据；回来后让两个页面自行刷新
-            },
-          ),
+          home: _booting
+              ? const _SplashPage()
+              : HomeShell(
+                  pages: [
+                    const RecordsPage(), // 首页（默认 tab）
+                    EditHubPage(
+                      onFancam: () => _startFancam(),
+                      onCompare: () => _startCompare(),
+                    ),
+                    const StatsPage(), // 统计
+                  ],
+                  onFabPressed: () {
+                    _navigatorKey.currentState?.push(
+                      MaterialPageRoute(
+                          builder: (_) => RecordFormPage(
+                              // 日历里选中的天直接作为新增默认日期
+                              initialDate: CalendarSelection.selectedDay)),
+                    ).then((_) => ReloadBus.instance.bump());
+                    // 保存/取消都可能改变数据；回来后让两个页面自行刷新
+                  },
+                ),
         ),
       ),
     );
@@ -266,4 +297,67 @@ class _AppRootState extends State<AppRoot> {
         builder: (_) => ComparePage(
             teacher: picked.teacher, mine: picked.mine)));
   }
+}
+
+/// 启动加载页（2026-10-08 需求 #5，参考舞动时光）：品牌标识＋轻提示，
+/// 期间完成首屏数据读取与封面预解码，避免首页可见的逐格加载。
+class _SplashPage extends StatelessWidget {
+  const _SplashPage();
+
+  @override
+  Widget build(BuildContext context) {
+    final accent = Theme.of(context).colorScheme.primary;
+    return Scaffold(
+      backgroundColor: AppColors.bg,
+      body: Center(
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            const Text('舞记',
+                style: TextStyle(
+                    fontSize: 40,
+                    fontWeight: FontWeight.w800,
+                    letterSpacing: 12,
+                    color: AppColors.ink)),
+            const SizedBox(height: 10),
+            SizedBox(
+              width: 84,
+              height: 20,
+              child: CustomPaint(painter: _WavePainter(accent)),
+            ),
+            const SizedBox(height: 28),
+            const Text('正在整理课堂记录…',
+                style: TextStyle(fontSize: 11, color: AppColors.faint)),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+/// 启动页的波浪笔触（与统计页 logo 同款笔意）。
+class _WavePainter extends CustomPainter {
+  _WavePainter(this.color);
+  final Color color;
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    final path = Path()
+      ..moveTo(0, size.height * 0.85)
+      ..cubicTo(size.width * 0.25, size.height * 0.1, size.width * 0.4,
+          size.height, size.width * 0.62, size.height * 0.4);
+    path.cubicTo(size.width * 0.78, size.height * 0.15, size.width * 0.9,
+        size.height * 0.35, size.width, size.height * 0.5);
+    canvas.drawPath(
+      path,
+      Paint()
+        ..color = color
+        ..style = PaintingStyle.stroke
+        ..strokeWidth = 2.2
+        ..strokeCap = StrokeCap.round,
+    );
+  }
+
+  @override
+  bool shouldRepaint(covariant _WavePainter old) => old.color != color;
 }

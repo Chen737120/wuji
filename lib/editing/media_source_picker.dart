@@ -4,6 +4,7 @@ import 'package:wechat_assets_picker/wechat_assets_picker.dart';
 import '../data/db.dart' show ClassRecord, MediaAsset;
 import '../services/abs_path_cache.dart';
 import '../services/archive_fs.dart';
+import '../services/gallery_permission.dart';
 import '../theme.dart';
 import '../ui/record_media_picker_page.dart';
 
@@ -118,52 +119,16 @@ Future<PickedSource?> showVideoSourceSheet(
   return null;
 }
 
-/// 相册权限处于「仅部分照片」时的一次性引导（2026-10-08 需求 #6/#7）：
-/// - 关掉选择器自带的"无法访问所有资源"整页提示（limitedPermissionOverlayPredicate）；
-/// - 改由 App 自己提示一次：解释 Recent 总数多于可选列表属正常，并引导去
-///   系统设置允许所有照片。每次冷启动最多提示一次，不再反复打扰。
-bool _limitedHintShownThisSession = false;
-
-Future<void> _ensureGalleryAccessHint(BuildContext context) async {
-  if (_limitedHintShownThisSession) return;
-  PermissionState ps;
-  try {
-    ps = await PhotoManager.getPermissionState(
-        requestOption: const PermissionRequestOption());
-  } catch (_) {
-    return; // 拿不到权限态就不打扰
-  }
-  if (ps != PermissionState.limited) return;
-  _limitedHintShownThisSession = true;
-  if (!context.mounted) return;
-  await showDialog<void>(
-    context: context,
-    builder: (ctx) => AlertDialog(
-      backgroundColor: Colors.white,
-      title: const Text('相册权限是「仅部分照片」',
-          style: TextStyle(fontSize: 16, fontWeight: FontWeight.w700)),
-      content: const Text(
-          '选择器里只能看到已允许的那部分照片（Recent 总数多于列表属正常现象）。\n\n'
-          '建议在系统设置 → 照片和视频 中允许「访问所有照片」，即可看到全部相册。',
-          style: TextStyle(fontSize: 13, height: 1.7)),
-      actions: [
-        TextButton(
-            onPressed: () => Navigator.pop(ctx),
-            child: const Text('仍用部分照片')),
-        TextButton(
-            onPressed: () {
-              Navigator.pop(ctx);
-              PhotoManager.openSetting();
-            },
-            child: const Text('前往设置')),
-      ],
-    ),
-  );
-}
+/// 相册权限处于「仅部分照片」时的统一引导（2026-10-08 需求 #7）：
+/// 逻辑在 [ensureGalleryAccess]（services/gallery_permission.dart）——
+/// 新增记录/直拍/对比三个入口共用，每冷启动至多提示一次，提供
+/// 「重新选择照片范围」（系统选择界面，可全选）与「前往设置」。
+Future<bool> _ensureGalleryAccessHint(BuildContext context) =>
+    ensureGalleryAccess(context);
 
 /// 相册单选视频（剪辑入口用）：权限+选择器+originFile 解析一体。
 Future<PickedSource?> pickSingleVideoFromAlbum(BuildContext context, [String? hint]) async {
-  await _ensureGalleryAccessHint(context);
+  if (!await _ensureGalleryAccessHint(context)) return null;
   if (!context.mounted) return null;
   final assets = await AssetPicker.pickAssets(
     context,
@@ -196,7 +161,7 @@ Future<PickedSource?> showRecordMediaPicker(BuildContext context) {
 
 /// 相册单选视频；大视频取 originFile 有拷贝耗时，期间显示「准备中」遮罩。
 Future<PickedSource?> _pickFromAlbum(BuildContext context, String? hint) async {
-  await _ensureGalleryAccessHint(context);
+  if (!await _ensureGalleryAccessHint(context)) return null;
   if (!context.mounted) return null;
   final assets = await AssetPicker.pickAssets(
     context,
