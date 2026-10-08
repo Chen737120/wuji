@@ -87,6 +87,37 @@ class PluginMediaImporter implements MediaImporter {
       return const PickResultEmpty();
     }
     if (!context.mounted) return const PickResultEmpty();
+    // 「仅部分照片」一次性引导（2026-10-08 需求 #6/#7）：解释可选列表
+    // 少于 Recent 总数属正常，引导去系统设置允许所有照片；每次冷启动至多一次
+    if (state == PermissionState.limited) {
+      final go = await showDialog<bool>(
+        context: context,
+        builder: (ctx) => AlertDialog(
+          backgroundColor: Colors.white,
+          title: const Text('相册权限是「仅部分照片」',
+              style: TextStyle(fontSize: 16, fontWeight: FontWeight.w700)),
+          content: const Text(
+              '选择器里只能看到已允许的那部分照片（Recent 总数多于列表属正常现象）。\n\n'
+              '建议在系统设置 → 照片和视频 中允许「访问所有照片」，即可看到全部相册。',
+              style: TextStyle(fontSize: 13, height: 1.7)),
+          actions: [
+            TextButton(
+                onPressed: () => Navigator.pop(ctx, false),
+                child: const Text('仍用部分照片')),
+            TextButton(
+                onPressed: () => Navigator.pop(ctx, true),
+                child: const Text('前往设置')),
+          ],
+        ),
+      );
+      if (go == true) {
+        await PhotoManager.openSetting();
+        if (!context.mounted) return const PickResultEmpty();
+        // 从设置回来后不自动打开选择器，用户手动重选一次即可
+        return const PickResultEmpty();
+      }
+      if (!context.mounted) return const PickResultEmpty();
+    }
     final List<AssetEntity>? assets;
     try {
       assets = await AssetPicker.pickAssets(
@@ -95,6 +126,8 @@ class PluginMediaImporter implements MediaImporter {
           maxAssets: max,
           requestType: RequestType.common, // 视频＋图片
           themeColor: const Color(0xFF3FA26F),
+          // 关掉选择器自带的整页提示（上面已引导过）
+          limitedPermissionOverlayPredicate: (_) => false,
         ),
       );
     } catch (e) {

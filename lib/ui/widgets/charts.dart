@@ -24,6 +24,7 @@ class TrendBars extends StatefulWidget {
 
 class _TrendBarsState extends State<TrendBars> {
   final ScrollController _scroll = ScrollController();
+  int? _selected; // 点击选中的柱（需求 #9：气泡显示时长）
 
   @override
   void initState() {
@@ -51,6 +52,10 @@ class _TrendBarsState extends State<TrendBars> {
     _scroll.dispose();
     super.dispose();
   }
+
+  /// 气泡里的时长文案：≥90 分钟显示小时（1 位小数），否则显示分钟。
+  String _minutesText(int m) =>
+      m >= 90 ? '${(m / 60).toStringAsFixed(1)} 小时' : '$m 分钟';
 
   @override
   Widget build(BuildContext context) {
@@ -142,7 +147,7 @@ class _TrendBarsState extends State<TrendBars> {
                           ],
                         ),
                       ),
-                      // 柱区＋日期标签：横向滑动
+                      // 柱区＋日期标签：横向滑动；点柱显示时长气泡（需求 #9）
                       Positioned.fill(
                         child: SingleChildScrollView(
                           controller: _scroll,
@@ -150,61 +155,136 @@ class _TrendBarsState extends State<TrendBars> {
                           child: SizedBox(
                             width: contentW,
                             height: barH + labelH,
-                            child: Row(
-                              crossAxisAlignment: CrossAxisAlignment.start,
+                            child: Stack(
                               children: [
-                                for (final p in points)
-                                  SizedBox(
-                                    width: slotW,
-                                    child: Column(
-                                      children: [
-                                        SizedBox(
-                                          height: barH,
+                                Row(
+                                  crossAxisAlignment:
+                                      CrossAxisAlignment.start,
+                                  children: [
+                                    for (var i = 0; i < points.length; i++)
+                                      SizedBox(
+                                        width: slotW,
+                                        child: GestureDetector(
+                                          behavior:
+                                              HitTestBehavior.opaque,
+                                          onTap: () => setState(() =>
+                                              _selected = _selected == i
+                                                  ? null
+                                                  : i),
                                           child: Column(
-                                            mainAxisAlignment:
-                                                MainAxisAlignment.end,
                                             children: [
-                                              Container(
-                                                height: p.minutes == 0
-                                                    ? 2
-                                                    : (p.minutes /
-                                                            (peak == 0
-                                                                ? 1
-                                                                : peak)) *
-                                                        (barH - 4),
-                                                margin: EdgeInsets.symmetric(
-                                                    horizontal:
-                                                        widget.mode ==
-                                                                TrendMode
-                                                                    .monthly
-                                                            ? 4.0
-                                                            : 1.5),
-                                                decoration: BoxDecoration(
-                                                  // 2026-10-08 用户反馈：所有
-                                                  // 柱子都用点缀色（不再只有
-                                                  // 峰值一根有色）
-                                                  color: p.minutes > 0
-                                                      ? accent
-                                                      : AppColors.hairline,
-                                                  borderRadius:
-                                                      BorderRadius.circular(
-                                                          2),
+                                              SizedBox(
+                                                height: barH,
+                                                child: Column(
+                                                  mainAxisAlignment:
+                                                      MainAxisAlignment
+                                                          .end,
+                                                  children: [
+                                                    Container(
+                                                      height: points[i]
+                                                                  .minutes ==
+                                                              0
+                                                          ? 2
+                                                          : (points[i].minutes /
+                                                                  (peak == 0
+                                                                      ? 1
+                                                                      : peak)) *
+                                                              (barH - 4),
+                                                      margin: EdgeInsets
+                                                          .symmetric(
+                                                              horizontal: widget
+                                                                          .mode ==
+                                                                      TrendMode
+                                                                          .monthly
+                                                                  ? 4.0
+                                                                  : 1.5),
+                                                      decoration:
+                                                          BoxDecoration(
+                                                        // 选中柱加深；其余柱
+                                                        // 全部用点缀色
+                                                        color: _selected ==
+                                                                i
+                                                            ? AppColors.ink
+                                                            : points[i].minutes >
+                                                                    0
+                                                                ? accent
+                                                                : AppColors
+                                                                    .hairline,
+                                                        borderRadius:
+                                                            BorderRadius
+                                                                .circular(2),
+                                                      ),
+                                                    ),
+                                                  ],
+                                                ),
+                                              ),
+                                              SizedBox(
+                                                height: labelH,
+                                                child: Center(
+                                                  child: Text(
+                                                      points[i].label,
+                                                      style: TextStyle(
+                                                          fontSize: 10,
+                                                          color: AppColors
+                                                              .faint)),
                                                 ),
                                               ),
                                             ],
                                           ),
                                         ),
-                                        SizedBox(
-                                          height: labelH,
-                                          child: Center(
-                                            child: Text(p.label,
-                                                style: TextStyle(
-                                                    fontSize: 10,
-                                                    color:
-                                                        AppColors.faint)),
-                                          ),
-                                        ),
-                                      ],
+                                      ),
+                                  ],
+                                ),
+                                // 时长气泡（点击柱子时显示，需求 #9）
+                                if (_selected != null &&
+                                    _selected! < points.length &&
+                                    points[_selected!].minutes > 0)
+                                  Positioned(
+                                    top: 0,
+                                    // clamp 到可视窗口（滚动到两端时气泡也可见）
+                                    left: (_selected! * slotW +
+                                            slotW / 2 -
+                                            60)
+                                        .clamp(
+                                            _scroll.hasClients
+                                                ? _scroll.offset
+                                                : 0.0,
+                                            math.max(
+                                                0.0,
+                                                (_scroll.hasClients
+                                                        ? _scroll.offset +
+                                                            _scroll.position
+                                                                .viewportDimension
+                                                        : contentW) -
+                                                    120)),
+                                    width: 120,
+                                    child: Container(
+                                      padding: const EdgeInsets.symmetric(
+                                          horizontal: 8, vertical: 6),
+                                      decoration: BoxDecoration(
+                                        color: AppColors.ink
+                                            .withValues(alpha: .88),
+                                        borderRadius:
+                                            BorderRadius.circular(8),
+                                      ),
+                                      child: Column(
+                                        mainAxisSize: MainAxisSize.min,
+                                        children: [
+                                          Text(points[_selected!].tooltip,
+                                              textAlign: TextAlign.center,
+                                              style: const TextStyle(
+                                                  fontSize: 10,
+                                                  color: Colors.white70)),
+                                          Text(_minutesText(
+                                              points[_selected!].minutes),
+                                              textAlign: TextAlign.center,
+                                              style: const TextStyle(
+                                                  fontSize: 13,
+                                                  fontWeight:
+                                                      FontWeight.w700,
+                                                  color: Colors.white)),
+                                        ],
+                                      ),
                                     ),
                                   ),
                               ],
@@ -274,14 +354,14 @@ class StyleDonut extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    // 中心文字："X种 / 舞种分布"；2026-10-07 调大（96px）保证文字完整
+    // 中心文字："X种 / 舞种分布"；盒子和画布同尺寸（116），孔径加大保证完整
     final kinds = slices.where((s) => !s.isOther).length;
     return Row(
       crossAxisAlignment: CrossAxisAlignment.center,
       children: [
         SizedBox(
-          width: 96,
-          height: 96,
+          width: 116,
+          height: 116,
           child: Stack(
             alignment: Alignment.center,
             children: [
@@ -293,7 +373,7 @@ class StyleDonut extends StatelessWidget {
                   Text('$kinds种',
                       style: const TextStyle(
                           fontSize: 20,
-                          fontWeight: FontWeight.w700,
+                          fontWeight: FontWeight.w400, // 2026-10-08：细一点
                           color: AppColors.ink)),
                   const Text('舞种分布',
                       style: TextStyle(
@@ -303,7 +383,7 @@ class StyleDonut extends StatelessWidget {
             ],
           ),
         ),
-        const SizedBox(width: 22),
+        const SizedBox(width: 28),
         Expanded(
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
@@ -351,10 +431,11 @@ class _DonutPainter extends CustomPainter {
   void paint(Canvas canvas, Size size) {
     final total = slices.fold<int>(0, (a, s) => a + s.sessions);
     if (total == 0) {
+      // 空态几何与有数据时一致（2026-10-08：避免"0 种时环更大"的观感差异）
       final paint = Paint()
         ..color = AppColors.hairline
         ..style = PaintingStyle.stroke
-        ..strokeWidth = 15;
+        ..strokeWidth = 22;
       canvas.drawCircle(Offset(size.width / 2, size.height / 2),
           size.width / 2 - 8, paint);
       return;
@@ -367,8 +448,8 @@ class _DonutPainter extends CustomPainter {
       canvas.drawArc(rect, start, sweep, true, Paint()..color = colorOf(slices[i]));
       start += sweep;
     }
-    // 中孔（半径随 116px 环放大，留足中心文字空间）
-    canvas.drawCircle(rect.center, rect.width / 2 - 17,
+    // 中孔加大（孔径 72px），保证"X种/舞种分布"完整显示不被环挡
+    canvas.drawCircle(rect.center, rect.width / 2 - 14,
         Paint()..color = AppColors.bg);
   }
 
@@ -498,6 +579,134 @@ class _NameBarsState extends State<NameBars> {
             ),
           ),
       ],
+    );
+  }
+}
+
+/// 跳舞热力图（2026-10-08 需求 #8，样式参考 GitHub 提交墙）：
+/// 列=周（周一起）、行=周一..周日，颜色深浅=当天跳舞分钟数；可横向滑动
+/// 查看最近 26 周。空=浅灰；有数据按分钟分四档点缀色深浅。长按格子看详情。
+class DanceHeatmap extends StatelessWidget {
+  const DanceHeatmap({super.key, required this.minutesByDay});
+
+  final Map<String, int> minutesByDay; // 'yyyy-MM-dd' -> 当天分钟
+
+  static const _cell = 13.0;
+  static const _gap = 3.0;
+  static const _weeks = 26;
+
+  Color _colorFor(int minutes, Color accent) {
+    if (minutes <= 0) return AppColors.hairline;
+    if (minutes <= 15) return accent.withValues(alpha: .25);
+    if (minutes <= 30) return accent.withValues(alpha: .45);
+    if (minutes <= 60) return accent.withValues(alpha: .70);
+    return accent;
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final accent = Theme.of(context).colorScheme.primary;
+    final now = DateTime.now();
+    final today0 = DateTime(now.year, now.month, now.day);
+    final thisMonday = today0.subtract(Duration(days: today0.weekday - 1));
+    final start = thisMonday.subtract(const Duration(days: 7 * (_weeks - 1)));
+
+    String keyOf(DateTime d) =>
+        '${d.year}-${d.month.toString().padLeft(2, '0')}-${d.day.toString().padLeft(2, '0')}';
+
+    // 月份标签行：某列周一的月份与前列不同时，在该列标注「M月」
+    Widget monthLabels() {
+      return SizedBox(
+        height: 14,
+        child: Row(
+          children: [
+            for (var c = 0; c < _weeks; c++)
+              SizedBox(
+                width: _cell + _gap,
+                child: Builder(builder: (context) {
+                  final monday = start.add(Duration(days: 7 * c));
+                  final prev = monday.subtract(const Duration(days: 7));
+                  final show = c > 0 && monday.month != prev.month;
+                  return Text(show ? '${monday.month}月' : '',
+                      style: TextStyle(
+                          fontSize: 9, color: AppColors.faint));
+                }),
+              ),
+          ],
+        ),
+      );
+    }
+
+    Widget weekColumn(int c) {
+      return Column(
+        children: [
+          for (var d = 0; d < 7; d++)
+            Builder(builder: (context) {
+              final day = start.add(Duration(days: 7 * c + d));
+              final future = day.isAfter(today0);
+              final minutes =
+                  future ? 0 : (minutesByDay[keyOf(day)] ?? 0);
+              final cell = Container(
+                width: _cell,
+                height: _cell,
+                margin: const EdgeInsets.all(1.5),
+                decoration: BoxDecoration(
+                  color: future
+                      ? Colors.transparent
+                      : _colorFor(minutes, accent),
+                  borderRadius: BorderRadius.circular(3),
+                ),
+              );
+              if (future) return cell;
+              return Tooltip(
+                message:
+                    '${day.month}月${day.day}日 · ${minutes >= 60 ? '${(minutes / 60).toStringAsFixed(1)} 小时' : '$minutes 分钟'}',
+                child: cell,
+              );
+            }),
+        ],
+      );
+    }
+
+    Widget legend() {
+      return Padding(
+        padding: const EdgeInsets.only(top: 8),
+        child: Row(
+          mainAxisAlignment: MainAxisAlignment.end,
+          children: [
+            const Text('少',
+                style: TextStyle(fontSize: 10, color: AppColors.faint)),
+            for (final m in [0, 10, 25, 45, 90])
+              Container(
+                width: 11,
+                height: 11,
+                margin: const EdgeInsets.all(2),
+                decoration: BoxDecoration(
+                  color: _colorFor(m, accent),
+                  borderRadius: BorderRadius.circular(3),
+                ),
+              ),
+            const Text('多',
+                style: TextStyle(fontSize: 10, color: AppColors.faint)),
+          ],
+        ),
+      );
+    }
+
+    return SingleChildScrollView(
+      scrollDirection: Axis.horizontal,
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          monthLabels(),
+          Row(
+            children: [
+              for (var c = 0; c < _weeks; c++) weekColumn(c),
+            ],
+          ),
+          legend(),
+        ],
+      ),
     );
   }
 }

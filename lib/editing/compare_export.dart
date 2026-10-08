@@ -13,7 +13,7 @@ String _fmtSec(Duration d) => (d.inMilliseconds / 1000).toStringAsFixed(3);
 /// - 总长 = 未被剪辑一侧的完整时长：先结束的一侧用 `tpad=stop_duration`
 ///   冻结末帧补齐（允许的末尾竞争延长），`-t` 兜底取齐。
 ///
-/// 布局：每侧 crop=取样矩形 → scale=-2:720 → hstack=inputs=2。
+/// 布局：每侧 crop=取样矩形 → scale=-2:1080 → hstack=inputs=2。
 /// 音频：teacher→`-map 0:a`；mine→`-map 1:a`；none→`-an`。
 /// 帧率：`fps=min(30, teacherFps)`。
 String buildCompareCommand({
@@ -29,7 +29,7 @@ String buildCompareCommand({
   required String audio, // teacher | mine | none
   required double fpsCap,
   required double containerAspect, // 画面微调预览容器宽高比（WYSIWYG 基准）
-  int outHeight = 720,
+  int outHeight = 1080,
 }) {
   final lr = left.toSourceRect(leftSrc, containerAspect);
   final rr = right.toSourceRect(rightSrc, containerAspect);

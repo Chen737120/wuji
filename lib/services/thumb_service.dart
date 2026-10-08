@@ -11,6 +11,7 @@ Future<String?> Function(String sourcePath) deviceThumbMaker(
       video: sourcePath,
       imageFormat: ImageFormat.JPEG,
       quality: 60,
+      maxWidth: 360, // 列表封面够用：小文件省磁盘，解码也快
     );
     if (bytes == null || bytes.isEmpty) return null;
     final rel = 'thumbs/${const Uuid().v4()}.jpg';

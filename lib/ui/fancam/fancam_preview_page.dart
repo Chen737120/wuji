@@ -7,7 +7,7 @@ import '../../editing/keyframes.dart';
 import '../../theme.dart';
 
 /// 直拍预览页（规格 §5.3）：参数单＋「返回调整」＋「保存到相册」。
-/// 预览画面简化为参数单（参数即所见：框区域裁剪+720 高）。
+/// 预览画面简化为参数单（参数即所见：框区域裁剪+1080 高）。
 class FancamPreviewPage extends StatefulWidget {
   const FancamPreviewPage({
     super.key,
@@ -49,12 +49,12 @@ class _FancamPreviewPageState extends State<FancamPreviewPage> {
   @override
   void initState() {
     super.initState();
-    // 不放大规则：输出高 = min(720, 固定框像素高)，偶数化（与导出命令一致）
-    var h = 720;
+    // 不放大规则：输出高 = min(1080, 固定框像素高)，偶数化（与导出命令一致）
+    var h = 1080;
     final (_, cropH) = widget.track.fixedCropSize(widget.srcW, widget.srcH);
     if (cropH < h) h = cropH;
     h = h & ~0x1;
-    _outHeight = h.clamp(2, 720);
+    _outHeight = h.clamp(2, 1080);
     _command = buildFancamCommand(
       srcPath: widget.sourcePath,
       track: widget.track,

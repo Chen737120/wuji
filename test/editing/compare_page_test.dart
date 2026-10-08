@@ -25,7 +25,7 @@ void main() {
     expect(find.text('请先「确认已对齐」'), findsOneWidget);
     await tester.tap(find.text('确认已对齐'));
     await tester.pumpAndSettle();
-    expect(find.text('导出视频（720p）'), findsOneWidget);
+    expect(find.text('导出视频（1080p）'), findsOneWidget);
 
     // 延后一步 → 0.10 秒
     await tester.tap(find.text('延后'));

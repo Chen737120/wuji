@@ -5,7 +5,7 @@ import 'keyframes.dart';
 /// - 修剪（2026-10-05 需求 #3）：[trimStart]/[trimEnd] 输入侧裁剪，
 ///   关键帧时间轴已相对修剪起点（-ss 在 -i 前，滤镜时间 t 从 0 起）；
 /// - crop：[track.cropExpr]（单帧常量；多帧 = 固定最大框 + x/y 逐帧跟随）；
-/// - 不放大规则（Review Focus #3）：输出高 = min(outH=720, 固定框像素高)，
+/// - 不放大规则（Review Focus #3）：输出高 = min(outH=1080, 固定框像素高)，
 ///   且**偶数化**（h264_mediacodec 不接受奇数尺寸）；
 /// - 帧率跟源（不设 fps 滤镜）；音频＝源完整原声 AAC；无音轨源 → `-an`。
 String buildFancamCommand({
@@ -14,7 +14,7 @@ String buildFancamCommand({
   required int srcW,
   required int srcH,
   bool hasAudio = true,
-  int outH = 720,
+  int outH = 1080,
   Duration trimStart = Duration.zero,
   Duration? trimEnd,
 }) {

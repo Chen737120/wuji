@@ -438,7 +438,7 @@ class _ComparePageState extends State<ComparePage> {
                                   ? '重叠区间不足 1 秒，无法导出'
                                   : (!_alignedConfirmed
                                       ? '请先「确认已对齐」'
-                                      : '导出视频（720p）')),
+                                      : '导出视频（1080p）')),
                           style: TextStyle(
                               fontSize: 13,
                               fontWeight: FontWeight.w600,

@@ -47,6 +47,7 @@ class MediaThumb extends StatelessWidget {
                 }
                 return Image.file(File(path),
                     fit: BoxFit.cover,
+                    cacheWidth: 200, // 列表小图：限解码宽防卡顿
                     width: double.infinity,
                     height: double.infinity,
                     errorBuilder: (_, _, _) =>

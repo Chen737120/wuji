@@ -684,6 +684,7 @@ class _CalendarState extends State<_Calendar> {
                       ? null
                       : Image.file(File(path),
                           fit: BoxFit.cover,
+                          cacheWidth: 300, // 日历格子小图：限解码宽防卡顿
                           errorBuilder: (_, _, _) => const SizedBox.shrink()),
                 ),
               );
@@ -1011,7 +1012,9 @@ class _RecordCardState extends State<RecordCard> {
                           size: 22));
                 }
                 return Image.file(File(path),
-                    fit: BoxFit.cover, errorBuilder: (_, _, _) => Container());
+                    fit: BoxFit.cover,
+                    cacheWidth: 500, // 网格格子小图：限解码宽防卡顿
+                    errorBuilder: (_, _, _) => Container());
               },
             );
       final core = GestureDetector(

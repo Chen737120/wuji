@@ -19,9 +19,10 @@ class StatFilter {
 }
 
 class BarPoint {
-  const BarPoint(this.label, this.minutes);
+  const BarPoint(this.label, this.minutes, {this.tooltip = ''});
   final String label;
   final int minutes; // 柱值=该桶内跳舞总时长（分钟）
+  final String tooltip; // 点柱气泡的完整时间描述（如 10月7日 / 2026年9月）
 }
 
 class NameCount {
@@ -134,7 +135,8 @@ class StatsComputer {
     }
     return List.generate(days, (i) {
       final day = today.subtract(Duration(days: days - 1 - i));
-      return BarPoint('${day.day}', buckets[i]);
+      return BarPoint('${day.day}', buckets[i],
+          tooltip: '${day.month}月${day.day}日');
     });
   }
 
@@ -156,7 +158,9 @@ class StatsComputer {
       if (idx >= 0) buckets[idx] += r.totalMinutes;
     }
     return List.generate(
-        months, (i) => BarPoint('${keys[i].split('-')[1]}月', buckets[i]));
+        months,
+        (i) => BarPoint('${keys[i].split('-')[1]}月', buckets[i],
+            tooltip: '${keys[i].split('-')[0]}年${keys[i].split('-')[1]}月'));
   }
 
   /// 舞种分布：按节数降序取前 6，其余并入"其他"。

@@ -16,13 +16,13 @@ void main() {
     return t;
   }
 
-  test('单帧：常量 crop + 不放大规则（框高<720 时输出=框高）', () {
+  test('单帧：常量 crop + 不放大规则（框高<1080 时输出=框高）', () {
     // 源 1080x1920，框 0.5x0.5 → 像素 540x960。9:16 比例下框高 960 ≥720 → 输出 720
     final t = track([[0.5, 0.5, 0.5, 0.5]]);
     final cmd = buildFancamCommand(
         srcPath: '/s.mp4', track: t, srcW: 1080, srcH: 1920);
     expect(cmd, contains('crop=540:960:270:480'));
-    expect(cmd, contains('scale=-2:720'));
+    expect(cmd, contains('scale=-2:960'));
     expect(cmd, contains('-c:a aac'));
     expect(cmd, isNot(contains('-an')));
   });

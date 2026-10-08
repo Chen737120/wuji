@@ -175,11 +175,39 @@ class _StatsPageState extends State<StatsPage>
                   totalSessions: _stats.sessionCount,
                 ),
               ),
+              // 跳舞热力图（2026-10-08 需求 #8）：最近 26 周，
+              // 颜色深浅=当天跳舞分钟数（基于全量记录，不随范围筛选）
+              const SizedBox(height: 10),
+              Container(
+                padding: const EdgeInsets.all(14),
+                decoration: _cardDecoration(),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    const Text('跳舞热力图',
+                        style: TextStyle(
+                            fontSize: 16,
+                            fontWeight: FontWeight.w700,
+                            color: AppColors.ink)),
+                    const SizedBox(height: 12),
+                    DanceHeatmap(minutesByDay: _minutesByDay),
+                  ],
+                ),
+              ),
             ],
           ),
         ),
       ),
     );
+  }
+
+  /// 日期 -> 当天跳舞分钟（热力图数据源；全量记录）。
+  Map<String, int> get _minutesByDay {
+    final map = <String, int>{};
+    for (final r in _records) {
+      map[r.date] = (map[r.date] ?? 0) + r.totalMinutes;
+    }
+    return map;
   }
 
   BoxDecoration _cardDecoration() => BoxDecoration(

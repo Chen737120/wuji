@@ -8,7 +8,7 @@ void main() {
   final right = SideTransform(ratio: '9:16', scale: 1.5);
   const ca = 1.0; // 测试用 1×1 容器
 
-  test('命令包含 hstack、两侧 crop 与 720 高缩放', () {
+  test('命令包含 hstack、两侧 crop 与 1080 高缩放', () {
     final cmd = buildCompareCommand(
       teacherPath: '/t.mp4',
       minePath: '/m.mp4',
@@ -25,7 +25,7 @@ void main() {
     );
     expect(cmd, startsWith('-y '));
     expect(cmd, contains('hstack=inputs=2'));
-    expect(cmd, contains('scale=-2:720'));
+    expect(cmd, contains('scale=-2:1080'));
     expect('crop='.allMatches(cmd).length, 2);
     expect(cmd, contains('-map 0:a'));
     expect(cmd, contains('fps=30'));
