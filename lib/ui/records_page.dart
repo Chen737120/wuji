@@ -6,6 +6,7 @@ import '../data/db.dart' show ClassRecord, ClassRecordRowX, MediaAsset;
 import '../reload_bus.dart';
 import '../services/abs_path_cache.dart';
 import '../services/archive_fs.dart' show MediaPathResolver;
+import '../services/startup_warmup.dart';
 import '../theme.dart';
 import 'player_page.dart';
 import 'record_form_page.dart';
@@ -209,8 +210,16 @@ class _RecordsPageState extends State<RecordsPage>
                 ),
               ),
             Expanded(
-              // 2026-10-07 需求 #2：日历随列表一起滚动（不再固定顶部）
-              child: _stream(),
+              // 2026-10-07 需求 #2：日历随列表一起滚动（不再固定顶部）。
+              // 滚动即上报：后台预热据此给交互让路（修 v1.5.20 预热
+              // 与滚动抢 UI 线程导致卡顿/ANR）
+              child: NotificationListener<ScrollUpdateNotification>(
+                onNotification: (_) {
+                  StartupWarmup.noteUserScroll();
+                  return false;
+                },
+                child: _stream(),
+              ),
             ),
           ],
         ),
@@ -978,38 +987,29 @@ class _RecordCardState extends State<RecordCard> {
   /// 媒体网格：1 个 16:9 大图；2 个 1:1 并排；≥3 个三列胶卷感（最多 6 格）。
   Widget _mediaGrid() {
     final list = widget.media.take(6).toList();
+    // 软占位色（2026-10-08 需求 #5）：浅灰替代黑底；解码/文件错误也落到这里
+    Widget placeholder(MediaAsset m) => Container(
+        color: AppColors.hairline,
+        alignment: Alignment.center,
+        child: Icon(m.type == 'video' ? Icons.play_arrow : Icons.image_outlined,
+            color: AppColors.faint, size: 22));
     Widget cell(MediaAsset m) {
       final rel = m.thumbName ?? (m.type == 'image' ? m.fileName : null);
       final first = m == widget.media.first;
+      // 不在 build 里做 existsSync（快速滚动时是 UI 线程同步盘 IO）；
+      // 文件丢失/解码失败统一走 errorBuilder 的占位态
       final inner = rel == null
-          ? Container(
-              // 软占位色（2026-10-08 需求 #5）：浅灰替代黑底
-              color: AppColors.hairline,
-              alignment: Alignment.center,
-              child: Icon(
-                  m.type == 'video' ? Icons.play_arrow : Icons.image_outlined,
-                  color: AppColors.faint,
-                  size: 22))
+          ? placeholder(m)
           : FutureBuilder<String?>(
               future: AbsPathCache.resolve(
                   context.read<MediaPathResolver?>(), rel),
               builder: (context, snap) {
                 final path = snap.data;
-                if (path == null || !File(path).existsSync()) {
-                  return Container(
-                      color: AppColors.hairline,
-                      alignment: Alignment.center,
-                      child: Icon(
-                          m.type == 'video'
-                              ? Icons.play_arrow
-                              : Icons.image_outlined,
-                          color: AppColors.faint,
-                          size: 22));
-                }
+                if (path == null) return placeholder(m);
                 return Image.file(File(path),
                     fit: BoxFit.cover,
                     cacheWidth: 500, // 网格格子小图：限解码宽防卡顿
-                    errorBuilder: (_, _, _) => Container());
+                    errorBuilder: (_, _, _) => placeholder(m));
               },
             );
       final core = GestureDetector(

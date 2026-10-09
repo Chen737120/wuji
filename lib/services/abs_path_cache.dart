@@ -9,13 +9,14 @@ class AbsPathCache {
   static final _cache = <String, String>{};
   static final _inflight = <String, Future<String?>>{};
 
-  static Future<String?> resolve(MediaPathResolver? resolver, String rel) {
+  static Future<String?> resolve(MediaPathResolver? resolver, String rel,
+      {bool paced = false}) {
     if (resolver == null) return Future.value(rel);
     final hit = _cache[rel];
     if (hit != null) return Future.value(hit);
     final running = _inflight[rel];
     if (running != null) return running;
-    final f = resolver.toAbsolutePath(rel).then((p) {
+    final f = resolver.toAbsolutePath(rel, paced: paced).then((p) {
       if (p != null) _cache[rel] = p;
       return p;
     });

@@ -3,7 +3,6 @@ import 'dart:typed_data';
 import 'package:path_provider/path_provider.dart';
 import 'package:saf_stream/saf_stream.dart';
 import 'package:saf_util/saf_util.dart';
-import 'package:uuid/uuid.dart';
 import 'archive_fs.dart';
 
 String _mimeForExt(String ext) {
@@ -31,7 +30,6 @@ class SafArchiveFs implements ArchiveFs, MediaPathResolver {
 
   final SafUtil _saf = SafUtil();
   final SafStream _stream = SafStream();
-  static const _uuid = Uuid();
 
   /// 存档根目录（「舞记」文件夹）的 tree/document uri。
   final String treeUri;
@@ -156,23 +154,48 @@ class SafArchiveFs implements ArchiveFs, MediaPathResolver {
   Future<int?> freeBytes() async => null; // SAF 免费空间查询不在本包范围；保存前警告降级
 
   @override
-  Future<String?> toAbsolutePath(String rel) async {
+  Future<String?> toAbsolutePath(String rel, {bool paced = false}) async {
     // SAF 没有真实路径：复制到临时文件，供分享/播放/存相册使用。
-    // 不用 saf_stream 的 copyToLocalFile——对 tree-document uri 会挂起；
-    // 走 read()（readFileStream，导出/manifest 同款原语，已验证可靠）。
+    // 不用 saf_stream 的 copyToLocalFile——对 tree-document uri 会挂起。
     final uri = await _fileUri(rel);
     if (uri == null) return null;
     final tmp = await getTemporaryDirectory();
-    final name = _segments(rel).last;
-    final dest = '${tmp.path}/share/${_uuid.v4()}-$name';
+    // 固定文件名（相对路径直接映射）：拷贝结果跨启动复用——预热和冷启动
+    // 首次显示都只在第一次真正拷贝，之后秒回（旧版每次启动都重新拷贝一遍）。
+    final dest = '${tmp.path}/share/${rel.replaceAll('/', '__')}';
     final f = File(dest);
+    if (f.existsSync() && f.lengthSync() > 0) return dest;
     await f.parent.create(recursive: true);
-    final sink = f.openWrite();
+    // 先写 .part 再改名：拷贝中途被杀不留半截目标文件（下次会重新拷）
+    final part = File('$dest.part');
+    final sink = part.openWrite();
     try {
-      await sink.addStream(read(rel));
+      if (paced) {
+        // 预热专用。readFileStream 的分块泵是 Dart UI 线程上的同步 JNI
+        // 循环（v1.5.20 全量预热曾把它打满 → 输入派发 5s 超时 ANR）；
+        // 改走 readFileBytes——原生侧在 Dispatchers.IO 读，每块之间
+        // 让出 UI 线程 2ms，滚动/帧调度随时可插入。
+        var start = 0;
+        while (true) {
+          final bytes = await _stream.readFileBytes(uri,
+              start: start, count: 256 * 1024);
+          if (bytes.isEmpty) break;
+          start += bytes.length;
+          sink.add(bytes);
+          await Future<void>.delayed(const Duration(milliseconds: 2));
+        }
+      } else {
+        await sink.addStream(read(rel));
+      }
       await sink.flush();
     } finally {
       await sink.close();
+    }
+    try {
+      if (f.existsSync()) f.deleteSync();
+      await part.rename(dest);
+    } on FileSystemException {
+      return part.path; // 改名失败（极少见）：.part 文件内容同样是完整的
     }
     return dest;
   }

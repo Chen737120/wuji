@@ -7,8 +7,11 @@ abstract class MediaLocator {
 
 /// 存档相对路径 → 可被系统分享/存相册的绝对文件路径。
 /// LocalFs 直接映射；SAF 模式由设备端先复制到临时文件再返回（T12 接线）。
+/// [paced]：预热等后台批量场景置 true——SAF 拷贝分块走后台线程并逐块让出
+/// UI 线程（readFileStream 的分块泵是 Dart UI 线程上的同步 JNI 循环，
+/// 批量跑会占满 UI 线程触发 ANR）。
 abstract class MediaPathResolver {
-  Future<String?> toAbsolutePath(String rel);
+  Future<String?> toAbsolutePath(String rel, {bool paced = false});
 }
 
 /// 存档文件夹的文件系统抽象。
@@ -82,6 +85,6 @@ class LocalArchiveFs implements ArchiveFs, MediaPathResolver {
   Future<int?> freeBytes() async => null; // Local 实现不提供；设备端由 SAF 查询
 
   @override
-  Future<String?> toAbsolutePath(String rel) async =>
+  Future<String?> toAbsolutePath(String rel, {bool paced = false}) async =>
       '$root/${rel.replaceAll('/', Platform.pathSeparator)}';
 }

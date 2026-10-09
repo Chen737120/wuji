@@ -4,6 +4,7 @@ import '../data/app_repository.dart' show ClassSaver;
 import '../data/db.dart';
 import '../reload_bus.dart';
 import '../services/stats.dart';
+import '../services/startup_warmup.dart';
 import '../theme.dart';
 import 'my_page.dart';
 import 'sheets/date_range_sheet.dart';
@@ -112,7 +113,13 @@ class _StatsPageState extends State<StatsPage>
       body: SafeArea(
         child: RefreshIndicator(
           onRefresh: _load,
-          child: ListView(
+          // 滚动即上报：后台预热据此给交互让路（同首页，修 v1.5.20 卡顿）
+          child: NotificationListener<ScrollUpdateNotification>(
+            onNotification: (_) {
+              StartupWarmup.noteUserScroll();
+              return false;
+            },
+            child: ListView(
             padding: const EdgeInsets.fromLTRB(16, 8, 16, 90),
             children: [
               _header(context),
@@ -197,6 +204,7 @@ class _StatsPageState extends State<StatsPage>
                 ),
               ),
             ],
+          ),
           ),
         ),
       ),
