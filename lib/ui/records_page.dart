@@ -929,7 +929,7 @@ class _RecordCardState extends State<RecordCard> {
             // 感受/标题：完整一遍、黑色正常字重、不折叠（需求 #6/#7）
             Text(noteText,
                 style: const TextStyle(
-                    fontSize: 13.5, height: 1.6, color: AppColors.ink)),
+                    fontSize: 15.5, height: 1.6, color: AppColors.ink)),
             if (widget.media.isNotEmpty) ...[
               const SizedBox(height: 10),
               _mediaGrid(),

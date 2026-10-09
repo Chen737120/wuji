@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:flutter_localizations/flutter_localizations.dart';
@@ -30,6 +31,12 @@ import 'ui/widgets/app_route.dart';
 
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
+  // 2026-10-09 需求 #4：后台会全量预热所有缩略图（默认 100MiB/1000 张
+  // 放不下百来条记录的图，会 LRU 逐出导致再滚回去又重载），按当前量级
+  // 调大到 384MiB，现代手机内存足够
+  PaintingBinding.instance.imageCache
+    ..maximumSize = 6000
+    ..maximumSizeBytes = 384 << 20;
   cleanupStaleTemp(); // 陈旧临时文件清理（fire-and-forget，不阻塞启动）
   final db = AppDatabase();
   final theme = ThemeController();
@@ -104,13 +111,16 @@ class _AppRootState extends State<AppRoot> {
   }
 
   Future<void> _boot() async {
+    List<ClassRecord>? records;
+    Map<String, List<MediaAsset>>? media;
+    MediaPathResolver? resolver;
     try {
       final nav = _navigatorKey.currentState;
       if (nav != null && nav.mounted) {
         final navContext = nav.context;
-        final records = await _repo.allRecords();
-        final media = await _repo.mediaByClass();
-        final resolver =
+        records = await _repo.allRecords();
+        media = await _repo.mediaByClass();
+        resolver =
             _store.fs is MediaPathResolver ? _store.fs as MediaPathResolver : null;
         if (!navContext.mounted) throw StateError('splash unmounted');
         // 超时不中断启动：剩余封面继续后台预热，页面用软占位色兜底
@@ -125,6 +135,17 @@ class _AppRootState extends State<AppRoot> {
     if (!mounted) return;
     setState(() => _booting = false);
     _maybeOnboard();
+    // 2026-10-09 需求 #4：开屏结束后后台继续全量预热其余图片（不阻塞、
+    // 逐张让出事件循环）——滑到过往记录/切历史月份时已是成图
+    final navCtx = _navigatorKey.currentState?.context;
+    if (records != null && media != null && navCtx != null && navCtx.mounted) {
+      unawaited(StartupWarmup.warmAll(
+        navCtx,
+        records: records,
+        mediaByClass: media,
+        resolver: resolver,
+      ));
+    }
   }
 
   /// 存档位置切换（规格 §5.1）：重选文件夹 → 重建仓库 → 从新存档恢复。
@@ -299,8 +320,10 @@ class _AppRootState extends State<AppRoot> {
   }
 }
 
-/// 启动加载页（2026-10-08 需求 #5，参考舞动时光）：品牌标识＋轻提示，
+/// 启动加载页（2026-10-08 需求 #5，参考舞动时光）：品牌标识＋slogan，
 /// 期间完成首屏数据读取与封面预解码，避免首页可见的逐格加载。
+/// 2026-10-09 需求 #7：加载提示换成品牌 slogan「跟着节拍，动即是舞」，
+/// 用站酷小薇体（OFL 开源）带一点设计感，风格简约。
 class _SplashPage extends StatelessWidget {
   const _SplashPage();
 
@@ -325,9 +348,13 @@ class _SplashPage extends StatelessWidget {
               height: 20,
               child: CustomPaint(painter: _WavePainter(accent)),
             ),
-            const SizedBox(height: 28),
-            const Text('正在整理课堂记录…',
-                style: TextStyle(fontSize: 11, color: AppColors.faint)),
+            const SizedBox(height: 30),
+            const Text('跟着节拍，动即是舞',
+                style: TextStyle(
+                    fontFamily: 'ZCOOLXiaoWei',
+                    fontSize: 17,
+                    letterSpacing: 5,
+                    color: AppColors.ink)),
           ],
         ),
       ),

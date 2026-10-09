@@ -5,8 +5,9 @@ import 'package:flutter/material.dart';
 class FabLogic {
   FabLogic._();
 
-  /// 底部导航高度（home_shell BottomAppBar height 64）——球不能压在导航上。
-  static const double bottomBarHeight = 64;
+  /// 底部导航高度（home_shell 底栏高度 56，2026-10-09 需求 #6 从 64 压小，
+  /// 降低底栏存在感）——球不能压在导航上。
+  static const double bottomBarHeight = 56;
 
   /// 默认位置：右下角（规格：SharedPreferences 无值时的缺省）。
   static Offset initialOffset(Size screen, Size ball) {

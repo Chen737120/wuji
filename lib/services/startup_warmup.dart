@@ -78,6 +78,73 @@ class StartupWarmup {
     return warmed;
   }
 
+  /// 全量预热（2026-10-09 需求 #4）：开屏 3 秒只够首屏（warmFirstScreen），
+  /// 结束后在后台把**全部**记录的网格图（500 宽）与所有有课日期的日历
+  /// 封面（300 宽）逐张预解码进图片缓存——此后滑到任意过往记录、切到
+  /// 任意历史月份都是即时成图，不再看到逐格加载。逐张之间让出事件循环，
+  /// 不拖累前台交互；页面关闭（context unmount）即中止。
+  static Future<int> warmAll(
+    BuildContext context, {
+    required List<ClassRecord> records,
+    required Map<String, List<MediaAsset>> mediaByClass,
+    required MediaPathResolver? resolver,
+    int mediaPerRecord = 6,
+  }) async {
+    // 全部记录的网格图（与首页卡片一致：每课前 6 个）
+    final gridRels = <String>{};
+    for (final r in records) {
+      for (final m in (mediaByClass[r.id] ?? const <MediaAsset>[]).take(mediaPerRecord)) {
+        final rel = m.thumbName ?? (m.type == 'image' ? m.fileName : null);
+        if (rel != null) gridRels.add(rel);
+      }
+    }
+    // 所有有课日期的日历封面（与首页 _coversIn 一致：同天取第一条记录、
+    // 优先视频封面）
+    final coverRels = <String>{};
+    final seenDays = <String>{};
+    for (final r in records) {
+      final d = r.dateAsDateTime;
+      if (!seenDays.add('${d.year}-${d.month}-${d.day}')) continue;
+      final media = mediaByClass[r.id];
+      if (media == null || media.isEmpty) continue;
+      MediaAsset? pick;
+      for (final m in media) {
+        if (m.type == 'video' && m.thumbName != null) {
+          pick = m;
+          break;
+        }
+      }
+      pick ??= media.first;
+      final rel =
+          pick.thumbName ?? (pick.type == 'image' ? pick.fileName : null);
+      if (rel != null) coverRels.add(rel);
+    }
+
+    // 1) 绝对路径解析统一先做（SAF 首次=复制，最慢的一步；与页面共享
+    //    AbsPathCache 去重）
+    final gridPaths = <String, String?>{
+      for (final rel in gridRels) rel: await AbsPathCache.resolve(resolver, rel),
+    };
+    final coverPaths = <String, String?>{
+      for (final rel in coverRels)
+        rel: gridPaths[rel] ?? await AbsPathCache.resolve(resolver, rel),
+    };
+
+    // 2) 预解码，每张之间让出事件循环
+    var warmed = 0;
+    for (final e in gridPaths.entries) {
+      if (!context.mounted) return warmed;
+      if (await _precache(context, e.value, 500)) warmed++;
+      await Future<void>.delayed(Duration.zero);
+    }
+    for (final e in coverPaths.entries) {
+      if (!context.mounted) return warmed;
+      if (await _precache(context, e.value, 300)) warmed++;
+      await Future<void>.delayed(Duration.zero);
+    }
+    return warmed;
+  }
+
   static Future<bool> _precache(
       BuildContext context, String? path, int width) async {
     if (path == null) return false;

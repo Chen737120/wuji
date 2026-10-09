@@ -11,7 +11,7 @@ void main() {
       final big = FabLogic.clampIntoScreen(
           const Offset(9999, 9999), screen, ball);
       expect(big.dx, lessThanOrEqualTo(400 - 48));
-      expect(big.dy, lessThanOrEqualTo(800 - 48 - 64)); // 减去底部导航高
+      expect(big.dy, lessThanOrEqualTo(800 - 48 - 56)); // 减去底部导航高
       expect(big.dx, greaterThanOrEqualTo(0));
       expect(big.dy, greaterThanOrEqualTo(0));
     });
@@ -40,7 +40,7 @@ void main() {
     test('initial offset = 右下（默认）', () {
       final initial = FabLogic.initialOffset(screen, ball);
       expect(initial.dx, 400 - 48);
-      expect(initial.dy, 800 - 48 - 64);
+      expect(initial.dy, 800 - 48 - 56); // 底部导航高 56（2026-10-09 #6 从 64 压小）
     });
   });
 }
