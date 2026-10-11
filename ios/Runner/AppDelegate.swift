@@ -32,7 +32,7 @@ import UIKit
           return
         }
         let url = URL(fileURLWithPath: path)
-        try? url.setResourceValue(true, forKey: .isExcludedFromBackupKey)
+        try? (url as NSURL).setResourceValue(true, forKey: .isExcludedFromBackupKey)
         result(nil)
       case "scanMedia":
         result(nil)
