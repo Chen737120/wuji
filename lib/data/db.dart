@@ -2,6 +2,7 @@ import 'dart:io';
 import 'package:drift/drift.dart';
 import 'package:drift/native.dart';
 import 'package:path_provider/path_provider.dart';
+import '../services/photo_bridge.dart';
 
 part 'db.g.dart';
 
@@ -96,5 +97,12 @@ AppDatabase appDatabaseForTest() =>
 QueryExecutor _open() => LazyDatabase(() async {
       final dir = await getApplicationDocumentsDirectory();
       final file = File('${dir.path}/wuji.db');
+      // iOS：数据库（含 WAL 伴生文件）排除 iCloud 备份——记录属个人数据，
+      // 异地备份由「导出 zip」覆盖；文件未建/通道未就绪时静默
+      if (Platform.isIOS) {
+        for (final p in [file.path, '${file.path}-wal', '${file.path}-shm']) {
+          await PhotoManagerBridge.excludeFromBackup(p);
+        }
+      }
       return NativeDatabase.createInBackground(file);
     });

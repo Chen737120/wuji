@@ -114,7 +114,7 @@ class _MyPageState extends State<MyPage> {
                         backgroundColor: Colors.white,
                         title: const Text('舞记', style: TextStyle(fontSize: 16)),
                         content: const Text(
-                            'v1.5.20\n\n'
+                            'v1.5.21\n\n'
                             '一个纯个人的舞蹈课记录本：数据全部保存在你的手机上，'
                             '没有账号，没有云端。\n\n'
                             '· 记录：课堂视频/图片 + 感受 + 日期舞种老师舞室，'

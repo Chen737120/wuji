@@ -1,3 +1,5 @@
+import 'dart:io';
+
 import 'keyframes.dart';
 
 /// 构建舞蹈直拍导出的 FFmpeg 命令（规格 §5.3）。
@@ -39,6 +41,10 @@ String buildFancamCommand({
   // （1080p≈16Mbps ≈ 0.25bpp@30fps，与相册原图放大观感对齐）
   final videoBitrate = _videoBitrate(outHeight);
 
+  // 硬件编码器按平台：Android=mediacodec；iOS=VideoToolbox（ffmpeg_kit
+  // min 变体内建，同为硬编；失败时 ExportService 回退 mpeg4 软编兜底）
+  final videoCodec = Platform.isIOS ? 'h264_videotoolbox' : 'h264_mediacodec';
+
   final trimPart = trimStart > Duration.zero
       ? '-ss ${(trimStart.inMilliseconds / 1000).toStringAsFixed(3)} '
       : '';
@@ -48,7 +54,7 @@ String buildFancamCommand({
 
   return '-y $trimPart-i "$srcPath" $durPart'
       '-vf "$cropExpr,scale=-2:$outHeight,setsar=1" '
-      '-c:v h264_mediacodec -pix_fmt yuv420p -b:v $videoBitrate $audioPart '
+      '-c:v $videoCodec -pix_fmt yuv420p -b:v $videoBitrate $audioPart '
       '-movflags +faststart';
 }
 

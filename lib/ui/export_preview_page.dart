@@ -129,19 +129,22 @@ class _ExportPreviewPageState extends State<ExportPreviewPage> {
           onProgress: (done, total) {
         if (mounted) setState(() => _progress = '打包中 $done/$total');
       }, cancelled: () => _cancelRequested);
-      // 优先：让用户选目标文件夹（SAF），复制进去；取消则走系统分享
+      // Android 优先：让用户选目标文件夹（SAF）复制进去，取消则走系统分享；
+      // iOS 无 SAF，直接走系统分享（存储到「文件」由分享面板完成）
       String? doneMsg;
-      try {
-        final saf = SafUtil();
-        final doc = await saf.pickDirectory(
-            persistablePermission: false, writePermission: true);
-        if (doc?.uri != null) {
-          await SafStream().pasteLocalFile(localZip, doc!.uri,
-              localZip.split(Platform.pathSeparator).last, 'application/zip',
-              overwrite: true);
-          doneMsg = '已保存到所选文件夹';
-        }
-      } catch (_) {}
+      if (Platform.isAndroid) {
+        try {
+          final saf = SafUtil();
+          final doc = await saf.pickDirectory(
+              persistablePermission: false, writePermission: true);
+          if (doc?.uri != null) {
+            await SafStream().pasteLocalFile(localZip, doc!.uri,
+                localZip.split(Platform.pathSeparator).last, 'application/zip',
+                overwrite: true);
+            doneMsg = '已保存到所选文件夹';
+          }
+        } catch (_) {}
+      }
       doneMsg ??= '已打包，选择保存位置';
       final file = XFile(localZip);
       if (doneMsg.startsWith('已打包')) {

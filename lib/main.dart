@@ -1,6 +1,7 @@
 import 'dart:async';
 import 'dart:io';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_localizations/flutter_localizations.dart';
 import 'package:path_provider/path_provider.dart';
 import 'package:provider/provider.dart';
@@ -12,6 +13,7 @@ import 'data/taxonomy_repo.dart';
 import 'reload_bus.dart';
 import 'services/archive_fs.dart';
 import 'services/archive_store.dart';
+import 'services/photo_bridge.dart';
 import 'services/saf_archive.dart';
 import 'services/startup_warmup.dart';
 import 'services/temp_cleanup.dart';
@@ -38,6 +40,9 @@ Future<void> main() async {
     ..maximumSize = 6000
     ..maximumSizeBytes = 384 << 20;
   cleanupStaleTemp(); // 陈旧临时文件清理（fire-and-forget，不阻塞启动）
+  // 全 app 锁竖屏：横屏只由播放页全屏时运行时放开（PlayerPage dispose
+  // 恢复 portraitUp，与这里闭环），避免竖屏设计的列表页转横屏后布局碎裂
+  await SystemChrome.setPreferredOrientations([DeviceOrientation.portraitUp]);
   final db = AppDatabase();
   final theme = ThemeController();
   await theme.load();
@@ -51,11 +56,23 @@ Future<void> main() async {
     final docs = await getApplicationDocumentsDirectory();
     store = ArchiveStore(LocalArchiveFs('${docs.path}/wuji-archive'));
   }
+  // iOS：存档目录排除 iCloud 备份——视频 GB 级会撑爆用户 iCloud，
+  // 备份需求由「导出 zip」覆盖；通道未就绪时 bridge 内部静默
+  if (Platform.isIOS) {
+    try {
+      final docs = await getApplicationDocumentsDirectory();
+      final archive =
+          Directory('${docs.path}${Platform.pathSeparator}wuji-archive');
+      if (!archive.existsSync()) archive.createSync(recursive: true);
+      await PhotoManagerBridge.excludeFromBackup(archive.path);
+    } catch (_) {}
+  }
   final repo = AppRepository(
     db,
     store,
     TaxonomyRepo(db),
-    thumbMaker: Platform.isAndroid ? deviceThumbMaker(store) : null,
+    thumbMaker:
+        Platform.isAndroid || Platform.isIOS ? deviceThumbMaker(store) : null,
   );
   await repo.reconcileOnStartup();
   runApp(AppRoot(repo: repo, store: store, theme: theme, hasSaf: treeUri != null));
@@ -173,6 +190,9 @@ class _AppRootState extends State<AppRoot> {
   }
 
   Future<void> _maybeOnboard() async {
+    // SAF 存档引导只属于 Android（iOS 用应用内 Documents 存档，
+    // 没有「选择文件夹」概念；卸载即删，靠导出 zip 做备份）
+    if (!Platform.isAndroid) return;
     if (_hasSaf || _onboardingShown || !mounted) return;
     final sp = await SharedPreferences.getInstance();
     if (sp.getBool('archiveOnboardSkipped') == true) return;
@@ -243,8 +263,11 @@ class _AppRootState extends State<AppRoot> {
         Provider<ClassSaver>.value(value: _repo),
         Provider<AppRepository>.value(value: _repo),
         Provider<TaxonomyRepo>.value(value: TaxonomyRepo(_repo.db)),
-        Provider<ArchiveSwitcher>.value(
-            value: ArchiveSwitcher(_switchArchive)),
+        // 存档位置切换依赖 SAF（Android 专属）；iOS 走应用内存档，
+        // my_page 在拿不到 ArchiveSwitcher 时有降级提示
+        if (Platform.isAndroid)
+          Provider<ArchiveSwitcher>.value(
+              value: ArchiveSwitcher(_switchArchive)),
         Provider<MediaLocator>.value(value: _store),
         Provider<ArchiveStore>.value(value: _store),
         if (_store.fs is MediaPathResolver)

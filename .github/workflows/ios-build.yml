@@ -1,8 +1,9 @@
-# 舞记 iOS 云构建：GitHub 的 macOS 机器上产出未签名的 IPA 归档。
-# 使用方式：把本仓库推到 GitHub → 仓库页 Actions → 手动运行 ios-build →
-# 完成后在 Artifacts 下载 wuji-ios → 解包得到 Runner.xcarchive。
+# 舞记 iOS 云构建：GitHub 的 macOS 机器上产出未签名的 IPA 归档，
+# 并在 iOS 模拟器上做启动冒烟（装机前的基本验证：不闪退 + 首屏渲染）。
+# 使用方式：push master 自动触发，或仓库页 Actions → 手动运行 ios-build →
+# 完成后在 Artifacts 下载 wuji-ios-unsigned-ipa / wuji-ios-smoke。
 # 出正式安装包还需要 Apple 开发者账号签名（Xcode 打开归档 Distribute，
-# 或在苹果开发者后台做 Ad Hoc/TestFlight 签名后导出 IPA）。
+# 或用 Sideloadly/爱思助手以免费 Apple ID 签名装机）。
 name: iOS build
 
 on:
@@ -12,6 +13,7 @@ on:
 
 jobs:
   build:
+    name: Build unsigned IPA
     runs-on: macos-14
     steps:
       - uses: actions/checkout@v4
@@ -44,3 +46,48 @@ jobs:
         with:
           name: wuji-ios-unsigned-ipa
           path: build/ios/ipa/wuji-unsigned.ipa
+
+  smoke:
+    name: iOS simulator smoke
+    runs-on: macos-14
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: subosito/flutter-action@v2
+        with:
+          channel: stable
+          cache: true
+
+      - run: flutter pub get
+
+      # 模拟器构建（真机 IPA 装不进模拟器，需单独产出 sim 架构）
+      - name: Build for simulator
+        run: flutter build ios --simulator --release --no-codesign
+
+      - name: Boot simulator and launch app
+        run: |
+          set -euo pipefail
+          # 动态选一个可用的 iPhone 模拟器（runner 预装 runtime 会随 Xcode 版本变化）
+          DEVICE=$(xcrun simctl list devices available | grep -m1 -E "iPhone" | sed -E 's/^.*\(([A-F0-9-]+)\).*$/\1/')
+          echo "Using simulator UDID: $DEVICE"
+          xcrun simctl boot "$DEVICE"
+          xcrun simctl bootstatus "$DEVICE" -b
+          xcrun simctl install "$DEVICE" build/ios/iphonesimulator/Runner.app
+          # launch 失败（权限 key 缺失等）直接 fail
+          xcrun simctl launch "$DEVICE" com.danceapp.wuji
+          sleep 15
+          # 进程仍存活 = 没有启动即闪退
+          xcrun simctl spawn "$DEVICE" launchctl list | grep -q com.danceapp.wuji \
+            || { echo "App process died within 15s"; exit 1; }
+          xcrun simctl io "$DEVICE" screenshot wuji-smoke-1.png
+          sleep 3
+          xcrun simctl io "$DEVICE" screenshot wuji-smoke-2.png
+          xcrun simctl terminate "$DEVICE" com.danceapp.wuji || true
+          xcrun simctl shutdown "$DEVICE" || true
+
+      - name: Upload smoke screenshots
+        uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: wuji-ios-smoke
+          path: wuji-smoke-*.png

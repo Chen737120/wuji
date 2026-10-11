@@ -38,4 +38,13 @@ class PhotoManagerBridge {
       await _native.invokeMethod('setKeepScreenOn', {'on': on});
     } catch (_) {}
   }
+
+  /// iOS：把路径标记为不参与 iCloud 备份（NSURLIsExcludedFromBackupKey）。
+  /// 只防「iCloud 被塞满」，真正的异地备份靠导出 zip。
+  /// 非 iOS 宿主/原生端未就绪时静默忽略。
+  static Future<void> excludeFromBackup(String path) async {
+    try {
+      await _native.invokeMethod('excludeFromBackup', {'path': path});
+    } catch (_) {}
+  }
 }

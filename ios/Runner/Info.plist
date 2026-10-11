@@ -26,6 +26,10 @@
 	<string>$(FLUTTER_BUILD_NUMBER)</string>
 	<key>LSRequiresIPhoneOS</key>
 	<true/>
+	<key>NSPhotoLibraryAddUsageDescription</key>
+	<string>舞记需要保存权限，将剪辑导出的成片和封面保存到你的相册。</string>
+	<key>NSPhotoLibraryUsageDescription</key>
+	<string>舞记需要访问相册，用于选择课堂视频和照片添加到舞蹈记录。</string>
 	<key>UIApplicationSceneManifest</key>
 	<dict>
 		<key>UIApplicationSupportsMultipleScenes</key>

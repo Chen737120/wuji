@@ -1,6 +1,7 @@
 import 'dart:convert';
 import 'dart:io';
 import 'package:archive/archive_io.dart';
+import 'package:file_selector/file_selector.dart';
 import 'package:flutter/material.dart';
 import 'package:path_provider/path_provider.dart';
 import 'package:provider/provider.dart';
@@ -40,25 +41,43 @@ class _ImportPageState extends State<ImportPage> {
     if (_busy) return;
     setState(() => _busy = true);
     try {
-      final saf = SafUtil();
-      final doc = await saf.pickFile(mimeTypes: const ['application/zip']);
-      if (doc == null) {
-        setState(() => _busy = false);
-        return;
+      final String localZip;
+      if (Platform.isAndroid) {
+        final saf = SafUtil();
+        final doc = await saf.pickFile(mimeTypes: const ['application/zip']);
+        if (doc == null) {
+          setState(() => _busy = false);
+          return;
+        }
+        setState(() => _status = '读取压缩包…');
+        final tmp = await getTemporaryDirectory();
+        localZip =
+            '${tmp.path}/wuji-import-${DateTime.now().millisecondsSinceEpoch}.zip';
+        // 不用 saf_stream 的 copyToLocalFile（部分 uri 形态会挂起），流式自拷
+        final zipSink = File(localZip).openWrite();
+        try {
+          await zipSink.addStream(await SafStream().readFileStream(doc.uri));
+          await zipSink.flush();
+        } finally {
+          await zipSink.close();
+        }
+      } else {
+        // iOS：系统文档选择器（open 模式隐式授予该文件读取权），
+        // 直接解压原文件，不再复制一份
+        final file = await openFile(acceptedTypeGroups: [
+          const XTypeGroup(
+            label: '备份包 (zip)',
+            extensions: ['zip'],
+            mimeTypes: ['application/zip'],
+          ),
+        ]);
+        if (file == null) {
+          setState(() => _busy = false);
+          return;
+        }
+        localZip = file.path;
       }
-      setState(() => _status = '读取压缩包…');
-      final tmp = await getTemporaryDirectory();
-      final localZip =
-          '${tmp.path}/wuji-import-${DateTime.now().millisecondsSinceEpoch}.zip';
-      // 不用 saf_stream 的 copyToLocalFile（部分 uri 形态会挂起），流式自拷
-      final zipSink = File(localZip).openWrite();
-      try {
-        await zipSink.addStream(await SafStream().readFileStream(doc.uri));
-        await zipSink.flush();
-      } finally {
-        await zipSink.close();
-      }
-      final extractDir = Directory('${tmp.path}/wuji-import-extract');
+      final extractDir = Directory('${(await getTemporaryDirectory()).path}/wuji-import-extract');
       if (extractDir.existsSync()) extractDir.deleteSync(recursive: true);
       extractDir.createSync(recursive: true);
       // zip slip 防护（评审建议）：不用库的 extractArchiveToDisk——
@@ -89,7 +108,7 @@ class _ImportPageState extends State<ImportPage> {
   }
 
   Future<void> _pickFolder() async {
-    if (_busy) return;
+    if (_busy || !Platform.isAndroid) return; // SAF 文件夹重连仅 Android 提供
     setState(() => _busy = true);
     try {
       final saf = SafUtil();
@@ -231,7 +250,10 @@ class _ImportPageState extends State<ImportPage> {
             const Text('选择要导入的备份',
                 style: TextStyle(fontSize: 13, fontWeight: FontWeight.w600)),
             const SizedBox(height: 4),
-            Text('支持「导出」生成的 zip 包，或解压后的文件夹。\n导入会合并进现有记录：已有的课只补回视频，不会重复。',
+            Text(
+                Platform.isAndroid
+                    ? '支持「导出」生成的 zip 包，或解压后的文件夹。\n导入会合并进现有记录：已有的课只补回视频，不会重复。'
+                    : '选择「导出」生成的 zip 包（可通过隔空投送、「文件」App 传入手机）。\n导入会合并进现有记录：已有的课只补回视频，不会重复。',
                 style: TextStyle(fontSize: 11, color: AppColors.secondary, height: 1.7)),
             const SizedBox(height: 16),
             FilledButton(
@@ -242,16 +264,18 @@ class _ImportPageState extends State<ImportPage> {
               onPressed: _pickZip,
               child: const Text('选择 zip 包'),
             ),
-            const SizedBox(height: 10),
-            OutlinedButton(
-              style: OutlinedButton.styleFrom(
-                  side: const BorderSide(color: AppColors.hairline),
-                  shape: const StadiumBorder(),
-                  padding: const EdgeInsets.symmetric(vertical: 12)),
-              onPressed: _pickFolder,
-              child: const Text('选择文件夹（含重装后重连存档）',
-                  style: TextStyle(fontSize: 13)),
-            ),
+            if (Platform.isAndroid) ...[
+              const SizedBox(height: 10),
+              OutlinedButton(
+                style: OutlinedButton.styleFrom(
+                    side: const BorderSide(color: AppColors.hairline),
+                    shape: const StadiumBorder(),
+                    padding: const EdgeInsets.symmetric(vertical: 12)),
+                onPressed: _pickFolder,
+                child: const Text('选择文件夹（含重装后重连存档）',
+                    style: TextStyle(fontSize: 13)),
+              ),
+            ],
             if (_status.isNotEmpty) ...[
               const SizedBox(height: 12),
               Text(_status,

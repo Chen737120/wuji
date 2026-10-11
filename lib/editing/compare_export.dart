@@ -1,3 +1,4 @@
+import 'dart:io';
 import 'dart:ui' show Size;
 
 import 'side_transform.dart';
@@ -75,13 +76,15 @@ String buildCompareCommand({
   };
 
   // 视频码率显式给定（2026-10-08 需求 #1，与直拍共用分档）：
-  // mediacodec 默认码率偏低，放大看毛边明显
+  // mediacodec 默认码率偏低，放大看毛边明显。
+  // 编码器按平台：Android=mediacodec；iOS=VideoToolbox（min 变体内建硬编）
+  final videoCodec = Platform.isIOS ? 'h264_videotoolbox' : 'h264_mediacodec';
   final videoBitrate =
       outHeight >= 1000 ? '16M' : (outHeight >= 700 ? '10M' : '6M');
 
   return '-y $inputs -filter_complex "$filter" '
       '-map "[v]" $audioMap '
-      '-c:v h264_mediacodec -pix_fmt yuv420p -b:v $videoBitrate '
+      '-c:v $videoCodec -pix_fmt yuv420p -b:v $videoBitrate '
       '-c:a aac -ar 48000 -ac 2 -b:a 128k '
       '-t ${_fmtSec(total)} '
       '-movflags +faststart';

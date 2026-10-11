@@ -150,16 +150,19 @@ class ExportService {
       var rc = await _runner.run(args,
           onProgress: onProgress,
           expectedDurationMs: job.expectedDurationMs);
-      // 硬件编码器（mediacodec）在部分设备/尺寸上会失败：回退软编码 mpeg4。
-      // 回退前必须删掉第一次运行可能写出的半成品——FFmpeg 遇到已存在
-      // 输出文件会问 Overwrite? 并以退出码 1 退出
-      if (rc != 0 && args.contains('h264_mediacodec')) {
-        await _dumpLogs('ROUND1(mediacodec)', rc);
+      // 硬件编码器（Android=mediacodec / iOS=videotoolbox）在部分设备/尺寸
+      // 上会失败：回退软编码 mpeg4。回退前必须删掉第一次运行可能写出的
+      // 半成品——FFmpeg 遇到已存在输出文件会问 Overwrite? 并以退出码 1 退出
+      final hw = args.contains('h264_mediacodec')
+          ? 'h264_mediacodec'
+          : (args.contains('h264_videotoolbox') ? 'h264_videotoolbox' : null);
+      if (rc != 0 && hw != null) {
+        await _dumpLogs('ROUND1(hw)', rc);
         final half = File(temp);
         if (half.existsSync()) half.deleteSync();
         // args 已含输出路径（最后一个参数），只替换编码器两个 token——
         // 再次追加会变成两个输出文件（历史 "already exists" 根因）
-        final ci = args.indexOf('h264_mediacodec');
+        final ci = args.indexOf(hw);
         args = [...args.sublist(0, ci), '-c:v', 'mpeg4', '-q:v', '4', ...args.sublist(ci + 1)];
         rc = await _runner.run(args,
             onProgress: onProgress,
