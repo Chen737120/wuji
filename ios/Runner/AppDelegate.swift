@@ -18,7 +18,7 @@ import UIKit
     // scanMedia 无需实现（iOS 相册感知由系统完成），回复 nil 保持协议兼容。
     let channel = FlutterMethodChannel(
       name: "wuji/native",
-      binaryMessenger: engineBridge.applicationRegistrar.messenger)
+      binaryMessenger: engineBridge.applicationRegistrar.messenger())
     channel.setMethodCallHandler { call, result in
       switch call.method {
       case "setKeepScreenOn":
