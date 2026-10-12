@@ -77,7 +77,7 @@ class _FancamPageState extends State<FancamPage> {
         // 关键帧轨道 = 修剪后时间轴（起点=0）
         _track = KeyframeTrack(
             duration: widget.trimmedEnd - widget.trimStart);
-        _box = CropBox.centered(_ratio);
+        _box = CropBox.centered(_ratio, srcW: _srcW, srcH: _srcH);
         _track!.reset(_box);
         // video_player 的 size 已应用 rotation，与 FFmpeg 默认 autorotate
         // 后滤镜看到的尺寸一致，可作为 crop 像素域基准
@@ -134,8 +134,10 @@ class _FancamPageState extends State<FancamPage> {
     setState(() {
       _ratio = r;
       if (r == '自由') return; // 自由：保持当前框，角柄可独立改宽高
-      // 比例切换：保持中心，按新比例重设框（h 不变，w=h*newAspect）
-      final newAspect = _ratioAspect(r);
+      // 比例切换：保持中心，按新比例重设框。比例锁定是像素域语义，
+      // 归一化 w/h 须乘 srcH/srcW 修正（w×源宽、h×源高基准不同）
+      final k = (_srcW <= 0 || _srcH <= 0) ? 1.0 : _srcH / _srcW;
+      final newAspect = _ratioAspect(r) * k;
       var w = _box.h * newAspect;
       var h = _box.h;
       if (w > 1) {
@@ -401,7 +403,8 @@ class _FancamPageState extends State<FancamPage> {
                         TextButton(
                             onPressed: () {
                               setState(() {
-                                _box = CropBox.centered(_ratio);
+                                _box = CropBox.centered(_ratio,
+                                    srcW: _srcW, srcH: _srcH);
                                 _track!.reset(_box);
                               });
                             },

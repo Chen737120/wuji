@@ -2,29 +2,32 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:wuji/editing/crop_box.dart';
 
 void main() {
-  group('CropBox（归一化 0..1，比例锁定）', () {
-    test('centered(9:16) 在横屏源上居中、比例正确', () {
-      final box = CropBox.centered('9:16');
+  group('CropBox（归一化 0..1，比例锁定=像素域语义）', () {
+    test('centered(9:16) 在横屏源上居中、像素比例正确', () {
+      final box = CropBox.centered('9:16', srcW: 1920, srcH: 1080);
       expect(box.cx, 0.5);
       expect(box.cy, 0.5);
-      // 9:16 → w/h = 9/16；归一化下面积 ≤1
-      expect(box.w / box.h, closeTo(9 / 16, 0.001));
+      // 归一化宽高物理基准不同（w×源宽、h×源高），像素域 w·srcW / h·srcH
+      // 才是真比例——旧实现归一化 w/h=比例值，9:16 源上全偏窄（1.5.23 修）
+      expect(box.w * 1920 / (box.h * 1080), closeTo(9 / 16, 0.001));
       expect(box.w, lessThanOrEqualTo(1));
       expect(box.h, lessThanOrEqualTo(1));
     });
 
     test('centered(9:16) 在 9:21 超高竖屏源上居中（Review Focus #5）', () {
-      final box = CropBox.centered('9:16');
+      final box = CropBox.centered('9:16', srcW: 1080, srcH: 2520);
       expect(box.cx, 0.5);
       expect(box.cy, 0.5);
-      // 归一化面积与宽高比保持
-      expect(box.w / box.h, closeTo(9 / 16, 0.001));
+      expect(box.w * 1080 / (box.h * 2520), closeTo(9 / 16, 0.001));
     });
 
-    test('比例 3:4 / 1:1 各自正确', () {
-      expect(CropBox.centered('3:4').w / CropBox.centered('3:4').h,
-          closeTo(3 / 4, 0.001));
-      expect(CropBox.centered('1:1').w, CropBox.centered('1:1').h);
+    test('9:16 竖屏源上三种比例像素域各自正确', () {
+      final wants = {'9:16': 9 / 16, '3:4': 3 / 4, '1:1': 1.0};
+      for (final e in wants.entries) {
+        final b = CropBox.centered(e.key, srcW: 1080, srcH: 1920);
+        expect(b.w * 1080 / (b.h * 1920), closeTo(e.value, 0.001),
+            reason: e.key);
+      }
     });
 
     test('clamped 把出界框拉回画面内', () {

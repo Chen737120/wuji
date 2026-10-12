@@ -6,9 +6,12 @@ void main() {
   group('KeyframeTrack（规格 §5.2：≤10、排序去重、分段线性插值）', () {
     test('upsert：乱序插入自动排序、同刻替换、clamp 到 [0,dur]', () {
       final track = KeyframeTrack(duration: const Duration(seconds: 10));
-      track.upsert(const Duration(seconds: 5), CropBox.centered('9:16'));
-      track.upsert(const Duration(seconds: 1), CropBox.centered('9:16'));
-      track.upsert(const Duration(seconds: 3), CropBox.centered('9:16'));
+      track.upsert(const Duration(seconds: 5),
+          CropBox.centered('9:16', srcW: 1080, srcH: 1920));
+      track.upsert(const Duration(seconds: 1),
+          CropBox.centered('9:16', srcW: 1080, srcH: 1920));
+      track.upsert(const Duration(seconds: 3),
+          CropBox.centered('9:16', srcW: 1080, srcH: 1920));
       expect(track.frames.map((f) => f.t.inSeconds).toList(), [1, 3, 5]);
 
       // 同刻替换
@@ -18,9 +21,11 @@ void main() {
       expect(track.frames[1].box.cx, 0.3);
 
       // 越界 clamp
-      track.upsert(const Duration(seconds: 99), CropBox.centered('9:16'));
+      track.upsert(const Duration(seconds: 99),
+          CropBox.centered('9:16', srcW: 1080, srcH: 1920));
       expect(track.frames.last.t, const Duration(seconds: 10));
-      track.upsert(const Duration(milliseconds: -5), CropBox.centered('9:16'));
+      track.upsert(const Duration(milliseconds: -5),
+          CropBox.centered('9:16', srcW: 1080, srcH: 1920));
       expect(track.frames.first.t, Duration.zero);
       expect(track.frames, hasLength(5));
     });
@@ -28,7 +33,8 @@ void main() {
     test('关键帧上限 10 个：第 11 个被拒绝', () {
       final track = KeyframeTrack(duration: const Duration(seconds: 100));
       for (var i = 0; i < 10; i++) {
-        track.upsert(Duration(seconds: i * 10 + 1), CropBox.centered('9:16'));
+        track.upsert(Duration(seconds: i * 10 + 1),
+            CropBox.centered('9:16', srcW: 1080, srcH: 1920));
       }
       expect(track.frames, hasLength(10));
       final added = track.upsert(
@@ -51,21 +57,23 @@ void main() {
       expect(mid.w, closeTo(0.6, 0.001));
     });
 
-    test('boxAt/cropExpr：关键帧间 smoothstep 缓动（2026-10-08 需求 #2）', () {
+    test('boxAt/cropExpr：关键帧间停顿式缓动（2026-10-12 移动感优化）', () {
       final track = KeyframeTrack(duration: const Duration(seconds: 10));
       track.upsert(Duration.zero,
           const CropBox(cx: 0.2, cy: 0.2, w: 0.4, h: 0.4));
       track.upsert(const Duration(seconds: 10),
           const CropBox(cx: 0.6, cy: 0.6, w: 0.8, h: 0.8));
 
-      // f=0.25 → smoothstep=0.15625 → cx=0.2+0.4×0.15625=0.2625
-      // （线性插值应为 0.3；缓动在段首更慢）
-      final q = track.boxAt(const Duration(milliseconds: 2500));
-      expect(q.cx, closeTo(0.2625, 0.001));
+      // 停顿式：每段前后各 25% 停住——f=0.25 仍在起点、f=0.75 已到终点，
+      // 中点 smoothstep 对称 = 均值。消除整段持续移动的漂移感
+      expect(track.boxAt(const Duration(milliseconds: 2500)).cx, 0.2);
+      expect(track.boxAt(const Duration(milliseconds: 7500)).cx, 0.6);
+      expect(track.boxAt(const Duration(seconds: 5)).cx, closeTo(0.4, 0.001));
 
-      // 导出表达式同用缓动：含 (3-2*p) 形态
+      // 导出表达式同用停顿缓动（WYSIWYG）：smoothstep 形态 + 停止窗口
       final expr = track.cropExpr(1080, 1920);
       expect(expr, contains('(3-2*'));
+      expect(expr, contains('if(lt('));
     });
 
     test('boxAt：单帧（单框模式）全程恒定', () {
@@ -131,6 +139,22 @@ void main() {
       final (sw, sh) = small.fixedCropSize(200, 20);
       expect(sw, 100);
       expect(sh, 16); // 0.5×20=10 → clamp 16
+    });
+
+    test('fixedCropSize 与单帧偏移全部偶数化（编码器边缘伪影防护）', () {
+      // 奇数尺寸/偏移送 yuv420p+mediacodec 会在画面边缘出绿色/黑色垃圾列
+      for (final (cx, cy) in [(0.5, 0.5), (0.33, 0.77), (0.2509259, 0.8005208)]) {
+        final track = KeyframeTrack(duration: const Duration(seconds: 10));
+        track.upsert(
+            Duration.zero, CropBox(cx: cx, cy: cy, w: 0.501, h: 0.4));
+        final (w, h) = track.fixedCropSize(1080, 1920);
+        expect(w.isEven, isTrue, reason: 'w=$w');
+        expect(h.isEven, isTrue, reason: 'h=$h');
+        final expr = track.cropExpr(1080, 1920);
+        final m = RegExp(r'crop=\d+:\d+:(\d+):(\d+)').firstMatch(expr)!;
+        expect(int.parse(m.group(1)!).isEven, isTrue, reason: expr);
+        expect(int.parse(m.group(2)!).isEven, isTrue, reason: expr);
+      }
     });
 
     test('reset：还原回单框', () {

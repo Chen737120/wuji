@@ -23,25 +23,22 @@ class CropBox {
   double get top => cy - h / 2;
   double get bottom => cy + h / 2;
 
-  /// 给定比例下"中央默认框"：取画面可容纳的最大 9:16/3:4/1:1 窗的 80%。
-  static CropBox centered(String ratio, {double fill = 0.8}) {
+  /// 给定比例下"中央默认框"：取画面可容纳的最大比例窗的 80%。
+  ///
+  /// 比例锁定指**像素域** w·srcW / h·srcH = ratio——归一化宽高的物理基准
+  /// 不同（w×源宽、h×源高），归一化 w/h 必须含 srcH/srcW 修正，否则
+  /// 9:16 源上选 1:1 实际出 9:16 框、选 9:16 出约 1:3.2 窄条
+  /// （2026-10-12 用户报告"实际比例错误"的根因）。
+  static CropBox centered(String ratio,
+      {required int srcW, required int srcH, double fill = 0.8}) {
     final aspect = _aspect(ratio);
-    // 归一化空间里取 w×h = fill²、w/h = aspect 的最大内接框
-    var w = fill;
-    var h = fill / aspect;
-    if (h > 1) {
-      h = fill;
-      w = fill * aspect;
+    var w = aspect * srcH / srcW; // h=1 时的归一化宽
+    var h = 1.0;
+    if (w > 1) {
+      h = 1 / w;
+      w = 1;
     }
-    // 归一化坐标里宽高单位不同：真实比例在像素域换算由调用方（固定以
-    // 归一化 w/h 比例描述）处理——此处以"归一化正方形×fill"的启发式：
-    // 为保证任意源下框都是比例锁定的可视框，直接取 h=fill*aspect clamp。
-    h = (w / aspect).clamp(0.0, 1.0);
-    if (h < fill * 0.5) {
-      // 极端比例回退
-      h = fill * 0.5;
-    }
-    return CropBox(cx: 0.5, cy: 0.5, w: w, h: h);
+    return CropBox(cx: 0.5, cy: 0.5, w: w * fill, h: h * fill);
   }
 
   static double _aspect(String ratio) {
