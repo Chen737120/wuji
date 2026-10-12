@@ -126,4 +126,49 @@ void main() {
     await tester.pumpAndSettle();
     expect(picked!.name, '小鹿');
   });
+
+  testWidgets('text sheet caps recent chips: teacher 10, studio 6',
+      (tester) async {
+    var tick = 0;
+    final clockRepo = TaxonomyRepo(db,
+        clock: () => DateTime(2026, 1, 1).add(Duration(minutes: tick++)));
+    for (var i = 1; i <= 13; i++) {
+      await clockRepo.touchByName(
+          TaxonomyKind.teacher, '老师${i.toString().padLeft(2, '0')}');
+    }
+    for (var i = 1; i <= 8; i++) {
+      await clockRepo.touchByName(
+          TaxonomyKind.studio, '舞室${i.toString().padLeft(2, '0')}');
+    }
+
+    var kind = TaxonomyKind.teacher;
+    await tester.pumpWidget(host(Builder(builder: (context) => Center(
+      child: TextButton(
+        onPressed: () async {
+          await showTextSheet(context, clockRepo, kind,
+              title: '输入', hint: '输入');
+        },
+        child: const Text('open'),
+      ),
+    ))));
+
+    // 老师：只出最近 10 个（老师04..老师13），更早的不出现
+    await tester.tap(find.text('open'));
+    await tester.pumpAndSettle();
+    expect(find.byType(ActionChip), findsNWidgets(10));
+    expect(find.text('老师13'), findsOneWidget);
+    expect(find.text('老师04'), findsOneWidget);
+    expect(find.text('老师03'), findsNothing);
+    await tester.tap(find.byIcon(Icons.close));
+    await tester.pumpAndSettle();
+
+    // 舞室：只出最近 6 个（舞室03..舞室08）
+    kind = TaxonomyKind.studio;
+    await tester.tap(find.text('open'));
+    await tester.pumpAndSettle();
+    expect(find.byType(ActionChip), findsNWidgets(6));
+    expect(find.text('舞室08'), findsOneWidget);
+    expect(find.text('舞室03'), findsOneWidget);
+    expect(find.text('舞室02'), findsNothing);
+  });
 }

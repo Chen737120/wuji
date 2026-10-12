@@ -118,6 +118,11 @@ class _ComparePageState extends State<ComparePage> {
     }
   }
 
+  /// 是否已播到结尾（video_player 无播放结束回调，用 80ms 阈值判定）。
+  static bool _atEnd(VideoPlayerValue v) =>
+      v.duration > Duration.zero &&
+      v.position >= v.duration - const Duration(milliseconds: 80);
+
   /// 老师播放器作为时钟主。播放期间**完全不做 seek**——
   /// 高频 seek 会把我的视频卡成一帧一帧跳（真机复现）。
   void _onTeacherTick() {
@@ -125,10 +130,7 @@ class _ComparePageState extends State<ComparePage> {
     final m = _mineCtl;
     if (t == null || m == null || !mounted) return;
     if (t.value.isPlaying && !m.value.isPlaying) {
-      final ended = m.value.duration > Duration.zero &&
-          m.value.position >=
-              m.value.duration - const Duration(milliseconds: 80);
-      if (!ended) m.play();
+      if (!_atEnd(m.value)) m.play();
     } else if (!t.value.isPlaying && m.value.isPlaying) {
       m.pause();
     }
@@ -167,6 +169,16 @@ class _ComparePageState extends State<ComparePage> {
       await t.pause();
       await m?.pause();
       return;
+    }
+    // 从头播放（老师已到结尾再点播放）：两个控制器必须一起 pause →
+    // seekTo(0) → play。否则 Android 的 play() 在 ENDED 态只把老师一路
+    // 自动回零，我的视频从原地续播、播到结尾卡住；iOS 连老师都不回零。
+    // 先归零，再走下面的 offset 起点逻辑，两侧才会同步起播。
+    if (_atEnd(t.value)) {
+      await t.pause();
+      await m?.pause();
+      await t.seekTo(Duration.zero);
+      await m?.seekTo(Duration.zero);
     }
     // 播放预览 = 时间微调后的效果（2026-10-05 用户反馈）：
     // offset>0（我的延后）→ 老师从 offset 处先播、我的从 0；

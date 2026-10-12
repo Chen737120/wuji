@@ -127,7 +127,11 @@ class _TextSheetState extends State<_TextSheet> {
               FutureBuilder<List<TaxonomyItem>>(
                 future: _recent,
                 builder: (context, snap) {
-                  final items = snap.data ?? const <TaxonomyItem>[];
+                  // 最近输入上限：舞室 6 个、老师 10 个（其余仍在库里，
+                  // 只是新增弹层不展示；管理页列表不受影响）。
+                  final limit = widget.kind == TaxonomyKind.studio ? 6 : 10;
+                  final items =
+                      (snap.data ?? const <TaxonomyItem>[]).take(limit);
                   return Wrap(
                     spacing: 8,
                     runSpacing: 8,
