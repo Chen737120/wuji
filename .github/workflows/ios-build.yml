@@ -77,8 +77,10 @@ jobs:
           # launch 失败（权限 key 缺失等）直接 fail
           xcrun simctl launch "$DEVICE" com.danceapp.wuji
           sleep 15
-          # 进程仍存活 = 没有启动即闪退
-          xcrun simctl spawn "$DEVICE" launchctl list | grep -q com.danceapp.wuji \
+          # 进程仍存活 = 没有启动即闪退。不能用 grep -q：命中即退出，
+          # launchctl 还在写会吃 SIGPIPE，pipefail 下误报 App died
+          # （2026-10-12 实踩：app 正常启动 PID 10350 仍被判失败）
+          xcrun simctl spawn "$DEVICE" launchctl list | grep com.danceapp.wuji \
             || { echo "App process died within 15s"; exit 1; }
           xcrun simctl io "$DEVICE" screenshot wuji-smoke-1.png
           sleep 3
