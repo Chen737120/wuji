@@ -1,6 +1,28 @@
 import 'dart:io';
+import 'dart:math' as math;
 
 import 'keyframes.dart';
+
+/// 16 宏块对齐（最近取整，下限 16）。
+///
+/// mediacodec 编码面按 16 的倍数编码：非 16 倍数的输出会被 pad 到宏块
+/// 边界、再用 SPS conformance window 裁回显示尺寸。裁剪信号本身是标准的
+/// （相册/系统播放器遵循），但部分设备的 TextureView 播放路径不应用该
+/// 裁剪——padding 区被一起渲染：右侧垃圾色度列=绿条、底部零值行=黑条
+/// （2026-10-12 真机实证：278×534 的成片编码面为 288×544，右裁10底裁10，
+/// 用户报告"成片预览右缘绿条+底部黑条，相册播放正常"）。v1.5.23 的
+/// 偶数对齐防不了它（278×534 本就是偶数），必须 16 对齐让编码面=显示面，
+/// padding 从根上消失。
+int align16(int v) => math.max(16, ((v + 8) ~/ 16) * 16);
+
+/// 导出输出尺寸：不放大规则（高取 crop 原生高与 [outH] 的较小者）+
+/// 16 宏块对齐；宽按 crop 高宽比缩放后同样对齐（纵横比偏差 ≤ ~1.5%，
+/// 不可感知）。预览参数单与导出命令共用，保证参数单即真实输出。
+(int, int) fancamOutputSize(int cropW, int cropH, {int outH = 1080}) {
+  final h = align16(math.min(outH, cropH));
+  final w = align16((cropW * h / cropH).round());
+  return (w, h);
+}
 
 /// 构建舞蹈直拍导出的 FFmpeg 命令（规格 §5.3）。
 ///
@@ -8,7 +30,7 @@ import 'keyframes.dart';
 ///   关键帧时间轴已相对修剪起点（-ss 在 -i 前，滤镜时间 t 从 0 起）；
 /// - crop：[track.cropExpr]（单帧常量；多帧 = 固定最大框 + x/y 逐帧跟随）；
 /// - 不放大规则（Review Focus #3）：输出高 = min(outH=1080, 固定框像素高)，
-///   且**偶数化**（h264_mediacodec 不接受奇数尺寸）；
+///   且输出宽高 **16 宏块对齐**（[fancamOutputSize]，v1.5.24 起）；
 /// - 帧率跟源（不设 fps 滤镜）；音频＝源完整原声 AAC；无音轨源 → `-an`。
 String buildFancamCommand({
   required String srcPath,
@@ -24,11 +46,8 @@ String buildFancamCommand({
     throw ArgumentError('track has no keyframes');
   }
 
-  final (_, cropH) = track.fixedCropSize(srcW, srcH);
-  var outHeight = outH;
-  if (cropH < outHeight) outHeight = cropH;
-  outHeight = outHeight & ~0x1; // 偶数化
-  outHeight = outHeight.clamp(2, outH);
+  final (cropW, cropH) = track.fixedCropSize(srcW, srcH);
+  final (outW, outHeight) = fancamOutputSize(cropW, cropH, outH: outH);
 
   final cropExpr = track.cropExpr(srcW, srcH);
   // 音频显式标准化（docx 排查建议）：aac 48kHz 立体声，避免源特殊采样率
@@ -53,7 +72,7 @@ String buildFancamCommand({
       : '';
 
   return '-y $trimPart-i "$srcPath" $durPart'
-      '-vf "$cropExpr,scale=-2:$outHeight,setsar=1" '
+      '-vf "$cropExpr,scale=$outW:$outHeight,setsar=1" '
       '-c:v $videoCodec -pix_fmt yuv420p -b:v $videoBitrate $audioPart '
       '-movflags +faststart';
 }

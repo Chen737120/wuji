@@ -16,24 +16,25 @@ void main() {
     return t;
   }
 
-  test('单帧：常量 crop + 不放大规则（框高<1080 时输出=框高）', () {
-    // 源 1080x1920，框 0.5x0.5 → 像素 540x960。9:16 比例下框高 960 ≥720 → 输出 720
+  test('单帧：常量 crop + 不放大规则（框高<1080 时输出=框高，16 对齐）', () {
+    // 源 1080x1920，框 0.5x0.5 → 像素 540x960。高 960 恰为 16 倍数；
+    // 宽 540 → 16 对齐 544（宏块 padding 防护，2026-10-12）
     final t = track([[0.5, 0.5, 0.5, 0.5]]);
     final cmd = buildFancamCommand(
         srcPath: '/s.mp4', track: t, srcW: 1080, srcH: 1920);
     expect(cmd, contains('crop=540:960:270:480'));
-    expect(cmd, contains('scale=-2:960'));
+    expect(cmd, contains('scale=544:960'));
     expect(cmd, contains('-c:a aac'));
     expect(cmd, isNot(contains('-an')));
   });
 
-  test('480p 源：框像素高 <720 → 不放大（输出=框像素高，偶数化）(Review Focus #3)', () {
-    // 源 480x854（9:16 附近），框 0.5 高 → 像素高 427 < 720 → 输出取 427；
-    // v1.5.7 起 h264_mediacodec 要求偶数尺寸 → 偶数化为 426
+  test('480p 源：框像素高 <1080 → 不放大（输出=框像素高，16 对齐）(Review Focus #3)', () {
+    // 源 480x854，框 0.5 高 → crop 像素 450x426 → 输出高 426→16 对齐 432、
+    // 宽 450×432/426≈456→464（v1.5.24：非 16 倍数会被编码器 pad 出绿边黑边）
     final t = track([[0.5, 0.5, 0.9412, 0.5]]);
     final cmd = buildFancamCommand(
         srcPath: '/s.mp4', track: t, srcW: 480, srcH: 854);
-    expect(cmd, contains('scale=-2:426'));
+    expect(cmd, contains('scale=464:432'));
   });
 
   test('无声源 → -an（Review Focus #1）', () {
@@ -59,8 +60,8 @@ void main() {
     expect(cmd, contains('crop='));
   });
 
-  test('视频码率显式分档（2026-10-08 需求 #1）：1080→16M / 960→10M / 426→6M', () {
-    // 框高 ≥1080 → 输出 1080 → 16M
+  test('视频码率显式分档（2026-10-08 需求 #1）：1088→16M / 960→10M / 432→6M', () {
+    // 框高 ≥1080 → 输出 1088（1080 的 16 对齐）→ 16M
     final tall = track([[0.5, 0.5, 0.5625, 1.0]]); // h=1.0×1920=1920≥1080
     expect(
         buildFancamCommand(
@@ -72,11 +73,27 @@ void main() {
         buildFancamCommand(
             srcPath: '/s.mp4', track: mid, srcW: 1080, srcH: 1920),
         contains('-b:v 10M'));
-    // 框高 426 → 输出 426 → 6M
+    // 框高 426 → 输出 432 → 6M
     final small = track([[0.5, 0.5, 0.9412, 0.5]]);
     expect(
         buildFancamCommand(
             srcPath: '/s.mp4', track: small, srcW: 480, srcH: 854),
         contains('-b:v 6M'));
+  });
+
+  test('fancamOutputSize：16 宏块对齐 + 不放大（绿边黑边根因回归）', () {
+    // 2026-10-12 真机实证：278×534 输出被编码器 pad 到 288×544（右10底10
+    // conformance crop），部分设备 TextureView 不应用 crop → 绿条黑条。
+    // 输出必须本身就是 16 的倍数。
+    final (w, h) = fancamOutputSize(278, 534);
+    expect(w % 16, 0, reason: 'w=$w');
+    expect(h % 16, 0, reason: 'h=$h');
+    expect(h, lessThanOrEqualTo(534)); // 不放大：不超 crop 原生高
+    // 常规 9:16 框：540x960 → (544, 960)
+    expect(fancamOutputSize(540, 960), (544, 960));
+    // 大框：crop 高超 1080 → 输出高 1088（1080 的 16 对齐）
+    final (bw, bh) = fancamOutputSize(864, 1536);
+    expect(bh, 1088);
+    expect(bw % 16, 0, reason: 'bw=$bw');
   });
 }

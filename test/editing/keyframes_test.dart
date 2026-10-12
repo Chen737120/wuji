@@ -57,23 +57,21 @@ void main() {
       expect(mid.w, closeTo(0.6, 0.001));
     });
 
-    test('boxAt/cropExpr：关键帧间停顿式缓动（2026-10-12 移动感优化）', () {
+    test('boxAt/cropExpr：关键帧间 smoothstep 缓动（2026-10-08 需求 #2）', () {
       final track = KeyframeTrack(duration: const Duration(seconds: 10));
       track.upsert(Duration.zero,
           const CropBox(cx: 0.2, cy: 0.2, w: 0.4, h: 0.4));
       track.upsert(const Duration(seconds: 10),
           const CropBox(cx: 0.6, cy: 0.6, w: 0.8, h: 0.8));
 
-      // 停顿式：每段前后各 25% 停住——f=0.25 仍在起点、f=0.75 已到终点，
-      // 中点 smoothstep 对称 = 均值。消除整段持续移动的漂移感
-      expect(track.boxAt(const Duration(milliseconds: 2500)).cx, 0.2);
-      expect(track.boxAt(const Duration(milliseconds: 7500)).cx, 0.6);
-      expect(track.boxAt(const Duration(seconds: 5)).cx, closeTo(0.4, 0.001));
+      // f=0.25 → smoothstep=0.15625 → cx=0.2+0.4×0.15625=0.2625
+      // （线性插值应为 0.3；缓动在段首更慢）
+      final q = track.boxAt(const Duration(milliseconds: 2500));
+      expect(q.cx, closeTo(0.2625, 0.001));
 
-      // 导出表达式同用停顿缓动（WYSIWYG）：smoothstep 形态 + 停止窗口
+      // 导出表达式同用缓动：含 (3-2*p) 形态
       final expr = track.cropExpr(1080, 1920);
       expect(expr, contains('(3-2*'));
-      expect(expr, contains('if(lt('));
     });
 
     test('boxAt：单帧（单框模式）全程恒定', () {

@@ -43,18 +43,20 @@ class _FancamPreviewPageState extends State<FancamPreviewPage> {
   double _progress = 0;
   bool _saving = false;
   late final String _command;
+  late final int _outWidth;
   late final int _outHeight;
   ExportService? _svc;
 
   @override
   void initState() {
     super.initState();
-    // 不放大规则：输出高 = min(1080, 固定框像素高)，偶数化（与导出命令一致）
-    var h = 1080;
-    final (_, cropH) = widget.track.fixedCropSize(widget.srcW, widget.srcH);
-    if (cropH < h) h = cropH;
-    h = h & ~0x1;
-    _outHeight = h.clamp(2, 1080);
+    // 输出尺寸与导出命令共用 fancamOutputSize（不放大 + 16 宏块对齐，
+    // 2026-10-12：非 16 倍数输出会被编码器 pad，部分设备预览渲染出
+    // 右缘绿条/底部黑条），参数单展示的就是真实输出。
+    final (cropW, cropH) = widget.track.fixedCropSize(widget.srcW, widget.srcH);
+    final (outW, outH) = fancamOutputSize(cropW, cropH);
+    _outWidth = outW;
+    _outHeight = outH;
     _command = buildFancamCommand(
       srcPath: widget.sourcePath,
       track: widget.track,
@@ -130,12 +132,6 @@ class _FancamPreviewPageState extends State<FancamPreviewPage> {
   @override
   Widget build(BuildContext context) {
     final accent = Theme.of(context).colorScheme.primary;
-    final outW = (widget.ratio == '1:1'
-            ? _outHeight
-            : widget.ratio == '9:16'
-                ? _outHeight * 9 / 16
-                : _outHeight * 3 / 4)
-        .round();
     if (_exportedPath != null) {
       return Scaffold(
         backgroundColor: Colors.black,
@@ -213,7 +209,7 @@ class _FancamPreviewPageState extends State<FancamPreviewPage> {
                         color: AppColors.secondary)),
                 const SizedBox(height: 12),
                 _row('比例', widget.ratio),
-                _row('输出分辨率', '$outW × $_outHeight'),
+                _row('输出分辨率', '$_outWidth × $_outHeight'),
                 _row('音频', widget.hasAudio ? '源视频完整原声' : '静音'),
                 _row('关键帧', '${widget.keyframeCount} 个'),
                 if (widget.trimEnd != null)
