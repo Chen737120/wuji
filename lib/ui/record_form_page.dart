@@ -1,13 +1,16 @@
 import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
+import 'package:path_provider/path_provider.dart';
 import 'package:provider/provider.dart';
 import 'package:uuid/uuid.dart';
+import 'package:video_thumbnail/video_thumbnail.dart';
 import '../data/app_repository.dart' show ClassDraft, ClassSaver;
 import '../data/db.dart' show ClassRecord, TaxonomyItem, ClassRecordRowX;
 import '../data/taxonomy_repo.dart';
 import '../models/models.dart';
 import '../reload_bus.dart';
+import '../services/abs_path_cache.dart';
 import '../services/archive_fs.dart' show MediaPathResolver;
 import '../services/media_importer.dart';
 import '../theme.dart';
@@ -44,6 +47,50 @@ class _RecordFormPageState extends State<RecordFormPage> {
   final _existingMedia = <ExistingMedia>[]; // 编辑模式的旧附件
   final _removedIds = <String>[]; // 编辑时被 ✕ 的旧附件 id
   bool _saving = false;
+
+  // 表单条目封面缓存（2026-10-24 需求）：coverKey → 封面绝对路径。
+  // 新选视频=video_thumbnail 生成临时封面（异步，完成即刷新）；
+  // 新选图片=原图自身；旧附件=thumbName（图片退 fileName）经 AbsPathCache 解析。
+  final _coverPaths = <String, String>{};
+  final _coverPending = <String>{}; // 生成中/解析中，防重复触发
+
+  /// 为本次新选的视频生成临时封面（56×42 小图，maxWidth 200 够用）。
+  Future<void> _generateVideoCover(String coverKey, String videoPath) async {
+    _coverPending.add(coverKey);
+    try {
+      final bytes = await VideoThumbnail.thumbnailData(
+          video: videoPath,
+          imageFormat: ImageFormat.JPEG,
+          quality: 60,
+          maxWidth: 200);
+      if (bytes == null || bytes.isEmpty) return;
+      final tmp = await getTemporaryDirectory();
+      final dir = Directory('${tmp.path}/wuji-form-thumb');
+      if (!dir.existsSync()) dir.createSync(recursive: true);
+      final f = File('${dir.path}/${const Uuid().v4()}.jpg');
+      await f.writeAsBytes(bytes);
+      if (mounted) setState(() => _coverPaths[coverKey] = f.path);
+    } catch (_) {
+      // 测试环境/取帧失败：留图标占位，不阻塞表单
+    } finally {
+      _coverPending.remove(coverKey);
+    }
+  }
+
+  /// 解析旧附件封面（SAF 复制有开销，AbsPathCache 进程内去重）。
+  Future<void> _resolveCover(String coverKey, String rel) async {
+    _coverPending.add(coverKey);
+    final resolver = context.read<MediaPathResolver?>();
+    try {
+      final path = await AbsPathCache.resolve(resolver, rel);
+      if (path != null && mounted) {
+        setState(() => _coverPaths[coverKey] = path);
+      }
+    } catch (_) {
+    } finally {
+      _coverPending.remove(coverKey);
+    }
+  }
 
   ClassSaver get _repo => context.read<ClassSaver>();
   MediaImporter get _importer => widget.importer ?? const PluginMediaImporter();
@@ -360,16 +407,32 @@ class _RecordFormPageState extends State<RecordFormPage> {
     return Column(
       children: [
         for (final em in _existingMedia)
-          _mediaTile(em.fileName, em.thumbName, em.isVideo, () {
-            setState(() {
-              _existingMedia.remove(em);
-              _removedIds.add(em.id);
-            });
-          }, onPreview: () => _previewExisting(em)),
+          _mediaTile(
+              coverKey: em.thumbName ?? 'old:${em.fileName}',
+              title: em.fileName
+                  .split(Platform.pathSeparator)
+                  .last
+                  .split('/')
+                  .last,
+              isVideo: em.isVideo,
+              rel: em.thumbName ?? (em.isVideo ? null : em.fileName),
+              onRemove: () {
+                setState(() {
+                  _existingMedia.remove(em);
+                  _removedIds.add(em.id);
+                });
+              },
+              onPreview: () => _previewExisting(em)),
         for (final p in _picked)
-          _mediaTile(p.path, null, p.isVideo, () {
-            setState(() => _picked.remove(p));
-          }, onPreview: () => _previewPicked(p)),
+          _mediaTile(
+              coverKey: p.path,
+              title: p.path.split(Platform.pathSeparator).last.split('/').last,
+              isVideo: p.isVideo,
+              pickedPath: p.path,
+              onRemove: () {
+                setState(() => _picked.remove(p));
+              },
+              onPreview: () => _previewPicked(p)),
         const SizedBox(height: 6),
         Align(
           alignment: Alignment.centerLeft,
@@ -383,9 +446,31 @@ class _RecordFormPageState extends State<RecordFormPage> {
     );
   }
 
-  Widget _mediaTile(String pathOrRel, String? thumb, bool isVideo,
-      VoidCallback onRemove,
-      {VoidCallback? onPreview}) {
+  /// 表单条目：封面小图（有封面显示封面，视频叠播放角标）＋文件名＋移除。
+  /// [pickedPath] 本次新选的绝对路径（视频用它生成封面，图片直接显示）；
+  /// [rel] 旧附件的封面相对路径（视频无 thumbName 时为 null，留图标占位）。
+  Widget _mediaTile({
+    required String coverKey,
+    required String title,
+    required bool isVideo,
+    String? pickedPath,
+    String? rel,
+    required VoidCallback onRemove,
+    VoidCallback? onPreview,
+  }) {
+    String? cover;
+    if (pickedPath != null && !isVideo) {
+      cover = pickedPath; // 新选图片：原图即封面
+    } else {
+      cover = _coverPaths[coverKey];
+      if (cover == null && !_coverPending.contains(coverKey)) {
+        if (pickedPath != null) {
+          _generateVideoCover(coverKey, pickedPath);
+        } else if (rel != null) {
+          _resolveCover(coverKey, rel);
+        }
+      }
+    }
     return Padding(
       padding: const EdgeInsets.only(bottom: 6),
       child: GestureDetector(
@@ -397,16 +482,43 @@ class _RecordFormPageState extends State<RecordFormPage> {
             width: 56,
             height: 42,
             decoration: BoxDecoration(
-              color: AppColors.ink,
+              color: AppColors.hairline, // 软占位色：封面生成前不再黑块
               borderRadius: BorderRadius.circular(6),
             ),
+            clipBehavior: Clip.antiAlias,
             alignment: Alignment.center,
-            child: Icon(isVideo ? Icons.play_arrow : Icons.image,
-                color: AppColors.bg, size: 18),
+            child: cover == null
+                ? Icon(isVideo ? Icons.play_arrow : Icons.image,
+                    color: AppColors.faint, size: 18)
+                : Stack(
+                    fit: StackFit.expand,
+                    children: [
+                      Image.file(File(cover),
+                          fit: BoxFit.cover,
+                          cacheWidth: 200, // 56×42 小图：限解码宽防卡顿
+                          errorBuilder: (_, _, _) => Icon(
+                              isVideo ? Icons.play_arrow : Icons.image,
+                              color: AppColors.faint,
+                              size: 18)),
+                      if (isVideo)
+                        Center(
+                          child: Container(
+                            width: 18,
+                            height: 18,
+                            decoration: const BoxDecoration(
+                                color: Colors.black38,
+                                shape: BoxShape.circle),
+                            alignment: Alignment.center,
+                            child: const Icon(Icons.play_arrow,
+                                color: Colors.white, size: 13),
+                          ),
+                        ),
+                    ],
+                  ),
           ),
           const SizedBox(width: 10),
           Expanded(
-            child: Text(pathOrRel.split(Platform.pathSeparator).last.split('/').last,
+            child: Text(title,
                 maxLines: 1,
                 overflow: TextOverflow.ellipsis,
                 style: const TextStyle(fontSize: 12)),

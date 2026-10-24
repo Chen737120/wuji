@@ -128,6 +128,46 @@ void main() {
     expect(find.text('编辑这节课'), findsOneWidget);
   });
 
+  testWidgets('picked image uses itself as tile cover', (tester) async {
+    // 2026-10-24 需求：表单条目显示封面——新选图片直接用原图当封面
+    await tester.pumpWidget(host(RecordFormPage(
+      importer: FakeImporter([pm('/x/b.jpg', video: false)]),
+    )));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('视频 / 图片'));
+    await tester.pumpAndSettle();
+    // Image.file 已构建（测试里文件不存在时 errorBuilder 兜底成图标，
+    // 但 Image widget 本身在树中）
+    expect(find.byType(Image), findsOneWidget);
+  });
+
+  testWidgets('edit mode resolves existing thumb into tile cover image', (tester) async {
+    final existing = ClassRecord(
+      id: 'r2',
+      date: '2026-09-30',
+      sessionCount: 1,
+      minutesEach: 60,
+      createdAt: DateTime.now(),
+      updatedAt: DateTime.now(),
+    );
+    repo.mediaRows = [
+      MediaAsset(
+        id: 'm2',
+        classId: 'r2',
+        type: 'video',
+        fileName: 'media/2026-09/def.mp4',
+        thumbName: 'thumbs/t.jpg',
+        sizeBytes: 1,
+        createdAt: DateTime.now(),
+      ),
+    ];
+    await tester.pumpWidget(host(RecordFormPage(existing: existing)));
+    await tester.pumpAndSettle();
+    // resolver 为 null → cover=rel 本身，Image.file 仍会构建（errorBuilder 兜底）
+    expect(find.byType(Image), findsOneWidget);
+    expect(find.text('def.mp4'), findsOneWidget);
+  });
+
   testWidgets('save button disables and shows 保存中 until save completes',
       (tester) async {
     // 用真实 push 结构，保存完成后 pop 回来（根路由上 pop 是 no-op）；
