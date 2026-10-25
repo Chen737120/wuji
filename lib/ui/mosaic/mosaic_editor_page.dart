@@ -1,0 +1,483 @@
+import 'dart:io';
+
+import 'package:flutter/material.dart';
+import 'package:video_player/video_player.dart';
+
+import '../../editing/keyframes.dart';
+import '../../editing/mosaic_editor_state.dart';
+import '../../editing/mosaic_region.dart';
+import '../../theme.dart';
+
+/// 打码编辑器（spec §3.3）：视频最大化＋区域框叠加＋底部工具条。
+/// embedded=true（直拍内嵌）→ 底部主按钮「完成」pop 回区域列表；
+/// embedded=false（独立入口）→ 「导出」，由宿主回调 onExport。
+class MosaicEditorPage extends StatefulWidget {
+  const MosaicEditorPage({
+    super.key,
+    required this.srcPath,
+    required this.srcW,
+    required this.srcH,
+    required this.durationMs,
+    this.initialRegions = const [],
+    required this.embedded,
+    this.onExport,
+  });
+
+  final String srcPath;
+
+  /// 源视频尺寸（video_player 已应用 rotation 的像素域，与导出滤镜一致）。
+  final int srcW;
+  final int srcH;
+  final int durationMs;
+  final List<MosaicRegion> initialRegions;
+  final bool embedded;
+  final void Function(List<MosaicRegion> regions)? onExport;
+
+  @override
+  State<MosaicEditorPage> createState() => _MosaicEditorPageState();
+}
+
+class _MosaicEditorPageState extends State<MosaicEditorPage> {
+  late final MosaicEditorState _state;
+  late final VideoPlayerController _player;
+  double _viewScale = 1;
+  Offset _viewOffset = Offset.zero;
+  bool _immersive = false;
+  String? _snapshotPath; // 当前 position 的帧快照，Task 5 接入生成
+  bool _playing = false;
+
+  @override
+  void initState() {
+    super.initState();
+    _state = MosaicEditorState(
+      duration: Duration(milliseconds: widget.durationMs),
+      srcW: widget.srcW,
+      srcH: widget.srcH,
+      initialRegions: widget.initialRegions,
+    );
+    _player = VideoPlayerController.file(File(widget.srcPath));
+    _player.initialize().then((_) {
+      if (mounted) setState(() {});
+    });
+    _player.addListener(_onPlayerTick);
+  }
+
+  /// 播放中随帧同步 state.position（否则叠加框/轨道不动）并刷新。
+  /// 拖动/关键帧落点同样读 state.position，两处口径一致。
+  void _onPlayerTick() {
+    final playing = _player.value.isPlaying;
+    if (playing != _playing) {
+      setState(() => _playing = playing);
+    }
+    if (playing) {
+      setState(() => _state.seekTo(_player.value.position));
+    }
+  }
+
+  @override
+  void dispose() {
+    _player.dispose();
+    super.dispose();
+  }
+
+  /// 「区域」：到 5 个上限时提示且不新增（spec §7；addRegion 底层
+  /// 超限会静默返回末位区域，UI 侧前置拦截）。
+  void _addRegion() {
+    if (_state.regions.length >= MosaicRegion.maxRegions) {
+      ScaffoldMessenger.of(context)
+          .showSnackBar(const SnackBar(content: Text('最多 5 个区域')));
+      return;
+    }
+    setState(_state.addRegion);
+  }
+
+  /// 「关键帧」：当前时刻 upsert（同刻替换不算新增，不受上限拦）。
+  /// addKeyframeAtPosition 无返回值，先按 KeyframeTrack.maxFrames 前置判断。
+  void _addKeyframe() {
+    final sel = _state.selected;
+    if (sel == null) return;
+    final track = sel.track;
+    final replaceSame = track.frames.any((f) => f.t == _state.position);
+    if (track.frames.length >= KeyframeTrack.maxFrames && !replaceSame) {
+      ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('关键帧已达 10 个上限')));
+      return;
+    }
+    setState(_state.addKeyframeAtPosition);
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      backgroundColor: Colors.black,
+      body: Stack(children: [
+        SafeArea(
+          child: Column(children: [
+            Expanded(
+              child: Center(
+                child: AspectRatio(
+                  aspectRatio: widget.srcW / widget.srcH,
+                  child: Stack(fit: StackFit.expand, children: [
+                    if (_player.value.isInitialized)
+                      VideoPlayer(_player)
+                    else
+                      const ColoredBox(color: Colors.black12),
+                    if (!_playing && _snapshotPath != null)
+                      Image.file(File(_snapshotPath!), fit: BoxFit.fill),
+                    OverlayEditor(
+                      state: _state,
+                      canvasSize: Size(
+                          widget.srcW.toDouble(), widget.srcH.toDouble()),
+                      immersive: _immersive,
+                      onChanged: () => setState(() {}),
+                      onToggleImmersive: () =>
+                          setState(() => _immersive = !_immersive),
+                      viewScale: _viewScale,
+                      viewOffset: _viewOffset,
+                      onViewTransformed: (scale, offset) => setState(() {
+                        _viewScale = scale;
+                        _viewOffset = offset;
+                      }),
+                      onSeek: (t) => setState(() {
+                        _state.seekTo(t);
+                        _player.seekTo(t);
+                        _snapshotPath = null; // 位置变了，快照失效待重生成
+                      }),
+                      onPause: () => _player.pause(),
+                    ),
+                  ]),
+                ),
+              ),
+            ),
+            if (!_immersive)
+              MosaicToolbar(
+                state: _state,
+                hasSelection: _state.selected != null,
+                onAddRegion: _addRegion,
+                onAddKeyframe: _addKeyframe,
+                onDeleteRegion: () => setState(() {
+                  if (_state.selectedId != null) {
+                    _state.removeRegion(_state.selectedId!);
+                  }
+                }),
+                onPrimary: () {
+                  if (widget.embedded) {
+                    Navigator.pop(context, _state.regions);
+                  } else {
+                    widget.onExport?.call(_state.regions);
+                  }
+                },
+                primaryLabel: widget.embedded ? '完成' : '导出',
+              ),
+          ]),
+        ),
+        // 返回（fancam 同款顶部返回；brief 未画，独立入口需要出口）
+        SafeArea(
+          child: Align(
+            alignment: Alignment.topLeft,
+            child: IconButton(
+              icon: const Icon(Icons.arrow_back, color: Colors.white),
+              onPressed: () => Navigator.pop(context),
+            ),
+          ),
+        ),
+      ]),
+    );
+  }
+}
+
+/// 区域框叠加层＋手势（无播放器依赖，可 widget 测试）。
+/// 手势分工照抄 fancam_page：单指拖框体=移动；拖角柄（右下）=缩放；
+/// 双指=查看缩放/平移（仅查看 1×~4×）；双击=复位查看；点空白=取消选中/切沉浸。
+class OverlayEditor extends StatefulWidget {
+  const OverlayEditor({
+    super.key,
+    required this.state,
+    required this.canvasSize,
+    required this.immersive,
+    required this.onChanged,
+    required this.onToggleImmersive,
+    this.viewScale = 1,
+    this.viewOffset = Offset.zero,
+    this.onViewTransformed,
+    this.onSeek,
+    this.onPause,
+  });
+
+  final MosaicEditorState state;
+
+  /// 源画面归一化坐标系基准（语义标注；实际布局以 LayoutBuilder 约束为准）。
+  final Size canvasSize;
+  final bool immersive;
+  final VoidCallback onChanged;
+  final VoidCallback onToggleImmersive;
+  final double viewScale;
+  final Offset viewOffset;
+  final void Function(double scale, Offset offset)? onViewTransformed;
+  final void Function(Duration t)? onSeek;
+  final void Function()? onPause;
+
+  @override
+  State<OverlayEditor> createState() => _OverlayEditorState();
+}
+
+class _OverlayEditorState extends State<OverlayEditor> {
+  /// 捏合起始时的查看缩放。onScaleUpdate 的 d.scale 自手势起累计（1.0 起），
+  /// 若直接 viewScale * d.scale，中途 onViewTransformed 更新 viewScale 会
+  /// 复利放大（fancam_page _panStart 同款问题域），须记手势起点基准。
+  double? _scaleBase;
+
+  @override
+  Widget build(BuildContext context) {
+    final state = widget.state;
+    return LayoutBuilder(builder: (context, constraints) {
+      final w = constraints.maxWidth;
+      final h = constraints.maxHeight;
+
+      Widget boxLayer(int i) {
+        final r = state.regions[i];
+        final b = r.track.boxAt(state.position);
+        final selected = r.id == state.selectedId;
+        // 归一化框 → 布局像素（乘 viewScale 平移 viewOffset 实现查看缩放）
+        final rect = Rect.fromLTWH(
+          (b.cx - b.w / 2) * w * widget.viewScale + widget.viewOffset.dx,
+          (b.cy - b.h / 2) * h * widget.viewScale + widget.viewOffset.dy,
+          b.w * w * widget.viewScale,
+          b.h * h * widget.viewScale,
+        );
+        return Positioned.fromRect(
+          key: ValueKey('mosaic-box-$i'),
+          rect: rect,
+          child: GestureDetector(
+            behavior: HitTestBehavior.translucent,
+            onTap: () {
+              state.selectedId = r.id;
+              widget.onChanged();
+            },
+            onPanStart: (_) => widget.onPause?.call(),
+            onPanUpdate: (d) {
+              // 拖框体：布局像素位移 → 归一化位移（除以 viewScale）
+              state.moveSelectedBy(Offset(
+                d.delta.dx / (w * widget.viewScale),
+                d.delta.dy / (h * widget.viewScale),
+              ));
+              widget.onChanged();
+            },
+            child: Container(
+              decoration: BoxDecoration(
+                border: Border.all(
+                  color: selected
+                      ? Theme.of(context).colorScheme.primary
+                      : Colors.white,
+                  width: selected ? 2 : 1,
+                ),
+              ),
+              // 角柄：右下（选中时），拖动缩放（fancam 角柄模式）
+              child: selected
+                  ? Align(
+                      alignment: Alignment.bottomRight,
+                      child: GestureDetector(
+                        behavior: HitTestBehavior.opaque,
+                        onPanUpdate: (d) {
+                          final f = 1 +
+                              (d.delta.dx + d.delta.dy) /
+                                  ((w + h) * widget.viewScale) *
+                                  2;
+                          state.scaleSelectedBy(f);
+                          widget.onChanged();
+                        },
+                        child: const Padding(
+                          padding: EdgeInsets.all(4),
+                          child: Icon(Icons.control_camera,
+                              size: 20, color: Colors.white),
+                        ),
+                      ),
+                    )
+                  : null,
+            ),
+          ),
+        );
+      }
+
+      return GestureDetector(
+        behavior: HitTestBehavior.translucent,
+        // 双指查看缩放/平移（fancam 模式：仅 pointerCount>=2 参与缩放判定）
+        onScaleStart: (_) => _scaleBase = widget.viewScale,
+        onScaleUpdate: (d) {
+          if (d.pointerCount < 2 || widget.onViewTransformed == null) return;
+          widget.onViewTransformed!(
+            ((_scaleBase ?? widget.viewScale) * d.scale).clamp(1.0, 4.0),
+            widget.viewOffset + d.focalPointDelta,
+          );
+        },
+        onScaleEnd: (_) => _scaleBase = null,
+        // 双击复位查看（fancam 同款；须注册 onDoubleTap 回调本身才生效）
+        onDoubleTap: () => widget.onViewTransformed?.call(1, Offset.zero),
+        onTap: () {
+          if (state.selectedId != null) {
+            state.selectedId = null;
+            widget.onChanged();
+          } else {
+            widget.onToggleImmersive();
+          }
+        },
+        child: Stack(
+          children: [
+            for (var i = 0; i < state.regions.length; i++) boxLayer(i),
+            if (!widget.immersive && state.regions.isNotEmpty)
+              Align(
+                alignment: Alignment.bottomCenter,
+                child: _TrackBar(
+                  duration: state.duration,
+                  position: state.position,
+                  frames: state.selected?.track.frames ?? const [],
+                  onSeek: widget.onSeek ?? (_) {},
+                  onDeleteKeyframe: (t) {
+                    state.removeKeyframeAt(t);
+                    widget.onChanged();
+                  },
+                ),
+              ),
+          ],
+        ),
+      );
+    });
+  }
+}
+
+/// 底部工具条（效果/强度/区域管理/主按钮）。
+class MosaicToolbar extends StatelessWidget {
+  const MosaicToolbar({
+    super.key,
+    required this.state,
+    required this.hasSelection,
+    required this.onAddRegion,
+    required this.onAddKeyframe,
+    required this.onDeleteRegion,
+    this.onPrimary,
+    this.primaryLabel,
+  });
+
+  final MosaicEditorState state;
+  final bool hasSelection;
+  final VoidCallback onAddRegion;
+  final VoidCallback onAddKeyframe;
+  final VoidCallback onDeleteRegion;
+  final VoidCallback? onPrimary;
+  final String? primaryLabel;
+
+  @override
+  Widget build(BuildContext context) {
+    final sel = state.selected;
+    return Container(
+      color: AppColors.bg,
+      padding: const EdgeInsets.fromLTRB(12, 8, 12, 12),
+      child: Column(mainAxisSize: MainAxisSize.min, children: [
+        Row(children: [
+          Expanded(
+            child: SegmentedButton<MosaicEffect>(
+              segments: const [
+                ButtonSegment(value: MosaicEffect.mosaic, label: Text('马赛克')),
+                ButtonSegment(value: MosaicEffect.blur, label: Text('模糊')),
+              ],
+              selected: {sel?.effect ?? MosaicEffect.mosaic},
+              onSelectionChanged: hasSelection
+                  ? (s) => state.setEffect(s.first)
+                  : null,
+            ),
+          ),
+          // 强度三档：细/中/粗
+          for (var i = 0; i < 3; i++)
+            IconButton(
+              key: ValueKey('strength-$i'),
+              onPressed: hasSelection ? () => state.setStrength(i) : null,
+              isSelected: sel?.strength == i,
+              icon: Icon(const [Icons.grain, Icons.circle, Icons.blur_on][i],
+                  size: 18),
+              tooltip: const ['细', '中', '粗'][i],
+            ),
+        ]),
+        Row(children: [
+          TextButton.icon(
+              onPressed: onAddRegion,
+              icon: const Icon(Icons.add),
+              label: const Text('区域')),
+          TextButton.icon(
+              onPressed: hasSelection ? onAddKeyframe : null,
+              icon: const Icon(Icons.push_pin),
+              label: const Text('关键帧')),
+          TextButton.icon(
+              onPressed: hasSelection ? onDeleteRegion : null,
+              icon: const Icon(Icons.delete_outline),
+              label: const Text('删除')),
+          const Spacer(),
+          FilledButton(
+            onPressed: onPrimary,
+            child: Text(primaryLabel ?? '完成'),
+          ),
+        ]),
+      ]),
+    );
+  }
+}
+
+/// 简化轨道：进度条＋关键帧圆点（点击 seek、长按删除）。选中区域无轨道时隐藏圆点。
+class _TrackBar extends StatelessWidget {
+  const _TrackBar({
+    required this.duration,
+    required this.position,
+    required this.frames,
+    required this.onSeek,
+    required this.onDeleteKeyframe,
+  });
+
+  final Duration duration;
+  final Duration position;
+  final List<Keyframe> frames;
+  final void Function(Duration t) onSeek;
+  final void Function(Duration t) onDeleteKeyframe;
+
+  @override
+  Widget build(BuildContext context) {
+    final durMs = duration.inMilliseconds;
+    double ratioOf(Duration t) => durMs == 0 ? 0.0 : t.inMilliseconds / durMs;
+    final ratio = ratioOf(position).clamp(0.0, 1.0);
+    return Padding(
+      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+      child: LayoutBuilder(builder: (context, c) {
+        final w = c.maxWidth;
+        return SizedBox(
+          height: 28,
+          child: Stack(alignment: Alignment.centerLeft, children: [
+            GestureDetector(
+              behavior: HitTestBehavior.opaque,
+              onTapUp: (d) => onSeek(duration * (d.localPosition.dx / w)),
+              child: SizedBox(
+                height: 28,
+                width: w,
+                child: Center(
+                  child: LinearProgressIndicator(value: ratio, minHeight: 3),
+                ),
+              ),
+            ),
+            // 关键帧圆点：按 t/duration 比例定位；命中区放大到 24dp 便于长按
+            for (final f in frames)
+              Positioned(
+                left: ratioOf(f.t).clamp(0.0, 1.0) * w - 12,
+                child: GestureDetector(
+                  behavior: HitTestBehavior.opaque,
+                  onLongPress: () => onDeleteKeyframe(f.t),
+                  child: const SizedBox(
+                    width: 24,
+                    height: 28,
+                    child: Center(
+                        child: Icon(Icons.circle, size: 10, color: Colors.white70)),
+                  ),
+                ),
+              ),
+          ]),
+        );
+      }),
+    );
+  }
+}
