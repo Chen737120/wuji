@@ -25,6 +25,11 @@ import 'ui/fancam/fancam_page.dart';
 import 'ui/compare/compare_page.dart';
 import 'ui/compare/compare_pick_page.dart';
 import 'editing/media_source_picker.dart';
+import 'editing/ffmpeg_probe.dart';
+import 'editing/export_service.dart';
+import 'editing/mosaic_export.dart';
+import 'editing/mosaic_region.dart';
+import 'ui/mosaic/mosaic_editor_page.dart';
 import 'ui/fancam/trim_page.dart';
 import 'ui/record_form_page.dart';
 import 'ui/records_page.dart';
@@ -295,6 +300,7 @@ class _AppRootState extends State<AppRoot> {
                     EditHubPage(
                       onFancam: () => _startFancam(),
                       onCompare: () => _startCompare(),
+                      onMosaic: () => _startMosaic(),
                     ),
                     const StatsPage(), // 统计
                   ],
@@ -340,6 +346,141 @@ class _AppRootState extends State<AppRoot> {
     nav.push(MaterialPageRoute(
         builder: (_) => ComparePage(
             teacher: picked.teacher, mine: picked.mine)));
+  }
+
+  /// 视频打码（规格 §3 独立入口）：选视频 → 打码编辑器 → 导出入相册。
+  Future<void> _startMosaic() async {
+    final nav = _navigatorKey.currentState;
+    if (nav == null) return;
+    final src = await showVideoSourceSheet(
+      nav.context,
+      albumPicker: pickSingleVideoFromAlbum,
+      archivePicker: showRecordMediaPicker,
+    );
+    if (src == null || !mounted) return;
+    final info = await probeMedia(src.path);
+    if (!mounted) return;
+    if (info == null) {
+      ScaffoldMessenger.of(nav.context).showSnackBar(
+          const SnackBar(content: Text('视频不可读，请重新选择')));
+      return;
+    }
+    nav.push(MaterialPageRoute(
+      builder: (_) => MosaicEditorPage(
+        srcPath: src.path,
+        srcW: info.width,
+        srcH: info.height,
+        durationMs: info.durationMs,
+        embedded: false,
+        // 对话框/Snackbar 必须走根 Navigator 的 context（本 State 的
+        // context 在 MaterialApp 之上，见 _showOnboardDialog 注释）
+        onExport: (regions) =>
+            _exportMosaic(nav.context, src.path, info, regions),
+      ),
+    ));
+  }
+
+  /// 独立打码导出（规格 §5.3/§7）：无直拍的两步预览确认环节，
+  /// run 默认 autoSave=true 直接搬进相册 Movies/wuji/；进度对话框
+  /// 可取消（取消→ExportCancelled→静默关框）；成功提示相册路径。
+  ///
+  /// [navCtx] 必须是根 Navigator 的 context（对话框/Snackbar 出口）。
+  Future<void> _exportMosaic(BuildContext navCtx, String srcPath,
+      MediaInfo info, List<MosaicRegion> regions) async {
+    // 空区域时 filter_complex 直通但 -map "[…]" 无合法输出标签（编辑器
+    // 「导出」按钮未拦），UI 侧前置拦截
+    if (regions.isEmpty) {
+      ScaffoldMessenger.of(navCtx).showSnackBar(
+          const SnackBar(content: Text('请先添加打码区域')));
+      return;
+    }
+    // 规格 §7：4K 或超 5 分钟，先告知预计耗时再进导出
+    if (info.height > 2160 || info.durationMs > 300000) {
+      final mins = (info.durationMs / 60000).round();
+      final why = info.height > 2160
+          ? '分辨率超过 4K'
+          : (mins > 0 ? '时长约 $mins 分钟' : '时长较长');
+      final goOn = await showDialog<bool>(
+        context: navCtx,
+        builder: (ctx) => AlertDialog(
+          backgroundColor: Colors.white,
+          title: const Text('导出提示',
+              style: TextStyle(fontSize: 16, fontWeight: FontWeight.w700)),
+          content: Text('该视频$why，打码导出可能需要较长时间，请耐心等待。',
+              style: const TextStyle(fontSize: 13, height: 1.7)),
+          actions: [
+            TextButton(
+                onPressed: () => Navigator.pop(ctx, false),
+                child: const Text('取消')),
+            FilledButton(
+                onPressed: () => Navigator.pop(ctx, true),
+                child: const Text('继续')),
+          ],
+        ),
+      );
+      if (goOn != true || !navCtx.mounted) return;
+    }
+    final cmd = buildMosaicExportCommand(
+        srcPath: srcPath, regions: regions, info: info);
+    final svc = ExportService(runner: FFmpegKitRunner(), mover: GalleryMover());
+    final progress = ValueNotifier<double>(0);
+    var dialogOpen = true;
+    unawaited(showDialog<void>(
+      context: navCtx,
+      barrierDismissible: false,
+      builder: (dlgCtx) => PopScope(
+        canPop: false, // 导出中不可返回键关框；取消走「取消」按钮
+        child: AlertDialog(
+          backgroundColor: Colors.white,
+          content: ValueListenableBuilder<double>(
+            valueListenable: progress,
+            builder: (_, p, _) => Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                LinearProgressIndicator(value: p <= 0 ? null : p),
+                const SizedBox(height: 12),
+                Text('导出中 ${(p * 100).round()}%',
+                    style: const TextStyle(fontSize: 12)),
+              ],
+            ),
+          ),
+          actions: [
+            TextButton(
+              // 只发取消请求，框由下方 ExportCancelled 分支统一关
+              onPressed: svc.cancel,
+              child: const Text('取消'),
+            ),
+          ],
+        ),
+      ),
+    ).whenComplete(() => dialogOpen = false));
+    try {
+      final galleryPath = await svc.run(
+        ExportJob(
+          command: cmd,
+          base: '打码',
+          ext: 'mp4',
+          expectedDurationMs: info.durationMs,
+        ),
+        onProgress: (p) => progress.value = p,
+      );
+      if (navCtx.mounted) {
+        ScaffoldMessenger.of(navCtx).showSnackBar(
+            SnackBar(content: Text('已保存到相册 $galleryPath')));
+      }
+    } on ExportCancelled {
+      // 用户取消：静默关框即可
+    } catch (e) {
+      // 失败详情已由 ExportService 落 last-failure.log
+      if (navCtx.mounted) {
+        ScaffoldMessenger.of(navCtx)
+            .showSnackBar(SnackBar(content: Text('导出失败：$e')));
+      }
+    } finally {
+      // 不 dispose progress：pop 动画期间 ValueListenableBuilder 仍挂监听，
+      // 先 dispose 会触发 removeListener-on-disposed 断言（本地对象随 GC 回收）
+      if (dialogOpen && navCtx.mounted) Navigator.of(navCtx).pop();
+    }
   }
 }
 

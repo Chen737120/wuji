@@ -152,11 +152,14 @@ class ExportService {
           expectedDurationMs: job.expectedDurationMs);
       // 硬件编码器（Android=mediacodec / iOS=videotoolbox）在部分设备/尺寸
       // 上会失败：回退软编码 mpeg4。回退前必须删掉第一次运行可能写出的
-      // 半成品——FFmpeg 遇到已存在输出文件会问 Overwrite? 并以退出码 1 退出
+      // 半成品——FFmpeg 遇到已存在输出文件会问 Overwrite? 并以退出码 1 退出。
+      // 用户取消（FFmpegKit 取消会话返回非零 rc）不算硬编失败：不回退，
+      // 否则点「取消」后还会完整跑一轮 mpeg4 软编才抛 ExportCancelled
+      //（Task 6 打码为首个带取消按钮的导出流，据此补此守卫）
       final hw = args.contains('h264_mediacodec')
           ? 'h264_mediacodec'
           : (args.contains('h264_videotoolbox') ? 'h264_videotoolbox' : null);
-      if (rc != 0 && hw != null) {
+      if (rc != 0 && hw != null && !_cancelRequested) {
         await _dumpLogs('ROUND1(hw)', rc);
         final half = File(temp);
         if (half.existsSync()) half.deleteSync();

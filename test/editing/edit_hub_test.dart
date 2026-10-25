@@ -7,24 +7,28 @@ import 'package:wuji/ui/home_shell.dart';
 void main() {
   setUp(() => SharedPreferences.setMockInitialValues({}));
 
-  testWidgets('剪辑落地页两张入口卡＋页脚说明', (tester) async {
+  testWidgets('剪辑落地页三张入口卡＋页脚说明', (tester) async {
     tester.view.physicalSize = const Size(400, 1200);
     tester.view.devicePixelRatio = 1.0;
     addTearDown(tester.view.reset);
-    var fancam = false, compare = false;
+    var fancam = false, compare = false, mosaic = false;
     await tester.pumpWidget(MaterialApp(
         home: EditHubPage(onFancam: () => fancam = true,
-            onCompare: () => compare = true)));
+            onCompare: () => compare = true,
+            onMosaic: () => mosaic = true)));
     await tester.pumpAndSettle();
 
     expect(find.text('舞蹈直拍'), findsOneWidget);
     expect(find.text('同屏对比'), findsOneWidget);
+    expect(find.text('视频打码'), findsOneWidget);
     expect(find.text('生成的视频保存在相册，原始课堂记录不受影响'), findsOneWidget);
 
     await tester.tap(find.text('舞蹈直拍'));
     expect(fancam, isTrue);
     await tester.tap(find.text('同屏对比'));
     expect(compare, isTrue);
+    await tester.tap(find.text('视频打码'));
+    expect(mosaic, isTrue);
   });
 
   testWidgets('HomeShell 三 tab：首页｜剪辑｜统计，悬浮球可见', (tester) async {

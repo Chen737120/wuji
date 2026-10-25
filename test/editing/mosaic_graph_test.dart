@@ -70,7 +70,7 @@ void main() {
   test('PC ffmpeg 冒烟（真滤镜解析，非断言测试）：常量链抽一帧成功', () {
     // 手动执行（不进 CI）：
     // 把上面常量模式用例的 g 写入 build/mosaic-smoke-graph.txt，然后：
-    // C:/Users/chen/tools/ffmpeg/ffmpeg.exe -y -ss 1 -i testdata/fancam-motion-demo/src.mp4 \
+    // C:/Users/chen/tools/ffmpeg/ffmpeg-9.0.2-essentials_build/bin/ffmpeg.exe -y -ss 1 -i testdata/fancam-motion-demo/src.mp4 \
     //   -filter_complex "<graph>" -map "[mo0]" -frames:v 1 build/mosaic-smoke.jpg
     // 预期：rc=0，jpg 生成，打开目检马赛克块位置居中。
   });

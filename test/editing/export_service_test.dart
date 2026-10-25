@@ -25,6 +25,20 @@ class FailRunner extends FakeRunner {
   FailRunner() : super(exitCode: 1);
 }
 
+/// 模拟「导出中用户点取消」：run 返回 FFmpegKit 取消退出码 255，
+/// 且此刻 svc.cancel() 已被调（_cancelRequested 已置位）。
+class CancelMidRunRunner extends FakeRunner {
+  CancelMidRunRunner(this.onRun) : super(exitCode: 255);
+  final void Function() onRun;
+  @override
+  Future<int> run(List<String> args,
+      {void Function(double)? onProgress, int? expectedDurationMs}) {
+    onRun();
+    return super.run(args,
+        onProgress: onProgress, expectedDurationMs: expectedDurationMs);
+  }
+}
+
 class FakeMover implements FileMover {
   final moved = <String, String>{};
   final cleanedTemps = <String>[];
@@ -135,6 +149,30 @@ void main() {
     );
     expect(runner.cancels, 1); // 透传给 runner 取消 FFmpeg 会话
     expect(mover.cleanedTemps, hasLength(1));
+  });
+
+  test('run: 导出中取消不当硬编失败——不进 mpeg4 软编回退，直接 ExportCancelled', () async {
+    late final ExportService svc;
+    final runner = CancelMidRunRunner(() => svc.cancel());
+    final mover = FakeMover();
+    svc = ExportService(
+      runner: runner,
+      mover: mover,
+      tempDirProvider: () async => Directory.systemTemp,
+      clock: () => DateTime(2026, 10, 4),
+    );
+    await expectLater(
+      svc.run(ExportJob(
+          // 含 mediacodec：无守卫时 rc=255 会被当硬编失败再跑一轮软编
+          command: '-i a.mp4 -c:v h264_mediacodec',
+          base: '打码',
+          ext: 'mp4')),
+      throwsA(isA<ExportCancelled>()),
+    );
+    expect(runner.calls, 1); // 只跑一轮：取消不触发软编回退
+    expect(runner.lastArgs.contains('mpeg4'), isFalse);
+    expect(mover.cleanedTemps, hasLength(1)); // 半成品清理
+    expect(mover.moved, isEmpty);
   });
 
   test('progress bubbles from runner', () async {

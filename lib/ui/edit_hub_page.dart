@@ -1,16 +1,18 @@
 import 'package:flutter/material.dart';
 import '../../theme.dart';
 
-/// 剪辑落地页（规格 §3）：两张入口卡＋页脚说明。
+/// 剪辑落地页（规格 §3）：三张入口卡＋页脚说明。
 class EditHubPage extends StatelessWidget {
   const EditHubPage({
     super.key,
     this.onFancam,
     this.onCompare,
+    this.onMosaic,
   });
 
   final VoidCallback? onFancam;
   final VoidCallback? onCompare;
+  final VoidCallback? onMosaic;
 
   @override
   Widget build(BuildContext context) {
@@ -40,6 +42,13 @@ class EditHubPage extends StatelessWidget {
               title: '同屏对比',
               subtitle: '老师视频和你的视频左右并排。\n手动对齐时间与画面，导出对比视频。',
               onTap: onCompare,
+            ),
+            const SizedBox(height: 16),
+            _EntryCard(
+              icon: Icons.blur_on,
+              title: '视频打码',
+              subtitle: '在视频画面上框出要遮挡的位置。\n马赛克或模糊，可打关键帧跟随移动。',
+              onTap: onMosaic,
             ),
             const SizedBox(height: 20),
             Center(
