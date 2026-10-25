@@ -4,7 +4,9 @@ import 'package:video_player/video_player.dart';
 import '../../editing/crop_box.dart';
 import '../../editing/keyframes.dart';
 import '../../editing/media_source_picker.dart';
+import '../../editing/mosaic_region.dart';
 import 'fancam_preview_page.dart';
+import '../mosaic/mosaic_editor_page.dart';
 import '../widgets/app_route.dart';
 import '../widgets/film_strip.dart';
 
@@ -40,6 +42,9 @@ class _FancamPageState extends State<FancamPage> {
 
   KeyframeTrack? _track;
   CropBox _box = const CropBox(cx: 0.5, cy: 0.5, w: 0.5, h: 0.5);
+
+  // 打码区域（会话内存，不落库；空列表＝无打码直拍的合法状态，spec §3.2）
+  List<MosaicRegion> _mosaicRegions = [];
 
   // 源视频真实尺寸（导出 crop 的像素域基准）。v1.5.6 前硬编码 1080×1920，
   // 横屏视频 crop 超界 → FFmpeg "Invalid too big size" → 直拍导出必败
@@ -171,6 +176,50 @@ class _FancamPageState extends State<FancamPage> {
     } else if (mounted) {
       setState(() {});
     }
+  }
+
+  /// 「＋打码」：先暂停（brief Step 4），进内嵌打码编辑器（AppRoute 项目
+  /// 转场惯例）。「完成」pop 回区域列表更新；顶部返回按钮 pop 不带回传
+  /// （null）→ 保持原区域不变（mosaic_editor_page.dart 返回按钮注释）。
+  /// 区域关键帧时间轴＝修剪后时间轴（durationMs 相对修剪起点，与 -ss
+  /// 前置语义一致）。
+  Future<void> _openMosaicEditor() async {
+    if (_srcW <= 0 || _srcH <= 0) return;
+    await _ctl?.pause();
+    if (!mounted) return;
+    final result = await Navigator.push<List<MosaicRegion>>(
+      context,
+      AppRoute(
+        builder: (_) => MosaicEditorPage(
+          srcPath: widget.source.path,
+          srcW: _srcW,
+          srcH: _srcH,
+          durationMs: (widget.trimmedEnd - widget.trimStart).inMilliseconds,
+          // 深拷贝隔离：MosaicEditorState 只浅拷列表，编辑器内拖框/改效果
+          // 会原地写 MosaicRegion 与 KeyframeTrack——若共享对象，返回按钮
+          // 「放弃编辑」后原区域仍带着改动，null=不变须对象级隔离才成立
+          initialRegions: _cloneRegions(_mosaicRegions),
+          embedded: true,
+        ),
+      ),
+    );
+    if (result != null) {
+      setState(() => _mosaicRegions = result);
+    }
+  }
+
+  /// 深拷贝打码区域（进编辑器前隔离，见 [_openMosaicEditor] 注释）。
+  List<MosaicRegion> _cloneRegions(List<MosaicRegion> src) =>
+      [for (final r in src) _cloneRegion(r)];
+
+  MosaicRegion _cloneRegion(MosaicRegion r) {
+    final track = KeyframeTrack(duration: r.track.duration);
+    for (final f in r.track.frames) {
+      track.upsert(f.t, f.box);
+    }
+    return MosaicRegion(id: r.id, track: track)
+      ..effect = r.effect
+      ..strength = r.strength;
   }
 
   @override
@@ -399,6 +448,15 @@ class _FancamPageState extends State<FancamPage> {
                             child: const Text('＋添加关键帧',
                                 style: TextStyle(
                                     fontSize: 12, color: Colors.white))),
+                        // ＋打码（内嵌编辑器入口；已配置区域数随按钮展示）
+                        TextButton.icon(
+                            onPressed: _openMosaicEditor,
+                            icon: const Icon(Icons.blur_on,
+                                size: 18, color: Colors.white),
+                            label: Text(
+                                '打码${_mosaicRegions.isEmpty ? '' : '(${_mosaicRegions.length})'}',
+                                style: const TextStyle(
+                                    fontSize: 12, color: Colors.white))),
                         const Spacer(),
                         TextButton(
                             onPressed: () {
@@ -432,7 +490,10 @@ class _FancamPageState extends State<FancamPage> {
                                     ratio: _ratio,
                                     keyframeCount: _track!.frames.length,
                                     trimStart: widget.trimStart,
-                                    trimEnd: widget.trimmedEnd)),
+                                    trimEnd: widget.trimmedEnd,
+                                    regions: _mosaicRegions,
+                                    mosaicRegionCount:
+                                        _mosaicRegions.length)),
                           );
                         },
                           child: const Text('下一步',

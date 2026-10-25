@@ -4,6 +4,7 @@ import 'package:video_player/video_player.dart';
 import '../../editing/export_service.dart';
 import '../../editing/fancam_export.dart';
 import '../../editing/keyframes.dart';
+import '../../editing/mosaic_region.dart';
 import '../../theme.dart';
 
 /// 直拍预览页（规格 §5.3）：参数单＋「返回调整」＋「保存到相册」。
@@ -18,6 +19,8 @@ class FancamPreviewPage extends StatefulWidget {
     required this.ratio,
     required this.keyframeCount,
     this.hasAudio = true,
+    this.regions = const [],
+    this.mosaicRegionCount = 0,
     this.trimStart = Duration.zero,
     this.trimEnd,
   });
@@ -29,6 +32,12 @@ class FancamPreviewPage extends StatefulWidget {
   final String ratio;
   final int keyframeCount;
   final bool hasAudio;
+
+  /// 打码区域（导出命令真源；空列表＝无打码直拍，spec §3.2 合法状态）。
+  final List<MosaicRegion> regions;
+
+  /// 参数单展示用区域数（同 [keyframeCount] 惯例：数据与展示行分开传）。
+  final int mosaicRegionCount;
 
   /// 修剪区间（关键帧时间轴相对 trimStart）
   final Duration trimStart;
@@ -62,6 +71,7 @@ class _FancamPreviewPageState extends State<FancamPreviewPage> {
       track: widget.track,
       srcW: widget.srcW,
       srcH: widget.srcH,
+      regions: widget.regions,
       hasAudio: widget.hasAudio,
       trimStart: widget.trimStart,
       trimEnd: widget.trimEnd,
@@ -212,6 +222,8 @@ class _FancamPreviewPageState extends State<FancamPreviewPage> {
                 _row('输出分辨率', '$_outWidth × $_outHeight'),
                 _row('音频', widget.hasAudio ? '源视频完整原声' : '静音'),
                 _row('关键帧', '${widget.keyframeCount} 个'),
+                _row('打码',
+                    widget.mosaicRegionCount == 0 ? '无' : '${widget.mosaicRegionCount} 个区域'),
                 if (widget.trimEnd != null)
                   _row('时长',
                       '${((widget.trimEnd! - widget.trimStart).inMilliseconds / 1000).toStringAsFixed(1)} 秒（已修剪）'),

@@ -2,6 +2,8 @@ import 'dart:io';
 import 'dart:math' as math;
 
 import 'keyframes.dart';
+import 'mosaic_graph.dart';
+import 'mosaic_region.dart';
 
 /// 16 宏块对齐（最近取整，下限 16）。
 ///
@@ -31,12 +33,20 @@ int align16(int v) => math.max(16, ((v + 8) ~/ 16) * 16);
 /// - crop：[track.cropExpr]（单帧常量；多帧 = 固定最大框 + x/y 逐帧跟随）；
 /// - 不放大规则（Review Focus #3）：输出高 = min(outH=1080, 固定框像素高)，
 ///   且输出宽高 **16 宏块对齐**（[fancamOutputSize]，v1.5.24 起）；
-/// - 帧率跟源（不设 fps 滤镜）；音频＝源完整原声 AAC；无音轨源 → `-an`。
+/// - 帧率跟源（不设 fps 滤镜）；音频＝源完整原声 AAC；无音轨源 → `-an`；
+/// - 打码（Task 7）：[regions] 非空时 `-vf` 切 `-filter_complex`——
+///   [buildMosaicGraph] 串联打码（split/crop/效果/overlay）后再接
+///   crop/scale，**打码在前、裁剪在后**（spec §5.2：裁剪改坐标域，
+///   打码区域坐标为源画面系，须在裁剪前生效）；空列表命令与无打码
+///   版本逐字节一致（零回归）。`-ss` 前置使滤镜 t 从 0 起，与关键帧
+///   时间轴相对修剪起点的语义一致（spec §8）；filter_complex 下显式
+///   `-map "[vout]" -map 0:a?`（可选 map，无音轨源无害）。
 String buildFancamCommand({
   required String srcPath,
   required KeyframeTrack track,
   required int srcW,
   required int srcH,
+  List<MosaicRegion> regions = const [],
   bool hasAudio = true,
   int outH = 1080,
   Duration trimStart = Duration.zero,
@@ -71,8 +81,24 @@ String buildFancamCommand({
       ? '-t ${((trimEnd - trimStart).inMilliseconds / 1000).toStringAsFixed(3)} '
       : '';
 
+  // 视频段：空 regions 走原 -vf 链（与旧版逐字节一致，零回归）；非空时
+  // filter_complex——buildMosaicGraph(inputLabel: '0:v') 输出自动带方括号、
+  // 返回 outLabel 裸名，链尾接 crop/scale 产出 [vout] 并显式 map。
+  final String videoPart;
+  if (regions.isEmpty) {
+    videoPart = '-vf "$cropExpr,scale=$outW:$outHeight,setsar=1" ';
+  } else {
+    final (graph, out) = buildMosaicGraph(
+      regions,
+      srcW: srcW,
+      srcH: srcH,
+      inputLabel: '0:v',
+    );
+    videoPart = '-filter_complex "$graph;[$out]$cropExpr,'
+        'scale=$outW:$outHeight,setsar=1[vout]" -map "[vout]" -map 0:a? ';
+  }
   return '-y $trimPart-i "$srcPath" $durPart'
-      '-vf "$cropExpr,scale=$outW:$outHeight,setsar=1" '
+      '$videoPart'
       '-c:v $videoCodec -pix_fmt yuv420p -b:v $videoBitrate $audioPart '
       '-movflags +faststart';
 }

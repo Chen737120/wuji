@@ -2,6 +2,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:wuji/editing/crop_box.dart';
 import 'package:wuji/editing/fancam_export.dart';
 import 'package:wuji/editing/keyframes.dart';
+import 'package:wuji/editing/mosaic_region.dart';
 
 void main() {
   KeyframeTrack track(List<List<double>> frames) {
@@ -95,5 +96,49 @@ void main() {
     final (bw, bh) = fancamOutputSize(864, 1536);
     expect(bh, 1088);
     expect(bw % 16, 0, reason: 'bw=$bw');
+  });
+
+  test('直拍＋打码：-vf 切 filter_complex，打码在前裁剪在后，打码模式显式 map 音频', () {
+    final regions = [
+      MosaicRegion(
+        id: 'r1',
+        track: KeyframeTrack(duration: const Duration(seconds: 30))
+          ..reset(const CropBox(cx: 0.5, cy: 0.5, w: 0.2, h: 0.2)),
+      ),
+    ];
+    final cmd = buildFancamCommand(
+      srcPath: '/tmp/a.mp4',
+      track: track([
+        [0.5, 0.5, 0.5, 0.5],
+        [0.3, 0.3, 0.4, 0.4],
+        [0.7, 0.7, 0.6, 0.6],
+      ]),
+      srcW: 1280,
+      srcH: 720,
+      regions: regions,
+    );
+    expect(cmd, contains('-filter_complex "'));
+    expect(cmd, isNot(contains('-vf "')));
+    // 顺序：overlay 在 crop 之前（打码先于裁剪，spec §5.2）
+    final overlayIdx = cmd.indexOf('[mo0]');
+    final cropIdx = cmd.indexOf('crop=', overlayIdx);
+    expect(cropIdx, greaterThan(overlayIdx));
+    expect(cmd, contains('-map "[vout]"'));
+    expect(cmd, contains('-map 0:a?')); // filter_complex 下显式 map 音频
+  });
+
+  test('直拍无打码：命令与旧版一致（空 regions 零回归）', () {
+    final cmd = buildFancamCommand(
+      srcPath: '/tmp/a.mp4',
+      track: track([
+        [0.5, 0.5, 0.5, 0.5],
+        [0.3, 0.3, 0.4, 0.4],
+        [0.7, 0.7, 0.6, 0.6],
+      ]),
+      srcW: 1280,
+      srcH: 720,
+    );
+    expect(cmd, contains('-vf "'));
+    expect(cmd.contains('-filter_complex'), isFalse);
   });
 }
