@@ -192,10 +192,14 @@ class ExportService {
         await _dumpLogs(rc != 0 ? 'ROUND1(hw)' : 'ROUND1(hw-novideo)', rc);
         final half = File(temp);
         if (half.existsSync()) half.deleteSync();
-        // args 已含输出路径（最后一个参数），只替换编码器两个 token——
-        // 再次追加会变成两个输出文件（历史 "already exists" 根因）
+        // args 已含输出路径（最后一个参数），只替换编码器 token——
+        // 再次追加会变成两个输出文件（历史 "already exists" 根因）。
+        // 注意 ci 处是 'h264_mediacodec' 本身（其 '-c:v' 在 ci-1 已存在），
+        // 替换值须不含 '-c:v'，否则出现双 '-c:v'，ffmpeg 把 'mpeg4'
+        // 当输出文件名报 "Unable to choose an output format"
+        // （probe 回退首次真实触发时暴露的潜伏 bug，冒烟 rA 实证）
         final ci = args.indexOf(hw);
-        args = [...args.sublist(0, ci), '-c:v', 'mpeg4', '-q:v', '4', ...args.sublist(ci + 1)];
+        args = [...args.sublist(0, ci), 'mpeg4', '-q:v', '4', ...args.sublist(ci + 1)];
         rc = await _runner.run(args,
             onProgress: onProgress,
             expectedDurationMs: job.expectedDurationMs);

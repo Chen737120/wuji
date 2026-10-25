@@ -131,6 +131,36 @@ void main() {
     expect(runner.lastArgs.where((a) => a == out), hasLength(1));
     expect(runner.lastArgs.contains('mpeg4'), isTrue);
     expect(runner.lastArgs.contains('h264_mediacodec'), isFalse);
+    // '-c:v' 只能出现一次且 'mpeg4' 紧随——双 '-c:v' 会让 ffmpeg 把
+    // 'mpeg4' 当输出文件名（probe 回退首次真实触发时暴露的潜伏 bug）
+    final cvIdx = runner.lastArgs.indexOf('-c:v');
+    expect(cvIdx, greaterThanOrEqualTo(0));
+    expect(runner.lastArgs.indexOf('mpeg4'), cvIdx + 1);
+    expect(runner.lastArgs.where((a) => a == '-c:v'), hasLength(1));
+  });
+
+  test('run: rc=0 无视频流回退 mpeg4——同样不产生双 -c:v（冒烟 rA 实证）', () async {
+    final runner = FakeRunner(); // 两轮均 rc=0
+    final mover = FakeMover();
+    final probe = FakeProbe([false, false]); // 两轮均无视频流→最终失败
+    final svc = ExportService(
+      runner: runner,
+      mover: mover,
+      probeHasVideo: probe.call,
+      tempDirProvider: () async => Directory.systemTemp,
+      clock: () => DateTime(2026, 10, 4),
+    );
+    await expectLater(
+      svc.run(ExportJob(
+          command: '-i a.mp4 -filter_complex x -c:v h264_mediacodec -c:a aac',
+          base: '打码',
+          ext: 'mp4')),
+      throwsA(isA<ExportFailed>()),
+    );
+    final cvIdx = runner.lastArgs.indexOf('-c:v');
+    expect(runner.lastArgs.indexOf('mpeg4'), cvIdx + 1);
+    expect(runner.lastArgs.where((a) => a == '-c:v'), hasLength(1));
+    expect(runner.lastArgs.last.endsWith('.mp4'), isTrue); // 输出仍在最后
   });
 
   test('run: failure cleans temp and throws', () async {
