@@ -1,7 +1,12 @@
+import 'dart:async';
 import 'dart:io';
 import 'package:flutter/material.dart';
+import 'package:path_provider/path_provider.dart';
 import 'package:video_player/video_player.dart';
 import '../../editing/crop_box.dart';
+import '../../editing/fancam_follow_controller.dart';
+import '../../editing/fancam_tracker.dart';
+import '../../editing/ffmpeg_probe.dart';
 import '../../editing/keyframes.dart';
 import '../../editing/media_source_picker.dart';
 import '../../editing/mosaic_region.dart';
@@ -9,6 +14,43 @@ import 'fancam_preview_page.dart';
 import '../mosaic/mosaic_editor_page.dart';
 import '../widgets/app_route.dart';
 import '../widgets/film_strip.dart';
+
+/// 编辑模式（Task 4）：手动打点＝现有功能原样保留；自动跟踪＝点选目标→
+/// 逐帧轨迹→拖框插锚点纠正（spec §3）。
+enum FancamEditMode { manual, follow }
+
+/// 模式开关（ruling 6：抽成顶层小 widget 以便单测——FancamPage 全页测试受
+/// video_player 平台通道限制，代码库无 fancam_page 测试先例；禁止为可测性
+/// 大改页面结构，故只外提本开关，回调与选中态在 test/ui 测）。
+class FancamModeSwitch extends StatelessWidget {
+  const FancamModeSwitch({
+    super.key,
+    required this.mode,
+    required this.onChanged,
+  });
+
+  final FancamEditMode mode;
+  final ValueChanged<FancamEditMode> onChanged;
+
+  @override
+  Widget build(BuildContext context) {
+    return SegmentedButton<FancamEditMode>(
+      segments: const [
+        ButtonSegment(value: FancamEditMode.manual, label: Text('手动')),
+        ButtonSegment(value: FancamEditMode.follow, label: Text('自动跟踪')),
+      ],
+      selected: {mode},
+      onSelectionChanged: (s) => onChanged(s.first),
+      showSelectedIcon: false,
+      style: const ButtonStyle(
+        visualDensity: VisualDensity.compact,
+        side: WidgetStatePropertyAll(BorderSide(color: Colors.white24)),
+        backgroundColor: WidgetStatePropertyAll(Colors.black45),
+        foregroundColor: WidgetStatePropertyAll(Colors.white),
+      ),
+    );
+  }
+}
 
 /// 舞蹈直拍页（规格 §5.1）：画面最大化＋比例锁定框＋关键帧轨道。
 /// 手势分工：单指拖框体=移动；拖翠芽角柄（右下）=缩放（比例锁定）；
@@ -45,6 +87,13 @@ class _FancamPageState extends State<FancamPage> {
 
   // 打码区域（会话内存，不落库；空列表＝无打码直拍的合法状态，spec §3.2）
   List<MosaicRegion> _mosaicRegions = [];
+
+  // ---- 自动跟踪（Task 4，spec §3）----
+  FancamEditMode _editMode = FancamEditMode.manual; // 默认手动（ruling 1）
+  FollowSession? _session; // 跟踪会话（轨迹＋锚点）；null=未跟踪（导出走手动路径）
+  TrackingRun? _tracking; // 进行中的跟踪运行（取消/释放用）
+  final ValueNotifier<double> _trackProgress = ValueNotifier(0); // 模态进度
+  double _fps = 30.0; // probeMedia 探测（video_player 无 fps）；失败兜底 30（ruling 2）
 
   // 源视频真实尺寸（导出 crop 的像素域基准）。v1.5.6 前硬编码 1080×1920，
   // 横屏视频 crop 超界 → FFmpeg "Invalid too big size" → 直拍导出必败
@@ -95,12 +144,30 @@ class _FancamPageState extends State<FancamPage> {
       if (!mounted) return;
       setState(() => _error = '视频加载失败');
     }
+    unawaited(_probeFps()); // fps 探测只服务跟踪/重建会话，无需 setState
+  }
+
+  /// 跟踪帧率探测（ruling 2）：video_player 的 value 无 fps，用 ffprobe 异步
+  /// 探测缓存一次；失败保持兜底 30.0。
+  Future<void> _probeFps() async {
+    try {
+      final info = await probeMedia(widget.source.path);
+      if (info != null && info.fps > 0) _fps = info.fps;
+    } catch (_) {
+      // 兜底 30.0
+    }
   }
 
   /// 播放超出修剪终点时自动停住（保留区间外不可播）。
+  /// 自动跟踪会话存在时顺带逐帧刷新跟随框（ruling 3：复用 player listener
+  /// 的 setState 机制；暂停/seek 后 listener 仍会触发一次，框位置同步）。
   void _onTick() {
     final c = _ctl;
-    if (c == null || !c.value.isPlaying) return;
+    if (c == null) return;
+    if (_editMode == FancamEditMode.follow && _session != null) {
+      setState(() {});
+    }
+    if (!c.value.isPlaying) return;
     if (c.value.position >= widget.trimmedEnd) {
       c.pause();
       c.seekTo(widget.trimmedEnd);
@@ -150,7 +217,13 @@ class _FancamPageState extends State<FancamPage> {
         h = w / newAspect;
       }
       _box = CropBox(cx: _box.cx, cy: _box.cy, w: w, h: h).clamped();
-      _track!.upsert(_trackTime, _box);
+      if (_editMode == FancamEditMode.follow && _session != null) {
+        // 自动模式：比例变化＝改跟随框尺寸（重建会话保留锚点），不写关键帧
+        _session = _session!.withBox(_box,
+            fps: _fps, duration: widget.trimmedEnd - widget.trimStart);
+      } else {
+        _track!.upsert(_trackTime, _box);
+      }
     });
   }
 
@@ -222,8 +295,179 @@ class _FancamPageState extends State<FancamPage> {
       ..strength = r.strength;
   }
 
+  /// 叠加框（painter/_hitTest 共用）：手动＝_box（现状）；自动且有会话＝
+  /// 轨迹在当前轨道时刻的跟随框（拖动中显示拖动框——onPanStart 已用跟随框
+  /// 快照初始化 _box，松手后由锚点混合接管）。
+  CropBox get _displayBox {
+    if (_editMode == FancamEditMode.follow && _session != null && _mode == null) {
+      return followBoxAt(_session!, _trackTime);
+    }
+    return _box;
+  }
+
+  /// 模式切换（ruling 1/4）：切回手动＝丢弃 session（轨迹/锚点），_track
+  /// 关键帧原样保留，叠加框回 _box；切入自动且尚无轨迹时轻提示点选（spec §3.1）。
+  void _setEditMode(FancamEditMode m) {
+    setState(() {
+      _editMode = m;
+      if (m == FancamEditMode.manual) {
+        _session = null;
+        _tracking?.cancel(); // 跟踪在途（进度框被系统返回键关掉的场景）直接终止
+      }
+    });
+    if (m == FancamEditMode.follow && _session == null && mounted) {
+      ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('点击画面中的人物开始自动跟踪')));
+    }
+  }
+
+  /// 自动模式点画面（onTapUp）＝选定/重选跟踪目标（spec §3.1，位置无关）。
+  /// 已有会话先确认（重选清除锚点）；确认后走完整跟踪流程。
+  Future<void> _onTapSelectTarget(
+      TapUpDetails d, VideoPlayerController ctl) async {
+    if (_tracking != null) return; // 跟踪进行中忽略（模态进度框已挡住多数路径）
+    final videoBox = _videoRect(ctl.value.aspectRatio);
+    if (videoBox.width <= 0 || videoBox.height <= 0) return;
+    final cx =
+        ((d.localPosition.dx - videoBox.left) / videoBox.width).clamp(0.0, 1.0);
+    final cy =
+        ((d.localPosition.dy - videoBox.top) / videoBox.height).clamp(0.0, 1.0);
+    if (_session != null) {
+      final ok = await showDialog<bool>(
+        context: context,
+        builder: (dlgCtx) => AlertDialog(
+          title: const Text('重新跟踪'),
+          content: const Text('重新跟踪将清除现有锚点'),
+          actions: [
+            TextButton(
+                onPressed: () => Navigator.pop(dlgCtx, false),
+                child: const Text('取消')),
+            TextButton(
+                onPressed: () => Navigator.pop(dlgCtx, true),
+                child: const Text('重新跟踪')),
+          ],
+        ),
+      );
+      if (ok != true) return;
+      if (!mounted) return;
+      setState(() => _session = null); // 锚点/轨迹一并丢弃（ruling 3）
+    }
+    await _startFollowTracking(cx, cy);
+  }
+
+  /// 自动跟踪主流程（ruling 2）：暂停 → 解码 raw（`<cache>/wuji-track/`）→
+  /// Isolate 跟踪（模态进度＋可取消）→ 建 FollowSession → recompute →
+  /// lossHint 一次性提示。raw 用后即删：正常完成由 isolate 侧 finally 删、
+  /// 取消由 cancel 删，此处对 decode 失败残留兜底（双删吞异常）。
+  Future<void> _startFollowTracking(double cxNorm, double cyNorm) async {
+    final ctl = _ctl;
+    if (ctl == null || !ctl.value.isInitialized || _srcW <= 0 || _srcH <= 0) {
+      return;
+    }
+    await ctl.pause();
+    if (!mounted) return;
+    final trackDur = widget.trimmedEnd - widget.trimStart;
+    var userCancelled = false;
+    unawaited(showDialog<void>(
+      context: context,
+      barrierDismissible: false,
+      builder: (dlgCtx) => AlertDialog(
+        title: const Text('正在跟踪目标'),
+        content: ValueListenableBuilder<double>(
+          valueListenable: _trackProgress,
+          builder: (context, p, _) => Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              LinearProgressIndicator(value: p <= 0 ? null : p.clamp(0.0, 1.0)),
+              const SizedBox(height: 10),
+              Text('${(p * 100).round()}%',
+                  style: const TextStyle(fontSize: 12)),
+            ],
+          ),
+        ),
+        actions: [
+          TextButton(
+            // 只 cancel（done 完成 null → 本流程 finally 收尾关框，留在自动模式）
+            onPressed: () {
+              userCancelled = true;
+              _tracking?.cancel();
+            },
+            child: const Text('取消'),
+          ),
+        ],
+      ),
+    ));
+    _trackProgress.value = 0;
+    String? rawPath;
+    try {
+      final tmp = await getTemporaryDirectory();
+      rawPath =
+          '${tmp.path}/wuji-track/track-${DateTime.now().millisecondsSinceEpoch}.raw';
+      await decodeRawFrames(
+        videoPath: widget.source.path,
+        ss: widget.trimStart,
+        duration: trackDur,
+        fps: _fps,
+        outPath: rawPath,
+      );
+      if (!mounted) return;
+      final run = startTracking(
+        rawPath: rawPath,
+        initCxNorm: cxNorm,
+        initCyNorm: cyNorm,
+        srcW: _srcW,
+        srcH: _srcH,
+        fps: _fps,
+        onProgress: (p) => _trackProgress.value = p,
+      );
+      _tracking = run;
+      final pts = await run.done;
+      if (!mounted || _editMode != FancamEditMode.follow) {
+        return; // 跟踪期间页面退出或已切回手动（进度框可被系统返回键关闭）→ 丢弃结果
+      }
+      if (pts == null || pts.isEmpty) {
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+              content:
+                  Text(userCancelled ? '跟踪已取消' : '跟踪失败，请重试')));
+        }
+        return;
+      }
+      if (!mounted) return;
+      final session = FollowSession(
+          points: pts, box: _box, srcW: _srcW, srcH: _srcH);
+      session.recompute(fps: _fps, duration: trackDur);
+      setState(() => _session = session);
+      final hint = session.lossHint(); // 一次性提示（spec §2.1 / ruling 2）
+      if (hint != null && mounted) {
+        ScaffoldMessenger.of(context)
+            .showSnackBar(SnackBar(content: Text(hint)));
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context)
+            .showSnackBar(SnackBar(content: Text('跟踪失败：$e')));
+      }
+    } finally {
+      _tracking = null;
+      _trackProgress.value = 0;
+      if (rawPath != null) {
+        try {
+          final f = File(rawPath);
+          if (f.existsSync()) f.deleteSync();
+        } catch (_) {}
+      }
+      if (mounted) {
+        final nav = Navigator.of(context, rootNavigator: true);
+        if (nav.canPop()) nav.pop(); // 关模态进度框（取消按钮只 cancel 不 pop）
+      }
+    }
+  }
+
   @override
   void dispose() {
+    _tracking?.cancel(); // 页面退出终止跟踪（isolate kill＋删 raw）
+    _trackProgress.dispose();
     _ctl?.removeListener(_onTick);
     _ctl?.dispose();
     super.dispose();
@@ -259,10 +503,18 @@ class _FancamPageState extends State<FancamPage> {
     final ctl = _ctl;
     return Stack(
       children: [
-        // 视频层（最大化 + 预览缩放/平移）
+        // 视频层（最大化 + 预览缩放/平移）。手动模式点按=切换控件（现状）；
+        // 自动模式点按=选定/重选跟踪目标（spec §3.1，onTapUp 取落点坐标）
         Positioned.fill(
           child: GestureDetector(
-            onTap: () => setState(() => _controlsVisible = !_controlsVisible),
+            onTap: _editMode == FancamEditMode.manual
+                ? () => setState(() => _controlsVisible = !_controlsVisible)
+                : null,
+            onTapUp: _editMode == FancamEditMode.follow &&
+                    ctl != null &&
+                    ctl.value.isInitialized
+                ? (d) => unawaited(_onTapSelectTarget(d, ctl))
+                : null,
             onDoubleTap: () => setState(() {
               _previewScale = 1.0;
               _previewPan = Offset.zero;
@@ -299,14 +551,22 @@ class _FancamPageState extends State<FancamPage> {
             ),
           ),
         ),
-        // 框叠加层（单指拖框/角柄）
+        // 框叠加层（单指拖框/角柄）。自动模式：拖框体＝当时刻插锚（onPanEnd），
+        // 角柄＝改跟随框尺寸（withBox 重建会话）；手动模式行为逐字节不变
         if (ctl != null && ctl.value.isInitialized)
           Positioned.fill(
             child: GestureDetector(
               onPanStart: (d) {
+                // 先取拖动前显示框（此时 _mode 尚为 null：手动=_box，自动=跟随框）
+                final startBox = _displayBox;
                 _mode = _hitTest(d.localPosition, ctl.value.aspectRatio);
                 _panStart = d.localPosition;
-                _boxAtStart = _box;
+                _boxAtStart = startBox;
+                if (_editMode == FancamEditMode.follow &&
+                    _session != null &&
+                    _mode != null) {
+                  _box = startBox; // 拖动直接操作跟随框快照（尺寸=session.box）
+                }
               },
               onPanUpdate: (d) {
                 if (_mode == null) return;
@@ -342,12 +602,28 @@ class _FancamPageState extends State<FancamPage> {
                 });
               },
               onPanEnd: (_) {
+                final gesture = _mode;
                 _mode = null;
-                _track!.upsert(_trackTime, _box);
+                if (_editMode == FancamEditMode.follow && _session != null) {
+                  final dur = widget.trimmedEnd - widget.trimStart;
+                  if (gesture == _GestureMode.resize) {
+                    // 角柄缩放＝改跟随框尺寸（ruling 3，实现从简：右下柄生效）
+                    setState(() => _session =
+                        _session!.withBox(_box, fps: _fps, duration: dur));
+                  } else if (gesture == _GestureMode.move) {
+                    // 拖框体＝当时刻插锚（传拖后中心归一化值，spec §2.4 / ruling 3）
+                    _session!.insertAnchor(_trackTime, cx: _box.cx, cy: _box.cy);
+                    setState(() {});
+                  }
+                } else {
+                  _track!.upsert(_trackTime, _box);
+                }
               },
               child: CustomPaint(
                 painter: _CropOverlayPainter(
-                    box: _box, aspect: ctl.value.aspectRatio, accent: accent),
+                    box: _displayBox,
+                    aspect: ctl.value.aspectRatio,
+                    accent: accent),
                 child: const SizedBox.expand(),
               ),
             ),
@@ -373,6 +649,10 @@ class _FancamPageState extends State<FancamPage> {
                 child: Column(
                   mainAxisSize: MainAxisSize.min,
                   children: [
+                    // 模式开关（ruling 1：比例 chips 行上方；手动为默认且
+                    // 手动模式页面行为与现状一致）
+                    FancamModeSwitch(mode: _editMode, onChanged: _setEditMode),
+                    const SizedBox(height: 6),
                     // 比例 chips
                     Row(
                       mainAxisAlignment: MainAxisAlignment.center,
@@ -431,11 +711,23 @@ class _FancamPageState extends State<FancamPage> {
                               accent: accent,
                               height: 52,
                               stripCount: 14,
-                              keyframes: [
-                                for (final f in _track!.frames) f.t,
-                              ],
+                              // 自动模式＝锚点时刻（ruling 3）；手动＝关键帧时刻（现状）
+                              keyframes: (_editMode == FancamEditMode.follow &&
+                                      _session != null)
+                                  ? [for (final a in _session!.anchors) a.t]
+                                  : [
+                                      for (final f in _track!.frames) f.t,
+                                    ],
                               onKeyframeTap: (t) =>
                                   _seekSmooth(t + widget.trimStart),
+                              // 锚点长按删除（自动模式；FilmStrip 可选回调，
+                              // 手动模式不传＝现状零变化）
+                              onKeyframeLongPress:
+                                  (_editMode == FancamEditMode.follow &&
+                                          _session != null)
+                                      ? (t) => setState(
+                                          () => _session!.removeAnchor(t))
+                                      : null,
                             ),
                           ),
                         ],
@@ -443,11 +735,14 @@ class _FancamPageState extends State<FancamPage> {
                     ),
                     Row(
                       children: [
-                        TextButton(
-                            onPressed: _addKeyframe,
-                            child: const Text('＋添加关键帧',
-                                style: TextStyle(
-                                    fontSize: 12, color: Colors.white))),
+                        // ＋添加关键帧：自动模式下隐藏（锚点即语义，ruling 3；
+                        // 切回手动恢复）
+                        if (_editMode == FancamEditMode.manual)
+                          TextButton(
+                              onPressed: _addKeyframe,
+                              child: const Text('＋添加关键帧',
+                                  style: TextStyle(
+                                      fontSize: 12, color: Colors.white))),
                         // ＋打码（内嵌编辑器入口；已配置区域数随按钮展示）
                         TextButton.icon(
                             onPressed: _openMosaicEditor,
@@ -463,7 +758,16 @@ class _FancamPageState extends State<FancamPage> {
                               setState(() {
                                 _box = CropBox.centered(_ratio,
                                     srcW: _srcW, srcH: _srcH);
-                                _track!.reset(_box);
+                                if (_editMode == FancamEditMode.follow &&
+                                    _session != null) {
+                                  // 自动模式：还原框尺寸（锚点保留）
+                                  _session = _session!.withBox(_box,
+                                      fps: _fps,
+                                      duration:
+                                          widget.trimmedEnd - widget.trimStart);
+                                } else {
+                                  _track!.reset(_box);
+                                }
                               });
                             },
                             child: const Text('还原',
@@ -479,6 +783,11 @@ class _FancamPageState extends State<FancamPage> {
                           ),
                           onPressed: () {
                           if (_srcW <= 0 || _srcH <= 0) return;
+                          // 自动模式且有轨迹→带 session 走 sendcmd 导出（ruling 5）；
+                          // 手动模式/自动未跟踪→follow=null 走手动路径（现状）
+                          final follow = _editMode == FancamEditMode.follow
+                              ? _session
+                              : null;
                           Navigator.push(
                             context,
                             AppRoute(
@@ -493,7 +802,8 @@ class _FancamPageState extends State<FancamPage> {
                                     trimEnd: widget.trimmedEnd,
                                     regions: _mosaicRegions,
                                     mosaicRegionCount:
-                                        _mosaicRegions.length)),
+                                        _mosaicRegions.length,
+                                    follow: follow)),
                           );
                         },
                           child: const Text('下一步',
@@ -526,12 +836,15 @@ class _FancamPageState extends State<FancamPage> {
   }
 
   _GestureMode? _hitTest(Offset pos, double aspect) {
+    // 命中检测用当前显示框（手动=_box；自动=跟随框）——onPanStart 调用时
+    // _mode 尚为 null，_displayBox 即拖动前可见框
+    final display = _displayBox;
     final videoBox = _videoRect(aspect);
     final boxPix = Rect.fromLTWH(
-        videoBox.left + _box.left * videoBox.width,
-        videoBox.top + _box.top * videoBox.height,
-        _box.w * videoBox.width,
-        _box.h * videoBox.height);
+        videoBox.left + display.left * videoBox.width,
+        videoBox.top + display.top * videoBox.height,
+        display.w * videoBox.width,
+        display.h * videoBox.height);
     // 角柄命中：右下角 36px 方块
     final handle = Rect.fromCenter(
         center: boxPix.bottomRight,

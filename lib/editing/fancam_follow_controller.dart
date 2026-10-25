@@ -43,6 +43,32 @@ const double kAnchorWindowSec = 1.0; // 锚点余弦过渡半窗（spec §2.4 �
   return (evenClamp(box.w * srcW, srcW), evenClamp(box.h * srcH, srcH));
 }
 
+/// 轨迹时刻 [trackT]（相对修剪起点）的跟随框（归一化，Task 4 预览叠加层逐帧取框）：
+/// 中心取最后一个 t≤trackT 的轨迹点（像素→归一化），尺寸恒为
+/// [FollowSession.box]（跟随框尺寸恒定语义）。centers 已在 recompute 时
+/// clamp 进画面（框完整可见），此处 clamp 仅兜底；空轨迹（未 recompute）
+/// 回退 session.box 不抛。
+CropBox followBoxAt(FollowSession session, Duration trackT) {
+  final cs = session.centers;
+  if (cs.isEmpty) return session.box;
+  final t = trackT.inMicroseconds / 1e6;
+  var lo = 0, hi = cs.length - 1;
+  while (lo < hi) {
+    final mid = (lo + hi + 1) >> 1;
+    if (cs[mid].t <= t) {
+      lo = mid;
+    } else {
+      hi = mid - 1;
+    }
+  }
+  return CropBox(
+    cx: (cs[lo].x / session.srcW).clamp(0.0, 1.0),
+    cy: (cs[lo].y / session.srcH).clamp(0.0, 1.0),
+    w: session.box.w,
+    h: session.box.h,
+  );
+}
+
 /// 单轴控制统计（gen_d5 stderr 行的 port；无行为影响，测试断言/日志用）。
 class FollowAxisStats {
   int moves = 0; // 触发骑行次数
@@ -187,6 +213,20 @@ class FollowSession {
       _anchors.sort((x, y) => x.t.compareTo(y.t));
     }
     _reblendIfPossible();
+  }
+
+  /// 复制会话并替换比例框（Task 4 自动模式改框尺寸：比例 chips / 角柄缩放 /
+  /// 还原——[box] 为 final，须重建会话）。锚点原样保留（同刻同位置）并重混合，
+  /// 轨迹帧数不变；原会话完全不受影响（页面侧以新会话替换旧引用）。
+  FollowSession withBox(CropBox newBox,
+      {required double fps, required Duration duration}) {
+    final s = FollowSession(
+        points: points, box: newBox, srcW: srcW, srcH: srcH);
+    s.recompute(fps: fps, duration: duration);
+    for (final a in _anchors) {
+      s.insertAnchor(a.t, cx: a.cx, cy: a.cy);
+    }
+    return s;
   }
 
   /// 删除距 [t] 最近（时间上）的锚点；混合同步更新 [centers]。

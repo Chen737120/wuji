@@ -185,6 +185,72 @@ void main() {
       );
     });
 
+    test('用例8: withBox——换框重建保留锚点并重混合，原会话不受影响（Task 4 ruling 3）', () {
+      final pts = [for (var i = 0; i < 60; i++) _pt(i.toDouble(), 640, 360)];
+      final origBox = _box340x604();
+      final s = FollowSession(
+          points: pts, box: origBox, srcW: 1280, srcH: 720);
+      s.recompute(fps: 30, duration: const Duration(seconds: 2));
+      s.insertAnchor(const Duration(seconds: 1), cx: 0.6, cy: 0.5);
+      final newBox = _box272x484();
+      final s2 = s.withBox(newBox, fps: 30, duration: const Duration(seconds: 2));
+      // 框已替换；锚点原样保留（同刻同位置）
+      expect(s2.box, same(newBox), reason: '会话框替换为传入框');
+      expect(s2.anchors.length, 1, reason: '锚点随重建保留');
+      expect(s2.anchors.single.t, const Duration(seconds: 1));
+      expect(s2.anchors.single.cx, closeTo(0.6, 1e-9));
+      expect(s2.anchors.single.cy, closeTo(0.5, 1e-9));
+      // 轨迹帧数不变；静止目标下新会话锚点时刻仍精确经过（0.6×1280=768）
+      expect(s2.centers.length, s.centers.length, reason: '轨迹帧数与原会话一致');
+      expect((s2.centers[30].x - 768).abs(), lessThan(1.0),
+          reason: '重建后 t=1s 仍经过锚点');
+      expect((s2.centers[30].y - 360).abs(), lessThan(1.0));
+      // 原会话完全不变（页面侧以新会话替换旧会话，旧引用不得被改写）
+      expect(s.box, same(origBox));
+      expect(s.anchors.length, 1);
+      expect((s.centers[30].x - 768).abs(), lessThan(1.0), reason: '原轨迹不变');
+      // 无锚点会话同样可换框（自动模式改比例/还原的常见路径）
+      final s3 = FollowSession(
+          points: pts, box: _box340x604(), srcW: 1280, srcH: 720);
+      s3.recompute(fps: 30, duration: const Duration(seconds: 2));
+      final s4 = s3.withBox(_box272x484(),
+          fps: 30, duration: const Duration(seconds: 2));
+      expect(s4.anchors, isEmpty);
+      expect(s4.centers.length, 61);
+    });
+
+    test('用例9: followBoxAt——最后 t≤trackT 轨迹点→归一化框；空轨迹回 session.box', () {
+      final pts = [for (var i = 0; i < 60; i++) _pt(i.toDouble(), 640, 360)];
+      final s = FollowSession(
+          points: pts, box: _box340x604(), srcW: 1280, srcH: 720);
+      s.recompute(fps: 30, duration: const Duration(seconds: 2));
+      s.insertAnchor(const Duration(seconds: 1), cx: 0.6, cy: 0.5);
+      // t=0 在锚点窗缘（权重 0）→ 基线中心 640,360 → 归一化 (0.5, 0.5)
+      final b0 = followBoxAt(s, Duration.zero);
+      expect(b0.cx, closeTo(640 / 1280, 1e-9));
+      expect(b0.cy, closeTo(0.5, 1e-9));
+      expect(b0.w, s.box.w, reason: '尺寸恒为 session.box（跟随框尺寸恒定语义）');
+      expect(b0.h, s.box.h);
+      // 锚点时刻：中心=锚点像素 768 → 归一化 0.6
+      final bAnchor = followBoxAt(s, const Duration(milliseconds: 1000));
+      expect(bAnchor.cx, closeTo(0.6, 1e-6), reason: '锚点时刻取锚点中心');
+      expect(bAnchor.cy, closeTo(0.5, 1e-9));
+      // 窗外（t=2s）回基线；t 超尾取末点；t 为负取首点
+      expect(followBoxAt(s, const Duration(seconds: 2)).cx, closeTo(0.5, 1e-9));
+      expect(followBoxAt(s, const Duration(hours: 1)).cx, closeTo(0.5, 1e-9),
+          reason: 't 超尾 → 末点');
+      expect(followBoxAt(s, const Duration(seconds: -5)).cx, closeTo(0.5, 1e-9),
+          reason: 't 为负 → 首点');
+      // 空轨迹（未 recompute 的会话）：回退 session.box，不抛
+      final empty = FollowSession(
+          points: const [], box: _box340x604(), srcW: 1280, srcH: 720);
+      final be = followBoxAt(empty, Duration.zero);
+      expect(be.cx, empty.box.cx);
+      expect(be.cy, empty.box.cy);
+      expect(be.w, empty.box.w);
+      expect(be.h, empty.box.h);
+    });
+
     test('用例6: 三素材指标回归——maxE ≤ z·box+20、中心出框 0 帧（缺失即跳过）', () {
       const confs = [
         // (名, CSV, boxW, boxH, 时长)——gen_d5 Conf 口径：340×604/340×604/272×484，

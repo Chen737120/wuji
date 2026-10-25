@@ -1,14 +1,18 @@
 import 'dart:io';
 import 'package:flutter/material.dart';
+import 'package:path_provider/path_provider.dart';
 import 'package:video_player/video_player.dart';
 import '../../editing/export_service.dart';
 import '../../editing/fancam_export.dart';
+import '../../editing/fancam_follow_controller.dart';
 import '../../editing/keyframes.dart';
 import '../../editing/mosaic_region.dart';
 import '../../theme.dart';
 
 /// 直拍预览页（规格 §5.3）：参数单＋「返回调整」＋「保存到相册」。
 /// 预览画面简化为参数单（参数即所见：框区域裁剪+1080 高）。
+/// 手动模式命令同步构建；自动跟踪模式（[FancamPreviewPage.follow] 非空）在
+/// initState 异步落盘 cmds 文件后构建 sendcmd 命令（ruling 5）。
 class FancamPreviewPage extends StatefulWidget {
   const FancamPreviewPage({
     super.key,
@@ -23,6 +27,7 @@ class FancamPreviewPage extends StatefulWidget {
     this.mosaicRegionCount = 0,
     this.trimStart = Duration.zero,
     this.trimEnd,
+    this.follow,
   });
 
   final String sourcePath;
@@ -43,6 +48,11 @@ class FancamPreviewPage extends StatefulWidget {
   final Duration trimStart;
   final Duration? trimEnd;
 
+  /// 自动跟踪会话（Task 4 ruling 5）：非空＝自动模式导出——cmds 落盘
+  /// `<cache>/wuji-export/follow-<millis>.txt`（内容＝buildSendCmd）＋
+  /// buildFancamFollowCommand；null＝手动路径（现状，命令同步构建）。
+  final FollowSession? follow;
+
   @override
   State<FancamPreviewPage> createState() => _FancamPreviewPageState();
 }
@@ -51,44 +61,91 @@ class _FancamPreviewPageState extends State<FancamPreviewPage> {
   bool _exporting = false;
   double _progress = 0;
   bool _saving = false;
-  late final String _command;
-  late final int _outWidth;
-  late final int _outHeight;
+  // 手动模式 initState 同步构建；自动模式 cmds 落盘后异步赋值（落盘前按钮禁用）
+  String? _command;
+  int _outWidth = 0;
+  int _outHeight = 0;
+  String? _followError; // 自动模式 cmds 落盘失败（按钮禁用＋参数单提示）
   ExportService? _svc;
 
   @override
   void initState() {
     super.initState();
-    // 输出尺寸与导出命令共用 fancamOutputSize（不放大 + 16 宏块对齐，
-    // 2026-10-12：非 16 倍数输出会被编码器 pad，部分设备预览渲染出
-    // 右缘绿条/底部黑条），参数单展示的就是真实输出。
-    final (cropW, cropH) = widget.track.fixedCropSize(widget.srcW, widget.srcH);
-    final (outW, outH) = fancamOutputSize(cropW, cropH);
-    _outWidth = outW;
-    _outHeight = outH;
-    _command = buildFancamCommand(
-      srcPath: widget.sourcePath,
-      track: widget.track,
-      srcW: widget.srcW,
-      srcH: widget.srcH,
-      regions: widget.regions,
-      hasAudio: widget.hasAudio,
-      trimStart: widget.trimStart,
-      trimEnd: widget.trimEnd,
-    );
+    final follow = widget.follow;
+    if (follow == null) {
+      // 手动模式：与旧版同流程（同步构建）。输出尺寸与导出命令共用
+      // fancamOutputSize（不放大 + 16 宏块对齐，2026-10-12：非 16 倍数输出
+      // 会被编码器 pad，部分设备预览渲染出右缘绿条/底部黑条），参数单展示
+      // 的就是真实输出。
+      final (cropW, cropH) =
+          widget.track.fixedCropSize(widget.srcW, widget.srcH);
+      final (outW, outH) = fancamOutputSize(cropW, cropH);
+      _outWidth = outW;
+      _outHeight = outH;
+      _command = buildFancamCommand(
+        srcPath: widget.sourcePath,
+        track: widget.track,
+        srcW: widget.srcW,
+        srcH: widget.srcH,
+        regions: widget.regions,
+        hasAudio: widget.hasAudio,
+        trimStart: widget.trimStart,
+        trimEnd: widget.trimEnd,
+      );
+    } else {
+      _initFollow(follow);
+    }
+  }
+
+  /// 自动跟踪模式（ruling 5）：cmds 落盘 `<cache>/wuji-export/follow-<millis>.txt`
+  /// （内容＝`follow.buildSendCmd()` 三段式）→ `buildFancamFollowCommand`
+  /// （crop 尺寸＝followCropSize，centers＝轨迹，打码 regions 沿用）。
+  Future<void> _initFollow(FollowSession follow) async {
+    try {
+      final tmp = await getTemporaryDirectory();
+      final dir = Directory('${tmp.path}/wuji-export');
+      await dir.create(recursive: true);
+      final cmdsPath =
+          '${dir.path}/follow-${DateTime.now().millisecondsSinceEpoch}.txt';
+      await File(cmdsPath).writeAsString(follow.buildSendCmd());
+      final (cropW, cropH) =
+          followCropSize(follow.box, widget.srcW, widget.srcH);
+      final (outW, outH) = fancamOutputSize(cropW, cropH);
+      if (!mounted) return;
+      setState(() {
+        _outWidth = outW;
+        _outHeight = outH;
+        _command = buildFancamFollowCommand(
+          srcPath: widget.sourcePath,
+          cmdsPath: cmdsPath,
+          cropW: cropW,
+          cropH: cropH,
+          srcW: widget.srcW,
+          srcH: widget.srcH,
+          centers: follow.centers,
+          hasAudio: widget.hasAudio,
+          trimStart: widget.trimStart,
+          trimEnd: widget.trimEnd,
+          regions: widget.regions,
+        );
+      });
+    } catch (e) {
+      if (mounted) setState(() => _followError = '跟踪数据准备失败：$e');
+    }
   }
 
   /// 第一步「保存到相册」：先只导出到临时文件并进入成片预览；
   /// 用户在预览里确认没问题、点「完成」后才真正写入系统相册（[_finish]）。
   Future<void> _export() async {
-    if (_exporting) return;
+    final cmd = _command;
+    if (_exporting || cmd == null) return; // 自动模式 cmds 未就绪时不导出
     setState(() => _exporting = true);
     try {
       _svc = ExportService(runner: FFmpegKitRunner(), mover: GalleryMover());
       final info = await _probeDur();
       final tempPath = await _svc!.run(
         ExportJob(
-            command: _command,
+            command: cmd,
             base: '直拍',
             expectedDurationMs: info),
         onProgress: (p) {
@@ -219,15 +276,27 @@ class _FancamPreviewPageState extends State<FancamPreviewPage> {
                         color: AppColors.secondary)),
                 const SizedBox(height: 12),
                 _row('比例', widget.ratio),
-                _row('输出分辨率', '$_outWidth × $_outHeight'),
+                _row('输出分辨率',
+                    _outWidth <= 0 ? '—' : '$_outWidth × $_outHeight'),
                 _row('音频', widget.hasAudio ? '源视频完整原声' : '静音'),
-                _row('关键帧', '${widget.keyframeCount} 个'),
+                // 模式行（Task 4 ruling 5）：自动跟踪（锚点 N 个）/ 手动打点
+                // （关键帧 M 个）——自动模式锚点数取 session，手动取关键帧数
+                _row('模式', widget.follow != null
+                    ? '自动跟踪（锚点 ${widget.follow!.anchors.length} 个）'
+                    : '手动打点（关键帧 ${widget.keyframeCount} 个）'),
                 _row('打码',
                     widget.mosaicRegionCount == 0 ? '无' : '${widget.mosaicRegionCount} 个区域'),
                 if (widget.trimEnd != null)
                   _row('时长',
                       '${((widget.trimEnd! - widget.trimStart).inMilliseconds / 1000).toStringAsFixed(1)} 秒（已修剪）'),
                 _row('保存位置', '确认预览后存入相册 Movies/wuji/'),
+                if (_followError != null)
+                  Padding(
+                    padding: const EdgeInsets.only(top: 8),
+                    child: Text(_followError!,
+                        style: const TextStyle(
+                            fontSize: 11, color: Colors.redAccent)),
+                  ),
               ],
             ),
           ),
@@ -248,7 +317,7 @@ class _FancamPreviewPageState extends State<FancamPreviewPage> {
                 shape: const StadiumBorder(),
                 padding: const EdgeInsets.symmetric(vertical: 12),
               ),
-              onPressed: _export,
+              onPressed: _command == null ? null : _export,
               child: const Text('保存到相册',
                   style: TextStyle(fontSize: 14, fontWeight: FontWeight.w600)),
             ),
