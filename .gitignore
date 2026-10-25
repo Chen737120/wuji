@@ -49,8 +49,10 @@ app.*.map.json
 
 # Wuji project additions
 .superpowers/
+/*.mp4
 testdata/*.mp4
 testdata/*.jpg
+testdata/
 .zcodeignore
 docs/
 dist/
