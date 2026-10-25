@@ -664,8 +664,13 @@ class _FancamPageState extends State<FancamPage> {
                   onPressed: () => Navigator.pop(context)),
             ),
           ),
-          // 底部一条：比例 chips + 关键帧轨道 + 主按钮
-          Align(
+          // 底部一条：比例 chips + 关键帧轨道 + 主按钮。
+          // 初始化门（冒烟缺陷 1 根因）：首帧 build 时 _ctl/_track 均为
+          // null（_init 异步），底条内 `valueListenable: _ctl!` 会立即抛
+          // Null check 红屏（3/3 复现，堆栈 fancam_page.dart:707）。
+          // _track 与 _ctl 在同一 setState 里赋值，ctl != null 即二者就绪。
+          if (ctl != null)
+            Align(
             alignment: Alignment.bottomCenter,
             child: Container(
               color: Colors.black54,
