@@ -12,6 +12,7 @@ import 'package:path_provider/path_provider.dart';
 import 'package:photo_manager/photo_manager.dart';
 
 import '../services/photo_bridge.dart';
+import 'ffmpeg_probe.dart' show probeMedia;
 
 /// 导出已取消（用户点取消，或取消请求先于任务启动）。
 class ExportCancelled implements Exception {
@@ -85,6 +86,22 @@ List<String> tokenizeFfmpeg(String line) {
   return out;
 }
 
+/// 输出校验（窄接口）：探测文件是否含视频流。rc==0 但编码器静默零包
+/// （AVD mediacodec 实测：成片仅 AAC、UI 零报错）时，半成品不得当成功
+/// 搬进相册。设备端用 FFprobeKit（[defaultProbeHasVideoStream]），测试注入 fake。
+typedef OutputVideoProbe = Future<bool> Function(String path);
+
+/// 设备端默认实现：probeMedia 非空即含视频流（parseMediaInformationJson
+/// 对无视频流的输入返回 null）。probe 自身异常按无视频流处理——
+/// 静默成功不可接受，误报失败的代价只是重试/明确报错。
+Future<bool> defaultProbeHasVideoStream(String path) async {
+  try {
+    return await probeMedia(path) != null;
+  } catch (_) {
+    return false;
+  }
+}
+
 /// 产物搬运（窄接口）：成功=搬进相册并消费临时文件；失败/取消=清半成品。
 abstract class FileMover {
   /// 把临时产物保存进相册 `Movies/wuji/`，返回相册内路径（展示用）。
@@ -116,12 +133,15 @@ class ExportService {
     required this._runner,
     required this._mover,
     this._clock,
+    OutputVideoProbe? probeHasVideo,
     Future<Directory> Function()? tempDirProvider,
-  })  : _tempDir = tempDirProvider;
+  })  : _probeHasVideo = probeHasVideo ?? defaultProbeHasVideoStream,
+        _tempDir = tempDirProvider;
 
   final CommandRunner _runner;
   final FileMover _mover;
   final DateTime Function()? _clock;
+  final OutputVideoProbe _probeHasVideo;
   final Future<Directory> Function()? _tempDir;
   bool _cancelRequested = false;
 
@@ -150,17 +170,25 @@ class ExportService {
       var rc = await _runner.run(args,
           onProgress: onProgress,
           expectedDurationMs: job.expectedDurationMs);
+      // 缺陷 2 修复：rc==0 不等于成片可用。AVD/部分设备上 mediacodec 会
+      // 静默产出零包（退出码 0、成片仅音频轨、UI 零报错），搬运前必须用
+      // FFprobe 校验输出含视频流（probe 在 mover 之前，半成品走 finally 清理）。
+      var videoOk = false;
+      if (rc == 0 && !_cancelRequested) {
+        videoOk = await _probeHasVideo(temp);
+      }
       // 硬件编码器（Android=mediacodec / iOS=videotoolbox）在部分设备/尺寸
-      // 上会失败：回退软编码 mpeg4。回退前必须删掉第一次运行可能写出的
-      // 半成品——FFmpeg 遇到已存在输出文件会问 Overwrite? 并以退出码 1 退出。
+      // 上会失败（非零退出），或成功但无视频流（静默零包）：均回退软编码
+      // mpeg4 一轮。回退前必须删掉第一次运行可能写出的半成品——FFmpeg
+      // 遇到已存在输出文件会问 Overwrite? 并以退出码 1 退出。
       // 用户取消（FFmpegKit 取消会话返回非零 rc）不算硬编失败：不回退，
       // 否则点「取消」后还会完整跑一轮 mpeg4 软编才抛 ExportCancelled
       //（Task 6 打码为首个带取消按钮的导出流，据此补此守卫）
       final hw = args.contains('h264_mediacodec')
           ? 'h264_mediacodec'
           : (args.contains('h264_videotoolbox') ? 'h264_videotoolbox' : null);
-      if (rc != 0 && hw != null && !_cancelRequested) {
-        await _dumpLogs('ROUND1(hw)', rc);
+      if ((rc != 0 || !videoOk) && hw != null && !_cancelRequested) {
+        await _dumpLogs(rc != 0 ? 'ROUND1(hw)' : 'ROUND1(hw-novideo)', rc);
         final half = File(temp);
         if (half.existsSync()) half.deleteSync();
         // args 已含输出路径（最后一个参数），只替换编码器两个 token——
@@ -170,16 +198,22 @@ class ExportService {
         rc = await _runner.run(args,
             onProgress: onProgress,
             expectedDurationMs: job.expectedDurationMs);
+        videoOk = false;
+        if (rc == 0 && !_cancelRequested) {
+          videoOk = await _probeHasVideo(temp);
+        }
       }
       if (_cancelRequested) throw ExportCancelled();
-      if (rc != 0) {
+      if (rc != 0 || !videoOk) {
         // FFmpegKitConfig 在无绑定环境（测试）会抛异步错误，用 zone 兜住
         var (tail, full) = ('', '');
         await runZonedGuarded(() async {
           (tail, full) = await _lastLogs(tailLines: 15);
         }, (e, s) {});
         _dumpLines('FAIL', full);
-        throw ExportFailed('FFmpeg 退出码 $rc${tail.isEmpty ? '' : '：$tail'}');
+        throw ExportFailed(rc != 0
+            ? 'FFmpeg 退出码 $rc${tail.isEmpty ? '' : '：$tail'}'
+            : '导出结果无视频流（编码器未产出画面），已重试仍失败');
       }
       if (!autoSave) {
         // 延迟入相册（直拍成片预览确认环节）：返回临时路径，
