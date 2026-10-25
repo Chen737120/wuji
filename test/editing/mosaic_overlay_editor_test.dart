@@ -99,4 +99,53 @@ void main() {
     await tester.pump(const Duration(milliseconds: 400));
     expect(seeks, [const Duration(seconds: 5)]);
   });
+
+  testWidgets('onAdjustEnd 接线（Task 5）：强度切换与关键帧长按删除后触发', (tester) async {
+    final state = MosaicEditorState(
+        duration: const Duration(seconds: 10), srcW: 1280, srcH: 720)
+      ..addRegion()
+      ..seekTo(const Duration(seconds: 5))
+      ..addKeyframeAtPosition(); // 帧 = [0s, 5s]，长按删除才有 ≥2 帧前提
+    var adjustEnds = 0;
+    await tester.pumpWidget(MaterialApp(
+      home: Scaffold(
+        body: Column(children: [
+          Expanded(
+            child: OverlayEditor(
+              state: state,
+              canvasSize: const Size(320, 180),
+              immersive: false,
+              onChanged: () {},
+              onToggleImmersive: () {},
+              onAdjustEnd: () => adjustEnds++,
+            ),
+          ),
+          MosaicToolbar(
+            state: state,
+            hasSelection: state.selected != null,
+            onAddRegion: state.addRegion,
+            onAddKeyframe: state.addKeyframeAtPosition,
+            onDeleteRegion: () => state.removeRegion(state.selectedId!),
+            onAdjustEnd: () => adjustEnds++,
+          ),
+        ]),
+      ),
+    ));
+    // 强度切换 → onAdjustEnd（MosaicToolbar 无双击竞技场，tap 直接生效）
+    await tester.tap(find.byKey(const ValueKey('strength-2')));
+    expect(state.selected!.strength, 2);
+    expect(adjustEnds, 1);
+    // 效果切换 → onAdjustEnd
+    await tester.tap(find.text('模糊'));
+    expect(state.selected!.effect, MosaicEffect.blur);
+    expect(adjustEnds, 2);
+    // 关键帧圆点长按删除 → onAdjustEnd（OverlayEditor onDeleteKeyframe 内）。
+    // 注：强度图标 strength-1 也是 Icons.circle，须限定 OverlayEditor 子树，
+    // 否则 finder 命中工具条按钮。
+    final dots = find.descendant(
+        of: find.byType(OverlayEditor), matching: find.byIcon(Icons.circle));
+    await tester.longPress(dots.last);
+    expect(state.selected!.track.frames.length, 1);
+    expect(adjustEnds, 3);
+  });
 }

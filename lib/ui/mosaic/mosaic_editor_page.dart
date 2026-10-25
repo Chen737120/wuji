@@ -6,6 +6,7 @@ import 'package:video_player/video_player.dart';
 import '../../editing/keyframes.dart';
 import '../../editing/mosaic_editor_state.dart';
 import '../../editing/mosaic_region.dart';
+import '../../editing/mosaic_snapshot.dart';
 import '../../theme.dart';
 
 /// 打码编辑器（spec §3.3）：视频最大化＋区域框叠加＋底部工具条。
@@ -43,8 +44,16 @@ class _MosaicEditorPageState extends State<MosaicEditorPage> {
   double _viewScale = 1;
   Offset _viewOffset = Offset.zero;
   bool _immersive = false;
-  String? _snapshotPath; // 当前 position 的帧快照，Task 5 接入生成
+  String? _snapshotPath; // 当前 position 的帧快照（Task 5 生成）
   bool _playing = false;
+  // 快照重生成 debounce（spec §6）：300ms 静默后抽帧；busy 期间新请求
+  // 只更新时间戳与提示策略，由进行中的循环等待后拿最新状态补拍。
+  DateTime _lastSnapshotRequest =
+      DateTime.now().subtract(const Duration(days: 1));
+  bool _snapshotBusy = false;
+
+  /// 最近一次请求失败时是否提示（seek 高频失败降噪，裁决 5）。
+  bool _snapshotAnnounce = true;
 
   @override
   void initState() {
@@ -76,8 +85,47 @@ class _MosaicEditorPageState extends State<MosaicEditorPage> {
 
   @override
   void dispose() {
+    deleteMosaicSnapshotDir(); // 快照临时目录整删（fire-and-forget，内部吞异常）
     _player.dispose();
     super.dispose();
+  }
+
+  /// 快照重生成（spec §6）：调整结束/seek 停止后 300ms 静默抽帧跑真实打码链。
+  /// 播放中不刷新（视频帧即真实画面）；失败降级为 null＋可选轻提示。
+  Future<void> _refreshSnapshot({bool announceFailure = true}) async {
+    if (_playing || _state.regions.isEmpty) return;
+    _lastSnapshotRequest = DateTime.now();
+    _snapshotAnnounce = announceFailure;
+    if (_snapshotBusy) return;
+    _snapshotBusy = true;
+    var stale = false;
+    try {
+      while (true) {
+        final idle = DateTime.now().difference(_lastSnapshotRequest);
+        if (idle >= const Duration(milliseconds: 300)) break;
+        await Future.delayed(const Duration(milliseconds: 100));
+      }
+      final capturedAt = DateTime.now();
+      final path = await captureMosaicSnapshot(
+        srcPath: widget.srcPath,
+        regions: _state.regions,
+        at: _state.position,
+        srcW: widget.srcW,
+        srcH: widget.srcH,
+      );
+      if (mounted && !_playing) {
+        setState(() => _snapshotPath = path);
+        if (path == null && _snapshotAnnounce) {
+          ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
+              content: Text('快照生成失败，导出不受影响')));
+        }
+      }
+      // FFmpeg 执行期间又来了新请求（debounce 窗口已过）：补拍一次
+      stale = _lastSnapshotRequest.isAfter(capturedAt);
+    } finally {
+      _snapshotBusy = false;
+    }
+    if (stale) await _refreshSnapshot(announceFailure: _snapshotAnnounce);
   }
 
   /// 「区域」：到 5 个上限时提示且不新增（spec §7；addRegion 底层
@@ -89,6 +137,7 @@ class _MosaicEditorPageState extends State<MosaicEditorPage> {
       return;
     }
     setState(_state.addRegion);
+    _refreshSnapshot(); // 新区域进滤镜图，快照须重拍
   }
 
   /// 「关键帧」：当前时刻 upsert（同刻替换不算新增，不受上限拦）。
@@ -104,6 +153,17 @@ class _MosaicEditorPageState extends State<MosaicEditorPage> {
       return;
     }
     setState(_state.addKeyframeAtPosition);
+    _refreshSnapshot(); // 关键帧增删（裁决 3）
+  }
+
+  /// 「删除」：移除选中区域并重拍快照（滤镜图变了）。
+  void _deleteSelectedRegion() {
+    setState(() {
+      if (_state.selectedId != null) {
+        _state.removeRegion(_state.selectedId!);
+      }
+    });
+    _refreshSnapshot();
   }
 
   @override
@@ -130,6 +190,8 @@ class _MosaicEditorPageState extends State<MosaicEditorPage> {
                           widget.srcW.toDouble(), widget.srcH.toDouble()),
                       immersive: _immersive,
                       onChanged: () => setState(() {}),
+                      // 拖框/角柄缩放结束、关键帧删除后重拍快照（裁决 3）
+                      onAdjustEnd: () => _refreshSnapshot(),
                       onToggleImmersive: () =>
                           setState(() => _immersive = !_immersive),
                       viewScale: _viewScale,
@@ -138,11 +200,15 @@ class _MosaicEditorPageState extends State<MosaicEditorPage> {
                         _viewScale = scale;
                         _viewOffset = offset;
                       }),
-                      onSeek: (t) => setState(() {
-                        _state.seekTo(t);
-                        _player.seekTo(t);
-                        _snapshotPath = null; // 位置变了，快照失效待重生成
-                      }),
+                      onSeek: (t) {
+                        setState(() {
+                          _state.seekTo(t);
+                          _player.seekTo(t);
+                          _snapshotPath = null; // 位置变了，快照失效待重生成
+                        });
+                        // seek 触发的刷新失败不提示（高频降噪，裁决 5）
+                        _refreshSnapshot(announceFailure: false);
+                      },
                       onPause: () => _player.pause(),
                     ),
                   ]),
@@ -155,11 +221,9 @@ class _MosaicEditorPageState extends State<MosaicEditorPage> {
                 hasSelection: _state.selected != null,
                 onAddRegion: _addRegion,
                 onAddKeyframe: _addKeyframe,
-                onDeleteRegion: () => setState(() {
-                  if (_state.selectedId != null) {
-                    _state.removeRegion(_state.selectedId!);
-                  }
-                }),
+                onDeleteRegion: _deleteSelectedRegion,
+                // 效果/强度切换后重拍快照（工具条回调由页面组合，裁决 3）
+                onAdjustEnd: () => _refreshSnapshot(),
                 onPrimary: () {
                   if (widget.embedded) {
                     Navigator.pop(context, _state.regions);
@@ -199,6 +263,7 @@ class OverlayEditor extends StatefulWidget {
     required this.immersive,
     required this.onChanged,
     required this.onToggleImmersive,
+    this.onAdjustEnd,
     this.viewScale = 1,
     this.viewOffset = Offset.zero,
     this.onViewTransformed,
@@ -213,6 +278,9 @@ class OverlayEditor extends StatefulWidget {
   final bool immersive;
   final VoidCallback onChanged;
   final VoidCallback onToggleImmersive;
+
+  /// 区域调整结束（拖框/角柄缩放 onPanEnd、关键帧删除）——宿主用于重拍快照。
+  final VoidCallback? onAdjustEnd;
   final double viewScale;
   final Offset viewOffset;
   final void Function(double scale, Offset offset)? onViewTransformed;
@@ -265,6 +333,7 @@ class _OverlayEditorState extends State<OverlayEditor> {
               ));
               widget.onChanged();
             },
+            onPanEnd: (_) => widget.onAdjustEnd?.call(),
             child: Container(
               decoration: BoxDecoration(
                 border: Border.all(
@@ -288,6 +357,7 @@ class _OverlayEditorState extends State<OverlayEditor> {
                           state.scaleSelectedBy(f);
                           widget.onChanged();
                         },
+                        onPanEnd: (_) => widget.onAdjustEnd?.call(),
                         child: const Padding(
                           padding: EdgeInsets.all(4),
                           child: Icon(Icons.control_camera,
@@ -337,6 +407,7 @@ class _OverlayEditorState extends State<OverlayEditor> {
                   onDeleteKeyframe: (t) {
                     state.removeKeyframeAt(t);
                     widget.onChanged();
+                    widget.onAdjustEnd?.call(); // 关键帧删除后重拍快照
                   },
                 ),
               ),
@@ -356,6 +427,7 @@ class MosaicToolbar extends StatelessWidget {
     required this.onAddRegion,
     required this.onAddKeyframe,
     required this.onDeleteRegion,
+    this.onAdjustEnd,
     this.onPrimary,
     this.primaryLabel,
   });
@@ -365,6 +437,9 @@ class MosaicToolbar extends StatelessWidget {
   final VoidCallback onAddRegion;
   final VoidCallback onAddKeyframe;
   final VoidCallback onDeleteRegion;
+
+  /// 效果/强度切换后回调——宿主用于重拍快照（本组件不依赖快照实现）。
+  final VoidCallback? onAdjustEnd;
   final VoidCallback? onPrimary;
   final String? primaryLabel;
 
@@ -384,7 +459,10 @@ class MosaicToolbar extends StatelessWidget {
               ],
               selected: {sel?.effect ?? MosaicEffect.mosaic},
               onSelectionChanged: hasSelection
-                  ? (s) => state.setEffect(s.first)
+                  ? (s) {
+                      state.setEffect(s.first);
+                      onAdjustEnd?.call();
+                    }
                   : null,
             ),
           ),
@@ -392,7 +470,12 @@ class MosaicToolbar extends StatelessWidget {
           for (var i = 0; i < 3; i++)
             IconButton(
               key: ValueKey('strength-$i'),
-              onPressed: hasSelection ? () => state.setStrength(i) : null,
+              onPressed: hasSelection
+                  ? () {
+                      state.setStrength(i);
+                      onAdjustEnd?.call();
+                    }
+                  : null,
               isSelected: sel?.strength == i,
               icon: Icon(const [Icons.grain, Icons.circle, Icons.blur_on][i],
                   size: 18),
