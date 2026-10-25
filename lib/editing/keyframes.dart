@@ -117,6 +117,21 @@ class KeyframeTrack {
     return (_evenClamp(w * srcW, srcW), _evenClamp(h * srcH, srcH));
   }
 
+  /// 打码区域用：固定像素尺寸下 x/y 的逐帧 if 链表达式。
+  /// 与 [cropExpr] 的 x/y 同源同 clamp 语义（spec §5.1 照抄模式）。
+  (String, String) topLeftExprs(int sizeWpx, int sizeHpx, int srcW, int srcH) =>
+      (_posExpr(sizeWpx.toDouble(), srcW, (b) => b.cx),
+          _posExpr(sizeHpx.toDouble(), srcH, (b) => b.cy));
+
+  /// 打码快照用：时刻 [t] 的区域左上角常量像素坐标（clamp 语义同上）。
+  (int, int) topLeftAt(Duration t, int sizeWpx, int sizeHpx, int srcW, int srcH) {
+    final b = boxAt(t);
+    return (
+      _clampedCenter(b.cx, sizeWpx, srcW),
+      _clampedCenter(b.cy, sizeHpx, srcH),
+    );
+  }
+
   /// 像素值取整→偶数→clamp 进源（上限取源的最大偶数）。
   static int _evenClamp(double px, int src) {
     final maxEven = src - (src & 1);

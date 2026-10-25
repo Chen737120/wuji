@@ -52,12 +52,11 @@ class CropBox {
     }
   }
 
-  /// clamp：框出界拉回画面内；面积 < 10% 时等比放大到最小面积。
-  CropBox clamped() {
+  /// clamp：框出界拉回画面内；面积 < [minArea] 时等比放大到最小面积。
+  /// 直拍规格最小面积 = 画面 10%；打码区域允许更小（spec §7，Task 3 传 0.0016）。
+  CropBox clamped({double minArea = 0.10}) {
     var nw = w;
     var nh = h;
-    // 面积下限（规格 §5.1：最小面积 = 画面 10%）
-    const minArea = 0.10;
     if (nw * nh < minArea) {
       final factor = math.sqrt(minArea / (nw * nh));
       nw = (nw * factor).clamp(0.01, 1.0);
@@ -81,14 +80,25 @@ class CropBox {
   }
 
   /// 以 delta 移动中心后 clamp。
-  CropBox movedBy(Offset delta) =>
-      CropBox(cx: cx + delta.dx, cy: cy + delta.dy, w: w, h: h).clamped();
+  /// [minArea] 透传 [clamped]：打码小框拖动时不得被最小面积放大（spec §7），
+  /// 直拍默认 0.10 行为不变。
+  CropBox movedBy(Offset delta, {double minArea = 0.10}) =>
+      CropBox(cx: cx + delta.dx, cy: cy + delta.dy, w: w, h: h)
+          .clamped(minArea: minArea);
 
   /// 以 factor 缩放（>1 放大框）后 clamp；比例锁定按 w 等比。
-  CropBox scaledBy(double factor) {
-    final factorClamped = factor.clamp(0.5, 2.0);
+  /// 直拍默认 minFactor 0.5 / maxFactor 2.0 / minArea 0.10 行为不变；
+  /// 打码编辑器（Task 3）传 minFactor 0.1 / maxFactor 4.0、minArea 0.0016
+  /// 以支持小框深缩放（spec §7）。
+  CropBox scaledBy(
+    double factor, {
+    double minArea = 0.10,
+    double minFactor = 0.5,
+    double maxFactor = 2.0,
+  }) {
+    final factorClamped = factor.clamp(minFactor, maxFactor);
     return CropBox(cx: cx, cy: cy, w: w * factorClamped, h: h * factorClamped)
-        .clamped();
+        .clamped(minArea: minArea);
   }
 
   /// 像素域矩形（源尺寸），供 FFmpeg crop。
