@@ -66,13 +66,18 @@ Future<String?> captureMosaicSnapshot({
   final outPath = '${dir.path}${Platform.pathSeparator}'
       'snap-${DateTime.now().millisecondsSinceEpoch}.jpg';
   try {
-    final session = await FFmpegKit.execute(buildSnapshotCommand(
+    // 完整命令打 logcat/console：Scudo 崩溃发生在 FFmpegKit 命令解析期
+    // (init_complex_filtergraph)，崩溃时需要当时命令做重放定位
+    final cmd = buildSnapshotCommand(
         srcPath: srcPath,
         regions: regions,
         at: at,
         srcW: srcW,
         srcH: srcH,
-        outPath: outPath));
+        outPath: outPath);
+    // ignore: avoid_print
+    print('WUJI_SNAPSHOT $cmd');
+    final session = await FFmpegKit.execute(cmd);
     // 注：isValueSuccess 是方法（本包 3.6.7 非 getter），brief 的
     // `rc?.isValueSuccess != true` 是 tear-off 比较恒真，此处按方法调用。
     final rc = await session.getReturnCode();
