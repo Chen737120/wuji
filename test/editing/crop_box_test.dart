@@ -46,5 +46,22 @@ void main() {
       final c = tiny.clamped();
       expect(c.w * c.h, greaterThanOrEqualTo(0.0999));
     });
+
+    test('scaledBy/minFactor=0.1：factor 0.2 不被默认 0.5 下限挡住（Task 3 裁决 3）', () {
+      // 0.4*0.2=0.08 的框面积 0.0064 < 直拍默认 minArea 0.10，会被放大回
+      // 0.10 而测不到 factor 下限本身——须显式传打码下限 0.0016（0.0064 > 0.0016）。
+      final b = const CropBox(cx: 0.5, cy: 0.5, w: 0.4, h: 0.4)
+          .scaledBy(0.2, minFactor: 0.1, minArea: 0.0016);
+      expect(b.w, closeTo(0.08, 1e-9));
+      expect(b.h, closeTo(0.08, 1e-9));
+    });
+
+    test('movedBy/minArea=0.0016：0.05 小框拖动不被最小面积放大（Task 3 裁决 3）', () {
+      // 0.05*0.05=0.0025 > 0.0016，原地移动后尺寸不得被放大。
+      final b = const CropBox(cx: 0.5, cy: 0.5, w: 0.05, h: 0.05)
+          .movedBy(Offset.zero, minArea: 0.0016);
+      expect(b.w, 0.05);
+      expect(b.h, 0.05);
+    });
   });
 }
