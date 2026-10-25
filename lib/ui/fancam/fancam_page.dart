@@ -368,35 +368,49 @@ class _FancamPageState extends State<FancamPage> {
     if (!mounted) return;
     final trackDur = widget.trimmedEnd - widget.trimStart;
     var userCancelled = false;
+    // 取消唯一入口（取消按钮）：decode 期 _tracking 尚为 null（no-op），
+    // 由 decode 后的 userCancelled 短路兜住；跟踪期 run.cancel() 即刻终止
+    void cancelTracking() {
+      userCancelled = true;
+      _tracking?.cancel();
+    }
+
+    // 进度模态与 main.dart 导出模态同款防线（评审 Important #1）：
+    // ① PopScope(canPop:false)——barrierDismissible 只挡点击，系统返回键
+    //    仍会关框；关框后跟踪继续，完成时 finally 的 pop 会误弹 FancamPage
+    //    （用户被踢回上一页、编辑状态全丢）。返回键不关框，取消走「取消」按钮。
+    // ② dialogOpen 标志——finally 只在本模态未关闭时 pop，双保险。
+    var dialogOpen = true;
     unawaited(showDialog<void>(
       context: context,
       barrierDismissible: false,
-      builder: (dlgCtx) => AlertDialog(
-        title: const Text('正在跟踪目标'),
-        content: ValueListenableBuilder<double>(
-          valueListenable: _trackProgress,
-          builder: (context, p, _) => Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              LinearProgressIndicator(value: p <= 0 ? null : p.clamp(0.0, 1.0)),
-              const SizedBox(height: 10),
-              Text('${(p * 100).round()}%',
-                  style: const TextStyle(fontSize: 12)),
-            ],
+      builder: (dlgCtx) => PopScope(
+        canPop: false, // 跟踪中不可返回键关框；取消走「取消」按钮（同 main.dart 导出模态）
+        child: AlertDialog(
+          title: const Text('正在跟踪目标'),
+          content: ValueListenableBuilder<double>(
+            valueListenable: _trackProgress,
+            builder: (context, p, _) => Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                LinearProgressIndicator(value: p <= 0 ? null : p.clamp(0.0, 1.0)),
+                const SizedBox(height: 10),
+                Text('${(p * 100).round()}%',
+                    style: const TextStyle(fontSize: 12)),
+              ],
+            ),
           ),
+          actions: [
+            TextButton(
+              // 只 cancel（done 完成 null / decode 后短路 → 本流程 finally 收尾关框，
+              // 留在自动模式）
+              onPressed: cancelTracking,
+              child: const Text('取消'),
+            ),
+          ],
         ),
-        actions: [
-          TextButton(
-            // 只 cancel（done 完成 null → 本流程 finally 收尾关框，留在自动模式）
-            onPressed: () {
-              userCancelled = true;
-              _tracking?.cancel();
-            },
-            child: const Text('取消'),
-          ),
-        ],
       ),
-    ));
+    ).whenComplete(() => dialogOpen = false));
     _trackProgress.value = 0;
     String? rawPath;
     try {
@@ -411,6 +425,14 @@ class _FancamPageState extends State<FancamPage> {
         outPath: rawPath,
       );
       if (!mounted) return;
+      if (userCancelled) {
+        // decode 期取消（评审 Important #2）：解码本身不可中断（数十秒内完
+        // 成），但取消后不得再启动跟踪跑完全程；raw 由 finally 兜底删除，
+        // 不写 session（清目标、留在自动模式，与跟踪期取消同语义）
+        ScaffoldMessenger.of(context)
+            .showSnackBar(const SnackBar(content: Text('跟踪已取消')));
+        return;
+      }
       final run = startTracking(
         rawPath: rawPath,
         initCxNorm: cxNorm,
@@ -423,7 +445,7 @@ class _FancamPageState extends State<FancamPage> {
       _tracking = run;
       final pts = await run.done;
       if (!mounted || _editMode != FancamEditMode.follow) {
-        return; // 跟踪期间页面退出或已切回手动（进度框可被系统返回键关闭）→ 丢弃结果
+        return; // 跟踪期间页面退出或已切回手动 → 丢弃结果（session 不写入）
       }
       if (pts == null || pts.isEmpty) {
         if (mounted) {
@@ -457,9 +479,12 @@ class _FancamPageState extends State<FancamPage> {
           if (f.existsSync()) f.deleteSync();
         } catch (_) {}
       }
-      if (mounted) {
+      if (mounted && dialogOpen) {
+        // 只在本模态仍在栈上时 pop（dialogOpen 由 whenComplete 置 false）——
+        // 否则 canPop() 会 pop 掉 FancamPage 本身（评审 Important #1）。
+        // 取消按钮只 cancel 不 pop，关框统一收口在此。
         final nav = Navigator.of(context, rootNavigator: true);
-        if (nav.canPop()) nav.pop(); // 关模态进度框（取消按钮只 cancel 不 pop）
+        if (nav.canPop()) nav.pop();
       }
     }
   }
