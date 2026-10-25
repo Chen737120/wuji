@@ -71,6 +71,37 @@ void main() {
     expect(state.selected!.strength, 2);
   });
 
+  testWidgets('无区域点「模糊」→ 轻提示（冒烟缺陷 5：原样静默无响应）', (tester) async {
+    final state = MosaicEditorState(
+        duration: const Duration(seconds: 10), srcW: 1280, srcH: 720);
+    await tester.pumpWidget(MaterialApp(
+      home: Scaffold(
+        body: Column(children: [
+          Expanded(
+            child: OverlayEditor(
+              state: state,
+              canvasSize: const Size(320, 180),
+              immersive: false,
+              onChanged: () {},
+              onToggleImmersive: () {},
+            ),
+          ),
+          MosaicToolbar(
+            state: state,
+            hasSelection: state.selected != null,
+            onAddRegion: state.addRegion,
+            onAddKeyframe: state.addKeyframeAtPosition,
+            onDeleteRegion: () => state.removeRegion(state.selectedId!),
+          ),
+        ]),
+      ),
+    ));
+    await tester.tap(find.text('模糊'));
+    await tester.pump();
+    expect(find.text('请先添加打码区域'), findsOneWidget);
+    expect(state.regions, isEmpty); // 无区域：不产生任何状态变化
+  });
+
   testWidgets('关键帧圆点点击 seek（评审 Important 修复回归）', (tester) async {
     final state = MosaicEditorState(
         duration: const Duration(seconds: 10), srcW: 1280, srcH: 720)

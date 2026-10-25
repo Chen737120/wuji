@@ -466,12 +466,17 @@ class MosaicToolbar extends StatelessWidget {
                 ButtonSegment(value: MosaicEffect.blur, label: Text('模糊')),
               ],
               selected: {sel?.effect ?? MosaicEffect.mosaic},
-              onSelectionChanged: hasSelection
-                  ? (s) {
-                      state.setEffect(s.first);
-                      onAdjustEnd?.call();
-                    }
-                  : null,
+              // 无区域时不再静默（冒烟缺陷 5：点「模糊」零反馈像坏了）——
+              // 轻提示引导先加区域；有区域维持原切换逻辑
+              onSelectionChanged: (s) {
+                if (!hasSelection) {
+                  ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
+                      content: Text('请先添加打码区域')));
+                  return;
+                }
+                state.setEffect(s.first);
+                onAdjustEnd?.call();
+              },
             ),
           ),
           // 强度三档：细/中/粗
