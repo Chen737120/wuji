@@ -105,6 +105,8 @@ class _MosaicEditorPageState extends State<MosaicEditorPage> {
         if (idle >= const Duration(milliseconds: 300)) break;
         await Future.delayed(const Duration(milliseconds: 100));
       }
+      // dispose 恰逢等待中：不起 capture（否则会重建 dispose 刚删掉的快照目录）
+      if (!mounted) return;
       final capturedAt = DateTime.now();
       final path = await captureMosaicSnapshot(
         srcPath: widget.srcPath,
@@ -113,19 +115,25 @@ class _MosaicEditorPageState extends State<MosaicEditorPage> {
         srcW: widget.srcW,
         srcH: widget.srcH,
       );
-      if (mounted && !_playing) {
+      // stale 判断前移到写入前（评审 Important #1）：capture 期间又来了
+      // 新请求（典型：seek 已清空 _snapshotPath），旧时刻帧不得回填——
+      // 跳过本次写入与提示，交给 tail 补拍最新状态。
+      stale = _lastSnapshotRequest.isAfter(capturedAt);
+      if (mounted && !stale && !_playing) {
         setState(() => _snapshotPath = path);
         if (path == null && _snapshotAnnounce) {
           ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
               content: Text('快照生成失败，导出不受影响')));
         }
       }
-      // FFmpeg 执行期间又来了新请求（debounce 窗口已过）：补拍一次
-      stale = _lastSnapshotRequest.isAfter(capturedAt);
     } finally {
       _snapshotBusy = false;
     }
-    if (stale) await _refreshSnapshot(announceFailure: _snapshotAnnounce);
+    // tail 补拍须过 mounted 门闩（评审 Minor #2）：dispose 后递归会重建
+    // 快照目录留下孤儿 jpg
+    if (mounted && stale) {
+      await _refreshSnapshot(announceFailure: _snapshotAnnounce);
+    }
   }
 
   /// 「区域」：到 5 个上限时提示且不新增（spec §7；addRegion 底层
