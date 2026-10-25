@@ -177,6 +177,8 @@ class _MosaicEditorPageState extends State<MosaicEditorPage> {
             alignment: Alignment.topLeft,
             child: IconButton(
               icon: const Icon(Icons.arrow_back, color: Colors.white),
+              // 注：此 pop 不带回传（null），与「完成」pop(regions) 返回类型
+              // 不一致——宿主须容错 null=取消/放弃（Task 7 直拍接线时处理）。
               onPressed: () => Navigator.pop(context),
             ),
           ),
@@ -466,6 +468,9 @@ class _TrackBar extends StatelessWidget {
                 left: ratioOf(f.t).clamp(0.0, 1.0) * w - 12,
                 child: GestureDetector(
                   behavior: HitTestBehavior.opaque,
+                  // 点击 seek 到该帧（opaque 会拦住下层进度条的 onTapUp，
+                  // 须在圆点自身注册 onTap，否则点击无响应）
+                  onTap: () => onSeek(f.t),
                   onLongPress: () => onDeleteKeyframe(f.t),
                   child: const SizedBox(
                     width: 24,

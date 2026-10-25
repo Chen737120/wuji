@@ -70,4 +70,33 @@ void main() {
     await tester.tap(find.byKey(const ValueKey('strength-2')));
     expect(state.selected!.strength, 2);
   });
+
+  testWidgets('关键帧圆点点击 seek（评审 Important 修复回归）', (tester) async {
+    final state = MosaicEditorState(
+        duration: const Duration(seconds: 10), srcW: 1280, srcH: 720)
+      ..addRegion()
+      ..seekTo(const Duration(seconds: 5))
+      ..addKeyframeAtPosition(); // 帧 = [0s, 5s]
+    final seeks = <Duration>[];
+    await tester.pumpWidget(MaterialApp(
+      home: Scaffold(
+        body: OverlayEditor(
+          state: state,
+          canvasSize: const Size(320, 180),
+          immersive: false,
+          onChanged: () {},
+          onToggleImmersive: () {},
+          onSeek: seeks.add,
+        ),
+      ),
+    ));
+    // 圆点渲染（0s 定位在左边缘截断处，5s 在轨道中部）
+    final dots = find.byIcon(Icons.circle);
+    expect(dots, findsNWidgets(2));
+    // 点击 5s 圆点 → onSeek 收到该帧时刻
+    await tester.tap(dots.last);
+    // 外层 onDoubleTap 扣住竞技场，单击 ~300ms 后生效（同上，推进假时钟）
+    await tester.pump(const Duration(milliseconds: 400));
+    expect(seeks, [const Duration(seconds: 5)]);
+  });
 }
