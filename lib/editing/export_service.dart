@@ -13,6 +13,7 @@ import 'package:photo_manager/photo_manager.dart';
 
 import '../services/photo_bridge.dart';
 import 'ffmpeg_probe.dart' show probeMedia;
+import 'ffmpeg_serial.dart' show ffmpegGate;
 
 /// 导出已取消（用户点取消，或取消请求先于任务启动）。
 class ExportCancelled implements Exception {
@@ -289,6 +290,9 @@ class ExportService {
 }
 
 /// 设备端实现：包 FFmpegKit 异步会话（数组形式，免 shell 拼接注入）。
+/// 经全局 [ffmpegGate] 串行——与快照重拍（mosaic_snapshot）互斥，
+/// 杜绝两条 FFmpeg 命令在 native 解析/释放滤镜图窗口重叠
+/// （冒烟缺陷 3 Scudo 崩溃的产品层缓解）。
 class FFmpegKitRunner implements CommandRunner {
   @override
   Future<int> run(
@@ -296,20 +300,23 @@ class FFmpegKitRunner implements CommandRunner {
     void Function(double progress)? onProgress,
     int? expectedDurationMs,
   }) {
-    final completer = Completer<int>();
-    FFmpegKit.executeWithArgumentsAsync(args.toList(),
-        (FFmpegSession session) async {
-      final ReturnCode? rc = await session.getReturnCode();
-      completer.complete(rc?.getValue() ?? -1);
-    }, null, (Statistics statistics) {
-      if (onProgress == null ||
-          expectedDurationMs == null ||
-          expectedDurationMs <= 0) {
-        return;
-      }
-      onProgress((statistics.getTime() / expectedDurationMs).clamp(0.0, 1.0));
+    return ffmpegGate.run(() {
+      final completer = Completer<int>();
+      FFmpegKit.executeWithArgumentsAsync(args.toList(),
+          (FFmpegSession session) async {
+        final ReturnCode? rc = await session.getReturnCode();
+        completer.complete(rc?.getValue() ?? -1);
+      }, null, (Statistics statistics) {
+        if (onProgress == null ||
+            expectedDurationMs == null ||
+            expectedDurationMs <= 0) {
+          return;
+        }
+        onProgress(
+            (statistics.getTime() / expectedDurationMs).clamp(0.0, 1.0));
+      });
+      return completer.future;
     });
-    return completer.future;
   }
 
   @override

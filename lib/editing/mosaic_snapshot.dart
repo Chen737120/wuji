@@ -3,6 +3,7 @@ import 'dart:io';
 import 'package:ffmpeg_kit_flutter_new_min/ffmpeg_kit.dart';
 import 'package:path_provider/path_provider.dart';
 
+import 'ffmpeg_serial.dart';
 import 'mosaic_graph.dart';
 import 'mosaic_region.dart';
 
@@ -77,7 +78,9 @@ Future<String?> captureMosaicSnapshot({
         outPath: outPath);
     // ignore: avoid_print
     print('WUJI_SNAPSHOT $cmd');
-    final session = await FFmpegKit.execute(cmd);
+    // 全局串行闸（缺陷 3 缓解）：与导出命令互斥，快照不得在导出命令
+    // 解析/执行窗口内并发起跑（native abort 无法 Dart 捕获，只能防）
+    final session = await ffmpegGate.run(() => FFmpegKit.execute(cmd));
     // 注：isValueSuccess 是方法（本包 3.6.7 非 getter），brief 的
     // `rc?.isValueSuccess != true` 是 tear-off 比较恒真，此处按方法调用。
     final rc = await session.getReturnCode();
