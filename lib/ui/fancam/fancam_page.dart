@@ -128,15 +128,19 @@ class _FancamPageState extends State<FancamPage> {
       ctl.addListener(_onTick);
       setState(() {
         _ctl = ctl;
+        // video_player 的 size 已应用 rotation，与 FFmpeg 默认 autorotate
+        // 后滤镜看到的尺寸一致，可作为 crop 像素域基准。
+        // 顺序铁律：先赋 _srcW/_srcH 再算默认框——反序会让
+        // CropBox.centered 在 0 尺寸上产出 NaN 框写进轨道，预览页
+        // 导出参数单 toInt 抛 Infinity or NaN（冒烟 d26 红屏，缺陷 1
+        // 修复后暴露的掩盖问题）
+        _srcW = ctl.value.size.width.round();
+        _srcH = ctl.value.size.height.round();
         // 关键帧轨道 = 修剪后时间轴（起点=0）
         _track = KeyframeTrack(
             duration: widget.trimmedEnd - widget.trimStart);
         _box = CropBox.centered(_ratio, srcW: _srcW, srcH: _srcH);
         _track!.reset(_box);
-        // video_player 的 size 已应用 rotation，与 FFmpeg 默认 autorotate
-        // 后滤镜看到的尺寸一致，可作为 crop 像素域基准
-        _srcW = ctl.value.size.width.round();
-        _srcH = ctl.value.size.height.round();
       });
       await ctl.seekTo(widget.trimStart);
       // 不自动播放：先停在修剪起点让用户选区/加关键帧，控制条可手动播放

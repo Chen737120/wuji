@@ -32,6 +32,12 @@ class CropBox {
   static CropBox centered(String ratio,
       {required int srcW, required int srcH, double fill = 0.8}) {
     final aspect = _aspect(ratio);
+    // 尺寸未知（调用方初始化时序上 video_player size 尚未就绪）时退回
+    // 满幅 fill 框：0/0=NaN 一旦流进 KeyframeTrack，导出参数单
+    // _evenClamp(NaN).floor() 会抛 Infinity or NaN toInt（冒烟实证）
+    if (srcW <= 0 || srcH <= 0) {
+      return CropBox(cx: 0.5, cy: 0.5, w: fill, h: fill);
+    }
     var w = aspect * srcH / srcW; // h=1 时的归一化宽
     var h = 1.0;
     if (w > 1) {

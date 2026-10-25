@@ -21,6 +21,20 @@ void main() {
       expect(box.w * 1080 / (box.h * 2520), closeTo(9 / 16, 0.001));
     });
 
+    test('centered 尺寸未知(0)时返回安全框不产 NaN——冒烟 NaN 导出崩溃守卫', () {
+      // FancamPage._init 曾在 _srcW/_srcH 赋值前算默认框：0/0=NaN 流进
+      // KeyframeTrack，预览页导出参数单 _evenClamp(NaN).floor() 抛
+      // Unsupported operation: Infinity or NaN toInt（冒烟 d26 红屏）。
+      // 防御：非正尺寸退回满幅 80% 框。
+      for (final ratio in const ['9:16', '3:4', '1:1', '自由']) {
+        final b = CropBox.centered(ratio, srcW: 0, srcH: 0);
+        expect(b.w.isNaN, isFalse, reason: ratio);
+        expect(b.h.isNaN, isFalse, reason: ratio);
+        expect(b.w, inInclusiveRange(0.01, 1.0), reason: ratio);
+        expect(b.h, inInclusiveRange(0.01, 1.0), reason: ratio);
+      }
+    });
+
     test('9:16 竖屏源上三种比例像素域各自正确', () {
       final wants = {'9:16': 9 / 16, '3:4': 3 / 4, '1:1': 1.0};
       for (final e in wants.entries) {
