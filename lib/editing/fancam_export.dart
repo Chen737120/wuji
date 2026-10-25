@@ -103,6 +103,79 @@ String buildFancamCommand({
       '-movflags +faststart';
 }
 
+/// 构建自动跟踪（sendcmd 驱动）导出的 FFmpeg 命令。
+///
+/// 与 [buildFancamCommand] 的差异仅在裁剪来源：手动版把逐帧 crop 表达式
+/// 内联进滤镜参数（受 ~4KB 单滤镜参数硬限制）；跟随版滤镜链只含
+/// `sendcmd=f=<cmdsPath>` 命令文件路径——每帧两行、无长度限制，文件内容
+/// 由 `FollowSession.buildSendCmd()` 生成，落盘由调用方页面负责
+/// （`getTemporaryDirectory()/wuji-export/follow-<millis>.txt`），本函数只引用路径。
+/// 其余与手动同口径：
+/// - x0/y0 = [centers] 首帧偶数化左上角（`(x−cropW/2).round() & ~1`，与
+///   sendcmd 首帧行同式，避免首帧闪跳）；
+/// - 输出尺寸 [fancamOutputSize]（不放大＋16 对齐）、码率 [videoBitrateFor]、
+///   音频段（hasAudio ? AAC 标准化 : -an）、编码器与 trim 拼装（`-ss` 前置
+///   → 滤镜 t 从 0 起，sendcmd 时间相对修剪起点，与 centers 时间轴一致）；
+/// - 打码同手动（spec §5.2）：[regions] 非空时 [buildMosaicGraph] 串联在前、
+///   sendcmd/crop/scale 在后，`-map "[vout]" -map 0:a?`。
+String buildFancamFollowCommand({
+  required String srcPath,
+  required String cmdsPath,
+  required int cropW,
+  required int cropH,
+  required int srcW,
+  required int srcH,
+  required List<({double t, double x, double y})> centers,
+  bool hasAudio = true,
+  int outH = 1080,
+  Duration trimStart = Duration.zero,
+  Duration? trimEnd,
+  List<MosaicRegion> regions = const [],
+}) {
+  if (centers.isEmpty) {
+    throw ArgumentError('centers has no frames');
+  }
+
+  final (outW, outHeight) = fancamOutputSize(cropW, cropH, outH: outH);
+  final x0 = (centers.first.x - cropW / 2).round() & ~1;
+  final y0 = (centers.first.y - cropH / 2).round() & ~1;
+  final followSeg =
+      'sendcmd=f=$cmdsPath,crop=$cropW:$cropH:$x0:$y0,'
+      'scale=$outW:$outHeight,setsar=1';
+
+  // 以下与 buildFancamCommand 同源（音频标准化 / 码率分档 / 平台硬编 /
+  // trim 拼装），保持两条导出路径口径一致。
+  final audioPart =
+      hasAudio ? '-c:a aac -ar 48000 -ac 2 -b:a 128k' : '-an';
+  final videoBitrate = videoBitrateFor(outHeight);
+  final videoCodec = Platform.isIOS ? 'h264_videotoolbox' : 'h264_mediacodec';
+
+  final trimPart = trimStart > Duration.zero
+      ? '-ss ${(trimStart.inMilliseconds / 1000).toStringAsFixed(3)} '
+      : '';
+  final durPart = trimEnd != null
+      ? '-t ${((trimEnd - trimStart).inMilliseconds / 1000).toStringAsFixed(3)} '
+      : '';
+
+  final String videoPart;
+  if (regions.isEmpty) {
+    videoPart = '-vf "$followSeg" ';
+  } else {
+    final (graph, out) = buildMosaicGraph(
+      regions,
+      srcW: srcW,
+      srcH: srcH,
+      inputLabel: '0:v',
+    );
+    videoPart = '-filter_complex "$graph;[$out]$followSeg[vout]" '
+        '-map "[vout]" -map 0:a? ';
+  }
+  return '-y $trimPart-i "$srcPath" $durPart'
+      '$videoPart'
+      '-c:v $videoCodec -pix_fmt yuv420p -b:v $videoBitrate $audioPart '
+      '-movflags +faststart';
+}
+
 /// 按输出高的视频码率分档（直拍/对比/打码共用）：1080p 级 16M，720p 级 10M，
 /// 更小 6M。设了 -b:v 后 mediacodec 才会按高码率编码。
 String videoBitrateFor(int outHeight) =>

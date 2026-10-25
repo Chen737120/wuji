@@ -223,16 +223,20 @@ class FollowSession {
     return best * frameDt > 1.0 ? '目标丢失，点击画面重新锁定' : null;
   }
 
-  /// 生成 sendcmd 命令文件内容：每帧两行 `t crop.x X;` / `t crop.y Y;`（按帧升序）。
+  /// 生成 sendcmd 命令文件内容：每帧两行 `t crop x X;` / `t crop y Y;`（按帧升序）。
   /// X/Y = 中心−半宽 **取整再偶数化**（Review Focus #2：原型踩过忘减半宽与
   /// yuv420p 奇偏移伪影两次坑）；t 相对修剪起点（centers 自 0 起）。
+  /// 行必须是 sendcmd **三段式** target+command+arg：ffmpeg 9 实测两段式
+  /// `crop.x V` 会被解析为 target:"crop.x" command:"V"——无滤镜可匹配、
+  /// 不报错、静默失效（Task 3 PC 冒烟发现，证据见
+  /// .superpowers/sdd/2026-10-25-fancam-follow/task-3-report.md）。
   String buildSendCmd() {
     final (boxW, boxH) = followCropSize(box, srcW, srcH);
     final buf = StringBuffer();
     for (final c in centers) {
       final t = c.t.toStringAsFixed(4);
-      buf.write('$t crop.x ${(c.x - boxW / 2).round() & ~1};\n');
-      buf.write('$t crop.y ${(c.y - boxH / 2).round() & ~1};\n');
+      buf.write('$t crop x ${(c.x - boxW / 2).round() & ~1};\n');
+      buf.write('$t crop y ${(c.y - boxH / 2).round() & ~1};\n');
     }
     return buf.toString();
   }

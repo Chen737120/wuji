@@ -135,22 +135,25 @@ void main() {
       expect(cmd.endsWith('\n'), isTrue, reason: '每行以换行结尾（文件直写语义）');
       final lines = cmd.split('\n')..removeLast();
       expect(lines.length, 62, reason: '2×帧数（31 帧）');
-      // 首帧行：x=中心−半宽取整再偶数化（640−170=470 已偶；360−302=58 已偶）
-      expect(lines[0], '0.0000 crop.x ${(640 - 170).round() & ~1};');
-      expect(lines[1], '0.0000 crop.y ${(360 - 302).round() & ~1};');
-      expect(lines[0], '0.0000 crop.x 470;');
-      expect(lines[1], '0.0000 crop.y 58;');
-      // 全部行：x/y 偶数、t 升序、crop.x/crop.y 交替
+      // 首帧行：x=中心−半宽取整再偶数化（640−170=470 已偶；360−302=58 已偶）。
+      // 格式必须是 sendcmd 三段式 "t crop x V;"（target+command+arg）——
+      // ffmpeg 9 实测两段式 "crop.x V" 被解析为 target:"crop.x" command:"V"，
+      // 无滤镜匹配、静默失效（Task 3 PC 冒烟发现，证据见 task-3-report.md）
+      expect(lines[0], '0.0000 crop x ${(640 - 170).round() & ~1};');
+      expect(lines[1], '0.0000 crop y ${(360 - 302).round() & ~1};');
+      expect(lines[0], '0.0000 crop x 470;');
+      expect(lines[1], '0.0000 crop y 58;');
+      // 全部行：x/y 偶数、t 升序、crop x/crop y 交替
       var prevT = -1.0;
       for (var i = 0; i < lines.length; i++) {
         final parts = lines[i].split(' ');
-        expect(parts.length, 3, reason: '行格式 "t crop.axle V;"：${lines[i]}');
+        expect(parts.length, 4, reason: '行格式 "t crop x|y V;"：${lines[i]}');
         final t = double.parse(parts[0]);
         expect(t, greaterThanOrEqualTo(prevT), reason: 't 升序');
         prevT = t;
-        final v = int.parse(parts[2].split(';')[0]);
+        final v = int.parse(parts[3].split(';')[0]);
         expect(v.isEven, isTrue, reason: '偶数化：${lines[i]}');
-        expect(parts[1], i.isEven ? 'crop.x' : 'crop.y');
+        expect(parts[2], i.isEven ? 'x' : 'y');
       }
     });
 

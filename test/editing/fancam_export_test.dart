@@ -141,4 +141,120 @@ void main() {
     expect(cmd, contains('-vf "'));
     expect(cmd.contains('-filter_complex'), isFalse);
   });
+
+  // ---- Task 3：sendcmd 跟随导出（buildFancamFollowCommand）----
+
+  List<({double t, double x, double y})> followCenters(List<List<double>> pts) =>
+      [for (final p in pts) (t: p[0], x: p[1], y: p[2])];
+
+  test('跟随导出无打码：-vf 链含 sendcmd 文件路径/crop/scale/setsar，首帧偶数化 x0/y0，码率音频同手动', () {
+    final cmd = buildFancamFollowCommand(
+      srcPath: '/tmp/a.mp4',
+      cmdsPath: '/tmp/follow-1.txt',
+      cropW: 340,
+      cropH: 604,
+      srcW: 1280,
+      srcH: 720,
+      // x0=(501-170)=331→偶数化330；y0=(401-302)=99→偶数化98（与 sendcmd
+      // 首帧行同式，防首帧闪跳）
+      centers: followCenters([
+        [0.0, 501.0, 401.0],
+        [0.5, 520.0, 405.0],
+      ]),
+    );
+    expect(cmd, contains('sendcmd=f=/tmp/follow-1.txt'));
+    expect(cmd, contains('crop=340:604:330:98'));
+    expect(cmd, contains('scale=336:608')); // fancamOutputSize(340,604)
+    expect(cmd, contains('setsar=1'));
+    expect(cmd, contains('-vf "sendcmd='));
+    expect(cmd.contains('-filter_complex'), isFalse);
+    expect(cmd, contains('-b:v 6M')); // 输出高 608 < 700 → 6M 分档
+    expect(cmd, contains('-c:a aac -ar 48000 -ac 2 -b:a 128k'));
+    expect(cmd, isNot(contains('-an')));
+  });
+
+  test('跟随导出＋打码：filter_complex 打码输出标签紧接 sendcmd（先打码后裁剪），显式 map', () {
+    final regions = [
+      MosaicRegion(
+        id: 'r1',
+        track: KeyframeTrack(duration: const Duration(seconds: 30))
+          ..reset(const CropBox(cx: 0.5, cy: 0.5, w: 0.2, h: 0.2)),
+      ),
+    ];
+    final cmd = buildFancamFollowCommand(
+      srcPath: '/tmp/a.mp4',
+      cmdsPath: '/tmp/follow-1.txt',
+      cropW: 340,
+      cropH: 604,
+      srcW: 1280,
+      srcH: 720,
+      centers: followCenters([
+        [0.0, 640.0, 360.0], // x0=(640-170)→470，y0=(360-302)→58
+        [1.0, 660.0, 370.0],
+      ]),
+      regions: regions,
+    );
+    expect(cmd, contains('-filter_complex "'));
+    expect(cmd.contains('-vf "'), isFalse);
+    // 顺序：mosaic overlay 输出标签 [mo0] 后紧跟 sendcmd（打码在前裁剪在后）
+    expect(cmd, contains('[mo0]sendcmd='));
+    expect(cmd, contains('crop=340:604:470:58'));
+    expect(cmd, contains('-map "[vout]"'));
+    expect(cmd, contains('-map 0:a?'));
+  });
+
+  test('跟随导出 trim 拼装与手动一致：-ss 前置于 -i、-t 输出时长', () {
+    final follow = buildFancamFollowCommand(
+      srcPath: '/tmp/a.mp4',
+      cmdsPath: '/tmp/follow-1.txt',
+      cropW: 340,
+      cropH: 604,
+      srcW: 1280,
+      srcH: 720,
+      centers: followCenters([[0.0, 640.0, 360.0]]),
+      trimStart: const Duration(milliseconds: 1500),
+      trimEnd: const Duration(milliseconds: 4500),
+    );
+    final manual = buildFancamCommand(
+      srcPath: '/tmp/a.mp4',
+      track: track([[0.5, 0.5, 0.5, 0.5]]),
+      srcW: 1280,
+      srcH: 720,
+      trimStart: const Duration(milliseconds: 1500),
+      trimEnd: const Duration(milliseconds: 4500),
+    );
+    const trimSeg = '-ss 1.500 -i "/tmp/a.mp4" -t 3.000 ';
+    expect(follow, contains(trimSeg));
+    expect(manual, contains(trimSeg));
+  });
+
+  test('跟随导出无声源 → -an（与手动同口径）', () {
+    final cmd = buildFancamFollowCommand(
+      srcPath: '/tmp/a.mp4',
+      cmdsPath: '/tmp/follow-1.txt',
+      cropW: 340,
+      cropH: 604,
+      srcW: 1280,
+      srcH: 720,
+      centers: followCenters([[0.0, 640.0, 360.0]]),
+      hasAudio: false,
+    );
+    expect(cmd, contains('-an'));
+    expect(cmd, isNot(contains('-c:a aac')));
+  });
+
+  test('跟随导出空 centers → ArgumentError', () {
+    expect(
+      () => buildFancamFollowCommand(
+        srcPath: '/tmp/a.mp4',
+        cmdsPath: '/tmp/follow-1.txt',
+        cropW: 340,
+        cropH: 604,
+        srcW: 1280,
+        srcH: 720,
+        centers: const [],
+      ),
+      throwsArgumentError,
+    );
+  });
 }
