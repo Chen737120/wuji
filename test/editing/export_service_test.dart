@@ -259,6 +259,7 @@ void main() {
     expect(mover.moved, hasLength(1)); // 回退轮成功照常入相册
     expect(mover.cleanedTemps, isEmpty);
     expect(probe.calls, 2);
+    expect(p, startsWith('Movies/wuji/打码')); // 返回相册路径（回退后仍成功）
   });
 
   test('run: 回退 mpeg4 后仍无视频流→ExportFailed 且清半成品', () async {
