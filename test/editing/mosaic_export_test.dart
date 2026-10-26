@@ -41,6 +41,34 @@ void main() {
     expect(cmd, isNot(contains('-c:a')));
   });
 
+  test('rotation=90：滤镜/码率按 display 尺寸（1080×1920），不按编码 1920×1080', () {
+    final rotated = MediaInfo(
+        durationMs: 30000,
+        width: 1920,
+        height: 1080,
+        fps: 30,
+        hasAudio: true,
+        rotationDegrees: 90);
+    final cmd = buildMosaicExportCommand(
+        srcPath: '/tmp/a.mp4', regions: [oneRegion()], info: rotated);
+    // 0.2×0.2 区域按 display 1080×1920 → 216×384（偶对齐后不变）
+    expect(cmd, contains('crop=216:384:'));
+    expect(cmd.contains('crop=384:216:'), isFalse);
+    // 编码高 1080 会被判 16M；修正后按 display 高 1920 仍是 16M，
+    // 故用 720 高的旋转源区分：1280×720 rotation=90 → display 720×1280
+    final small = MediaInfo(
+        durationMs: 30000,
+        width: 1280,
+        height: 720,
+        fps: 30,
+        hasAudio: true,
+        rotationDegrees: 90);
+    final smallCmd = buildMosaicExportCommand(
+        srcPath: '/tmp/a.mp4', regions: [oneRegion()], info: small);
+    expect(smallCmd, contains('-b:v 16M')); // displayHeight=1280
+    expect(smallCmd, isNot(contains('-b:v 10M')));
+  });
+
   test('videoBitrateFor 分档与原 _videoBitrate 一致（公开化回归）', () {
     expect(videoBitrateFor(1080), '16M');
     expect(videoBitrateFor(720), '10M');

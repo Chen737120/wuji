@@ -368,8 +368,10 @@ class _AppRootState extends State<AppRoot> {
     nav.push(MaterialPageRoute(
       builder: (_) => MosaicEditorPage(
         srcPath: src.path,
-        srcW: info.width,
-        srcH: info.height,
+        // 打码按显示方向建坐标域（竖拍 rotation=±90 时 ffprobe 的
+        // width/height 与 video_player/ffmpeg autorotate 后相反，F3）
+        srcW: info.displayWidth,
+        srcH: info.displayHeight,
         durationMs: info.durationMs,
         embedded: false,
         // 对话框/Snackbar 必须走根 Navigator 的 context（本 State 的

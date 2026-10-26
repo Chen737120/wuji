@@ -16,13 +16,16 @@ String buildMosaicExportCommand({
   required List<MosaicRegion> regions,
   required MediaInfo info,
 }) {
+  // 滤镜输入是 autorotate 后的画面：区域坐标域/码率分档都按 display 尺寸
+  //（竖拍 rotation=±90 时宽高与编码尺寸相反，F3）
   final (graph, out) = buildMosaicGraph(regions,
-      srcW: info.width, srcH: info.height, inputLabel: '0:v');
+      srcW: info.displayWidth, srcH: info.displayHeight, inputLabel: '0:v');
   return '-y -i "$srcPath" '
       '-filter_complex "$graph" '
       '-map "[$out]" '
       '${info.hasAudio ? '-map 0:a:0? ' : ''}'
-      '-c:v h264_mediacodec -pix_fmt yuv420p -b:v ${videoBitrateFor(info.height)} '
+      '-c:v h264_mediacodec -pix_fmt yuv420p '
+      '-b:v ${videoBitrateFor(info.displayHeight)} '
       '${info.hasAudio ? '-c:a aac -ar 48000 -ac 2 -b:a 128k' : '-an'} '
       '-movflags +faststart';
 }

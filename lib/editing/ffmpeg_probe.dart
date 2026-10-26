@@ -11,6 +11,7 @@ class MediaInfo {
     required this.height,
     required this.fps,
     required this.hasAudio,
+    this.rotationDegrees = 0,
   });
 
   final int durationMs;
@@ -18,6 +19,18 @@ class MediaInfo {
   final int height;
   final double fps; // 平均帧率
   final bool hasAudio;
+
+  /// 显示方向旋转角（ffprobe `side_data_list[].rotation` 或旧字段
+  /// `tags.rotate`，度；竖拍常为 ±90）。
+  final int rotationDegrees;
+
+  /// 显示尺寸（video_player / ffmpeg autorotate 后的像素域）：90/270 度时
+  /// 宽高交换。打码编辑器与导出滤镜必须用这套值。
+  ///
+  /// 注意不要把 [width]/[height] 改成显示尺寸——它们是编码尺寸，对比页
+  ///（compare_page）等仍按编码域使用（F3 约束：不误伤 compare）。
+  int get displayWidth => rotationDegrees % 180 == 0 ? width : height;
+  int get displayHeight => rotationDegrees % 180 == 0 ? height : width;
 }
 
 /// 解析 ffprobe 的媒体信息 JSON（纯函数，宿主可测）。
@@ -45,10 +58,35 @@ MediaInfo? parseMediaInformationJson(String json) {
       height: height,
       fps: fps,
       hasAudio: hasAudio,
+      rotationDegrees: _parseRotation(video),
     );
   } catch (_) {
     return null;
   }
+}
+
+/// 视频流 rotation：优先 `side_data_list[].rotation`（现代 ffprobe），
+/// 回退旧字段 `tags.rotate`；无则 0。
+int _parseRotation(Map<String, dynamic> video) {
+  int? read(Object? v) {
+    if (v is num) return v.round();
+    return int.tryParse('${v ?? ''}');
+  }
+
+  final side = video['side_data_list'];
+  if (side is List) {
+    for (final d in side) {
+      if (d is! Map) continue;
+      final r = read(d['rotation']);
+      if (r != null) return r;
+    }
+  }
+  final tags = video['tags'];
+  if (tags is Map) {
+    final r = read(tags['rotate']);
+    if (r != null) return r;
+  }
+  return 0;
 }
 
 /// '30000/1001' → 29.97；'30/1' → 30.0；'0/0' → 0。
