@@ -10,6 +10,7 @@ import '../../editing/ffmpeg_probe.dart';
 import '../../editing/keyframes.dart';
 import '../../editing/media_source_picker.dart';
 import '../../editing/mosaic_region.dart';
+import '../../editing/trim_timeline.dart';
 import 'fancam_preview_page.dart';
 import 'preview_geometry.dart';
 import '../mosaic/mosaic_editor_page.dart';
@@ -767,22 +768,30 @@ class _FancamPageState extends State<FancamPage> {
                               accent: accent,
                               height: 52,
                               stripCount: 14,
-                              // 自动模式＝锚点时刻（ruling 3）；手动＝关键帧时刻（现状）
-                              keyframes: (_editMode == FancamEditMode.follow &&
-                                      _session != null)
-                                  ? [for (final a in _session!.anchors) a.t]
-                                  : [
-                                      for (final f in _track!.frames) f.t,
-                                    ],
-                              onKeyframeTap: (t) =>
-                                  _seekSmooth(t + widget.trimStart),
+                              // 自动模式＝锚点时刻（ruling 3）；手动＝关键帧时刻（现状）。
+                              // FilmStrip 的 duration/position 是源时间，轨道/锚点是
+                              // track 时间——圆点统一换算为显示时间（F11）。
+                              keyframes: displayKeyframeTimes(
+                                (_editMode == FancamEditMode.follow &&
+                                        _session != null)
+                                    ? [for (final a in _session!.anchors) a.t]
+                                    : [
+                                        for (final f in _track!.frames) f.t,
+                                      ],
+                                widget.trimStart,
+                              ),
+                              // FilmStrip 回调已是显示（源）时间，直接 seek；
+                              // 偏移只在这里加一次，禁止回调里再加 trimStart
+                              onKeyframeTap: _seekSmooth,
                               // 锚点长按删除（自动模式；FilmStrip 可选回调，
-                              // 手动模式不传＝现状零变化）
+                              // 手动模式不传＝现状零变化）——显示时间换回 track 时间
                               onKeyframeLongPress:
                                   (_editMode == FancamEditMode.follow &&
                                           _session != null)
-                                      ? (t) => setState(
-                                          () => _session!.removeAnchor(t))
+                                      ? (t) => setState(() =>
+                                          _session!.removeAnchor(
+                                              trackTimeOfDisplay(
+                                                  t, widget.trimStart)))
                                       : null,
                             ),
                           ),
