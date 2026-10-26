@@ -94,6 +94,9 @@ class _FancamPageState extends State<FancamPage> {
   TrackingRun? _tracking; // 进行中的跟踪运行（取消/释放用）
   final ValueNotifier<double> _trackProgress = ValueNotifier(0); // 模态进度
   double _fps = 30.0; // probeMedia 探测（video_player 无 fps）；失败兜底 30（ruling 2）
+  // fps 探测 Future（F9）：init 起跑不阻塞首屏；点选跟踪解码前 await 它，
+  // 避免 25/60fps 源在探测完成前按 30fps 建轨迹导致时间轴错位。
+  Future<void>? _fpsProbe;
 
   // 源视频真实尺寸（导出 crop 的像素域基准）。v1.5.6 前硬编码 1080×1920，
   // 横屏视频 crop 超界 → FFmpeg "Invalid too big size" → 直拍导出必败
@@ -148,7 +151,8 @@ class _FancamPageState extends State<FancamPage> {
       if (!mounted) return;
       setState(() => _error = '视频加载失败');
     }
-    unawaited(_probeFps()); // fps 探测只服务跟踪/重建会话，无需 setState
+    // fps 探测只服务跟踪/重建会话，不阻塞首屏；存 Future 供点选时等待（F9）
+    _fpsProbe = _probeFps();
   }
 
   /// 跟踪帧率探测（ruling 2）：video_player 的 value 无 fps，用 ffprobe 异步
@@ -372,6 +376,9 @@ class _FancamPageState extends State<FancamPage> {
       return;
     }
     await ctl.pause();
+    if (!mounted) return;
+    // 探测先完成再解码（F9）：_probeFps 内部已 catch，失败保持兜底 30
+    await (_fpsProbe ??= _probeFps());
     if (!mounted) return;
     final trackDur = widget.trimmedEnd - widget.trimStart;
     var userCancelled = false;
