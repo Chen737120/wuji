@@ -7,6 +7,7 @@ import '../../editing/keyframes.dart';
 import '../../editing/mosaic_editor_state.dart';
 import '../../editing/mosaic_region.dart';
 import '../../editing/mosaic_snapshot.dart';
+import '../../editing/trim_timeline.dart';
 import '../../theme.dart';
 
 /// 打码编辑器（spec §3.3）：视频最大化＋区域框叠加＋底部工具条。
@@ -19,6 +20,7 @@ class MosaicEditorPage extends StatefulWidget {
     required this.srcW,
     required this.srcH,
     required this.durationMs,
+    this.trimStart = Duration.zero,
     this.initialRegions = const [],
     required this.embedded,
     this.onExport,
@@ -30,6 +32,11 @@ class MosaicEditorPage extends StatefulWidget {
   final int srcW;
   final int srcH;
   final int durationMs;
+
+  /// 修剪起点（直拍内嵌传入；独立入口默认 0）。播放器/快照的源视频 seek
+  /// 须加此偏移，编辑器内部（区域关键帧/轨道/快照滤镜）一律用 track 时间
+  /// （0=trimStart），见 [trackPosition]/[sourcePosition]。
+  final Duration trimStart;
   final List<MosaicRegion> initialRegions;
   final bool embedded;
   final void Function(List<MosaicRegion> regions)? onExport;
@@ -65,11 +72,24 @@ class _MosaicEditorPageState extends State<MosaicEditorPage> {
       initialRegions: widget.initialRegions,
     );
     _player = VideoPlayerController.file(File(widget.srcPath));
-    _player.initialize().then((_) {
+    _player.initialize().then((_) async {
+      if (!mounted) return;
+      // 直拍内嵌：首帧定位到修剪起点（track 0 = 源 trimStart，F1）
+      if (widget.trimStart > Duration.zero) {
+        await _player.seekTo(widget.trimStart);
+      }
       if (mounted) setState(() {});
     });
     _player.addListener(_onPlayerTick);
   }
+
+  /// 播放器位置 → track 时间（0=trimStart，钳进修剪区间）。播放同步、
+  /// 快照、打点都读这个口径。
+  Duration get _trackPosition => trackPosition(
+        playerPosition: _player.value.position,
+        trimStart: widget.trimStart,
+        duration: _state.duration,
+      );
 
   /// 播放中随帧同步 state.position（否则叠加框/轨道不动）并刷新。
   /// 拖动/关键帧落点同样读 state.position，两处口径一致。
@@ -79,7 +99,7 @@ class _MosaicEditorPageState extends State<MosaicEditorPage> {
       setState(() => _playing = playing);
     }
     if (playing) {
-      setState(() => _state.seekTo(_player.value.position));
+      setState(() => _state.seekTo(_trackPosition));
     }
   }
 
@@ -114,6 +134,7 @@ class _MosaicEditorPageState extends State<MosaicEditorPage> {
         at: _state.position,
         srcW: widget.srcW,
         srcH: widget.srcH,
+        sourceOffset: widget.trimStart,
       );
       // stale 判断前移到写入前（评审 Important #1）：capture 期间又来了
       // 新请求（典型：seek 已清空 _snapshotPath），旧时刻帧不得回填——
@@ -211,7 +232,9 @@ class _MosaicEditorPageState extends State<MosaicEditorPage> {
                       onSeek: (t) {
                         setState(() {
                           _state.seekTo(t);
-                          _player.seekTo(t);
+                          // 轨道时间是 track 口径，播放器要源时间（F1）
+                          _player.seekTo(
+                              sourcePosition(t, widget.trimStart));
                           _snapshotPath = null; // 位置变了，快照失效待重生成
                         });
                         // seek 触发的刷新失败不提示（高频降噪，裁决 5）

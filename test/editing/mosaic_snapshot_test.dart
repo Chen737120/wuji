@@ -40,6 +40,43 @@ void main() {
     expect(cmd, contains('-ss 0.000 -i "/tmp/a.mp4" -ss 0.400'));
   });
 
+  test('sourceOffset（内嵌 trimStart）：源视频 seek 加偏移，滤镜图仍按 track 时间', () {
+    // 两帧轨迹（0s cx=0.2 / 10s cx=0.8），at=5.3s 的插值常量 x=546；
+    // 若误用源时间 25.3s 会钳到末帧 cx=0.8 → x=896。
+    final track = KeyframeTrack(duration: const Duration(seconds: 10))
+      ..upsert(Duration.zero,
+          const CropBox(cx: 0.2, cy: 0.5, w: 0.2, h: 0.2))
+      ..upsert(const Duration(seconds: 10),
+          const CropBox(cx: 0.8, cy: 0.5, w: 0.2, h: 0.2));
+    final cmd = buildSnapshotCommand(
+      srcPath: '/tmp/a.mp4',
+      regions: [MosaicRegion(id: 'r1', track: track)],
+      at: const Duration(seconds: 5, milliseconds: 300),
+      sourceOffset: const Duration(seconds: 20),
+      srcW: 1280,
+      srcH: 720,
+      outPath: '/cache/snap.jpg',
+    );
+    expect(cmd, contains('-ss 24.300 -i "/tmp/a.mp4" -ss 1.000'));
+    expect(cmd, contains('overlay=546:')); // track 时间 5.3 的插值坐标
+    expect(cmd.contains('overlay=896:'), isFalse); // 不是源时间 25.3 的末帧坐标
+  });
+
+  test('sourceOffset 且 at<1s：总定位=源 20.4s（19.4 快进 + 1.0 精确补）', () {
+    // 双 -ss 的总定位 = 输入侧 + 输出侧。修复文档示例写 20.400+0.400
+    // 实为源 20.8s（多走一个 at）；此处按同一“sourceOffset+at”口径断言。
+    final cmd = buildSnapshotCommand(
+      srcPath: '/tmp/a.mp4',
+      regions: [_region()],
+      at: const Duration(milliseconds: 400),
+      sourceOffset: const Duration(seconds: 20),
+      srcW: 1280,
+      srcH: 720,
+      outPath: '/cache/snap.jpg',
+    );
+    expect(cmd, contains('-ss 19.400 -i "/tmp/a.mp4" -ss 1.000'));
+  });
+
   test('空区域：capture 直接返回 null 不起 FFmpeg 会话（buildSnapshotCommand 仍可用）', () {
     // captureMosaicSnapshot 依赖平台通道，纯逻辑侧只验证空列表短路契约
     // 由实现保证（regions.isEmpty → null）；此处锁 buildSnapshotCommand 不空指针。

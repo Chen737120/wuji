@@ -11,6 +11,10 @@ import 'mosaic_region.dart';
 /// 双 -ss：输入侧关键帧快进到 t-1s（fast seek），输出侧精确补 1s（accurate）。
 /// 路径双引号包裹（FFmpegKit 参数解析同 shell 级引用，见
 /// export_service.tokenizeFfmpeg 注释；防路径含空格）。
+///
+/// 时间轴两套口径（v1.5.26 走查 F1）：滤镜图坐标与 [at] 用 **track 时间**
+/// （0=trimStart，与编辑器/导出区间一致）；源视频 seek 用
+/// `sourceOffset + at`（直拍内嵌时 sourceOffset=trimStart）。
 String buildSnapshotCommand({
   required String srcPath,
   required List<MosaicRegion> regions,
@@ -18,12 +22,14 @@ String buildSnapshotCommand({
   required int srcW,
   required int srcH,
   required String outPath,
+  Duration sourceOffset = Duration.zero,
 }) {
   final (graph, out) = buildMosaicGraph(regions,
       srcW: srcW, srcH: srcH, inputLabel: '0:v', at: at);
   const back = Duration(seconds: 1);
-  final inSeek = at >= back ? at - back : Duration.zero;
-  final outSeek = at >= back ? back : at;
+  final sourceAt = sourceOffset + at;
+  final inSeek = sourceAt >= back ? sourceAt - back : Duration.zero;
+  final outSeek = sourceAt >= back ? back : sourceAt;
   String s(Duration d) => (d.inMilliseconds / 1000).toStringAsFixed(3);
   return '-y -ss ${s(inSeek)} -i "$srcPath" -ss ${s(outSeek)} '
       '-filter_complex "$graph" -map "[$out]" -frames:v 1 "$outPath"';
@@ -56,6 +62,7 @@ Future<String?> captureMosaicSnapshot({
   required Duration at,
   required int srcW,
   required int srcH,
+  Duration sourceOffset = Duration.zero,
 }) async {
   if (regions.isEmpty) return null;
   final Directory dir;
@@ -75,7 +82,8 @@ Future<String?> captureMosaicSnapshot({
         at: at,
         srcW: srcW,
         srcH: srcH,
-        outPath: outPath);
+        outPath: outPath,
+        sourceOffset: sourceOffset);
     // ignore: avoid_print
     print('WUJI_SNAPSHOT $cmd');
     // 全局串行闸（缺陷 3 缓解）：与导出命令互斥，快照不得在导出命令

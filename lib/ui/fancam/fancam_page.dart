@@ -272,6 +272,9 @@ class _FancamPageState extends State<FancamPage> {
           srcW: _srcW,
           srcH: _srcH,
           durationMs: (widget.trimmedEnd - widget.trimStart).inMilliseconds,
+          // 内嵌编辑器时间轴＝修剪后时间轴：编辑器内部 track 时间 0 = 源
+          // trimStart，播放器/快照 seek 加此偏移（v1.5.26 走查 F1）
+          trimStart: widget.trimStart,
           // 深拷贝隔离：MosaicEditorState 只浅拷列表，编辑器内拖框/改效果
           // 会原地写 MosaicRegion 与 KeyframeTrack——若共享对象，返回按钮
           // 「放弃编辑」后原区域仍带着改动，null=不变须对象级隔离才成立
