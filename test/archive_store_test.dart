@@ -1,9 +1,39 @@
 import 'dart:io';
+import 'dart:typed_data';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:wuji/services/archive_fs.dart';
 import 'package:wuji/services/archive_store.dart';
 import 'package:wuji/services/manifest.dart';
 import 'package:wuji/data/db.dart' show ClassRecord, MediaAsset;
+
+/// 只记录写入数据/分块数的假存档后端（验证 stageFromPath 是否流式）。
+class _RecordingFs implements ArchiveFs {
+  final data = BytesBuilder();
+  var chunkCount = 0;
+  var totalBytes = 0;
+
+  @override
+  Future<void> write(String rel, Stream<List<int>> bytes) async {
+    await for (final c in bytes) {
+      chunkCount++;
+      totalBytes += c.length;
+      data.add(c);
+    }
+  }
+
+  @override
+  Future<bool> exists(String rel) async => false;
+  @override
+  Stream<List<int>> read(String rel) => const Stream.empty();
+  @override
+  Future<void> delete(String rel) async {}
+  @override
+  Future<void> move(String from, String to) async {}
+  @override
+  Future<List<String>> list(String prefix) async => const [];
+  @override
+  Future<int?> freeBytes() async => null;
+}
 
 void main() {
   late Directory tmp;
@@ -32,6 +62,25 @@ void main() {
     expect(await store.fs.exists(tempRel), isFalse);
     expect(await File('${tmp.path}/$finalRel').readAsBytes(), [1, 2, 3]);
     await store.discard(tempRel); // 幂等：文件已不存在也不抛
+  });
+
+  test('stageFromPath 流式拷贝：大文件分块写入，不整读进内存（OOM 回归）', () async {
+    final rec = _RecordingFs();
+    final streaming = ArchiveStore(rec);
+    final size = 2 * 1024 * 1024; // 2MB：openRead 默认 64KB/块 → 必须多块
+    final bytes = Uint8List(size);
+    for (var i = 0; i < size; i++) {
+      bytes[i] = i & 0xFF;
+    }
+    final src = File('${tmp.path}/big.bin')..writeAsBytesSync(bytes);
+
+    final tempRel = await streaming.stageFromPath(src.path, ext: 'mp4');
+    expect(tempRel.startsWith('media/.staging/'), isTrue);
+    // 2026-10-26 真机 394MB 视频保存 OOM：旧实现 readAsBytes 整读后单块写出
+    expect(rec.chunkCount, greaterThan(1),
+        reason: 'stageFromPath 必须流式分块，不能整文件一次性读入');
+    expect(rec.totalBytes, size);
+    expect(rec.data.takeBytes(), bytes);
   });
 
   test('manifest write/read roundtrip', () async {

@@ -27,10 +27,13 @@ class ArchiveStore implements MediaLocator {
   }
 
   /// 相册文件先落 staging，登记成功后 commit 成正式路径。
+  ///
+  /// **流式拷贝**：大视频（真机实测 394MB）整文件 `readAsBytes` 会直接
+  /// OOM（2026-10-26 用户报告「保存失败」的表层文案，logcat 实证
+  /// `保存失败: Out of Memory`）。`openRead` 按块交给后端流式写。
   Future<String> stageFromPath(String srcPath, {required String ext}) async {
     final tempRel = 'media/.staging/${_uuid.v4()}.${ext.toLowerCase()}';
-    final bytes = await File(srcPath).readAsBytes();
-    await fs.write(tempRel, Stream<List<int>>.value(bytes));
+    await fs.write(tempRel, File(srcPath).openRead());
     return tempRel;
   }
 

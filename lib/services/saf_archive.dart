@@ -23,6 +23,32 @@ String _mimeForExt(String ext) {
   }
 }
 
+/// SAF 分块写的块大小（8MB）：394MB 视频约 50 次平台调用，单块内存峰值
+/// 远低于旧实现「整文件 fold 进 BytesBuilder」的双份 ~800MB
+///（2026-10-26 真机 `保存失败: Out of Memory` 实证）。
+const int safWriteChunkBytes = 8 << 20;
+
+/// 把任意字节流缓冲成 ≤[maxBytes] 的块；空流不产出块（调用方负责建空文件）。
+/// 单块输入超过剩余容量时切分后产出，保证任何块都不超限。
+Stream<Uint8List> chunkedBytes(Stream<List<int>> source,
+    {int maxBytes = safWriteChunkBytes}) async* {
+  final buf = BytesBuilder(copy: false);
+  await for (final part in source) {
+    var offset = 0;
+    while (offset < part.length) {
+      final room = maxBytes - buf.length;
+      final remaining = part.length - offset;
+      final take = remaining <= room ? remaining : room;
+      buf.add(offset == 0 && take == remaining
+          ? part
+          : part.sublist(offset, offset + take));
+      offset += take;
+      if (buf.length >= maxBytes) yield buf.takeBytes();
+    }
+  }
+  if (buf.isNotEmpty) yield buf.takeBytes();
+}
+
 /// Android SAF 存档（规格 §5.1）：用户授权的文件夹（默认「下载/舞记」）。
 /// 卸载不清空；相对路径映射为 treeUri 下的子路径。
 class SafArchiveFs implements ArchiveFs, MediaPathResolver {
@@ -90,18 +116,27 @@ class SafArchiveFs implements ArchiveFs, MediaPathResolver {
         : await _dirUri(segs.sublist(0, segs.length - 1));
     final name = segs.last;
     final ext = name.contains('.') ? name.split('.').last : '';
-    final data = await bytes.fold<BytesBuilder>(BytesBuilder(), (b, c) {
-      b.add(c);
-      return b;
-    });
-    // 存档内同路径覆写：由上层保证语义（commit 只会写新 uuid 路径）
-    await _stream.writeFileBytes(
-      dirUri,
-      name,
-      _mimeForExt(ext),
-      data.takeBytes(),
-      overwrite: true,
-    );
+    final mime = _mimeForExt(ext);
+    // 分块写：首块覆盖（truncate/create），后续块 append。整文件 fold 在
+    // 394MB 视频上会 OOM（2026-10-26 真机实证），且平台通道按整块拷贝；
+    // 8MB 块把内存峰值压到 ~16MB。
+    var wrote = false;
+    await for (final chunk in chunkedBytes(bytes)) {
+      await _stream.writeFileBytes(
+        dirUri,
+        name,
+        mime,
+        chunk,
+        overwrite: true,
+        append: wrote,
+      );
+      wrote = true;
+    }
+    // 空流仍需创建空文件（旧实现 fold 空流后同样写一次空字节）
+    if (!wrote) {
+      await _stream.writeFileBytes(dirUri, name, mime, Uint8List(0),
+          overwrite: true);
+    }
   }
 
   @override
@@ -123,7 +158,30 @@ class SafArchiveFs implements ArchiveFs, MediaPathResolver {
 
   @override
   Future<void> move(String from, String to) async {
-    if (!await exists(from)) return;
+    final fromUri = await _fileUri(from);
+    if (fromUri == null) return;
+    final toSegs = _segments(to);
+    if (toSegs.isEmpty) throw FileSystemExceptionOnSaf('非法目标路径: $to');
+    final destDir = toSegs.length == 1
+        ? treeUri
+        : await _dirUri(toSegs.sublist(0, toSegs.length - 1));
+    // 优先原生 copyTo＋rename：同树复制不读文件内容，且源文件在复制成功
+    // 前始终保留（moveTo 一旦成功源就没了，rename 失败会丢数据）。
+    // 394MB 视频若走 write(to, read(from)) 会在 UI 线程泵 ~6000 个 64KB
+    // 块（v1.5.21 ANR 同源），故复制失败才回退流式复制。
+    try {
+      final copied = await _saf.copyTo(fromUri, false, destDir);
+      final renamed = await _saf.rename(copied.uri, false, toSegs.last);
+      if (renamed.name == toSegs.last) {
+        await _saf.delete(fromUri, false); // 目标就绪后才删源（staging）
+        return;
+      }
+      try {
+        await _saf.delete(copied.uri, false); // 改名未生效：清中间副本
+      } catch (_) {}
+    } catch (_) {
+      // 提供方不支持 copy/rename（或跨卷）：走下面的流式复制兜底
+    }
     await write(to, read(from));
     await delete(from);
   }
