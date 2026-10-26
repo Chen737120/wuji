@@ -11,6 +11,7 @@ import '../../editing/keyframes.dart';
 import '../../editing/media_source_picker.dart';
 import '../../editing/mosaic_region.dart';
 import 'fancam_preview_page.dart';
+import 'preview_geometry.dart';
 import '../mosaic/mosaic_editor_page.dart';
 import '../widgets/app_route.dart';
 import '../widgets/film_strip.dart';
@@ -106,6 +107,9 @@ class _FancamPageState extends State<FancamPage> {
   // 预览缩放（双指，仅查看）
   double _previewScale = 1.0;
   Offset _previewPan = Offset.zero;
+  // 捏合起点基准（F10）：d.scale 自手势起累计，直接乘当前 _previewScale 会
+  // 复利放大（从 2× 起手第一下会跳到 ~1.1×）；与 player/mosaic 同口径。
+  double? _previewScaleBase;
 
   // 手势状态
   _GestureMode? _mode;
@@ -339,10 +343,11 @@ class _FancamPageState extends State<FancamPage> {
     if (_tracking != null) return; // 跟踪进行中忽略（模态进度框已挡住多数路径）
     final videoBox = _videoRect(ctl.value.aspectRatio);
     if (videoBox.width <= 0 || videoBox.height <= 0) return;
-    final cx =
-        ((d.localPosition.dx - videoBox.left) / videoBox.width).clamp(0.0, 1.0);
-    final cy =
-        ((d.localPosition.dy - videoBox.top) / videoBox.height).clamp(0.0, 1.0);
+    // 预览可能被捏合放大：屏幕点先逆变换回视频内容坐标再归一化（F10）
+    final norm = previewNormalizedPoint(
+        d.localPosition, videoBox, _previewScale, _previewPan);
+    final cx = norm.dx;
+    final cy = norm.dy;
     if (_session != null) {
       final ok = await showDialog<bool>(
         context: context,
@@ -561,19 +566,22 @@ class _FancamPageState extends State<FancamPage> {
             onScaleStart: (d) {
               if (d.pointerCount >= 2) {
                 _mode = _GestureMode.previewScale;
-                _panStart = Offset(_previewScale, _previewPan.distance);
+                _previewScaleBase = _previewScale;
               }
             },
             onScaleUpdate: (d) {
               if (_mode == _GestureMode.previewScale && d.pointerCount >= 2) {
                 setState(() {
                   _previewScale =
-                      (d.scale * _previewScale / (_panStart.dx == 0 ? 1 : _panStart.dx))
+                      ((_previewScaleBase ?? _previewScale) * d.scale)
                           .clamp(1.0, 4.0);
                 });
               }
             },
-            onScaleEnd: (_) => _mode = null,
+            onScaleEnd: (_) {
+              _mode = null;
+              _previewScaleBase = null;
+            },
             child: Transform(
               alignment: Alignment.center,
               transform: Matrix4.identity()
@@ -610,10 +618,12 @@ class _FancamPageState extends State<FancamPage> {
               onPanUpdate: (d) {
                 if (_mode == null) return;
                 final videoBox = _videoRect(ctl.value.aspectRatio);
-                final dx =
-                    (d.localPosition.dx - _panStart.dx) / videoBox.width;
-                final dy =
-                    (d.localPosition.dy - _panStart.dy) / videoBox.height;
+                // 屏幕位移 → 视频内容归一化位移：预览放大后同一屏幕位移
+                // 对应的内容位移按 scale 缩小（与点选逆变换同源，F10）
+                final dx = (d.localPosition.dx - _panStart.dx) /
+                    (videoBox.width * _previewScale);
+                final dy = (d.localPosition.dy - _panStart.dy) /
+                    (videoBox.height * _previewScale);
                 setState(() {
                   switch (_mode!) {
                     case _GestureMode.move:
@@ -662,7 +672,9 @@ class _FancamPageState extends State<FancamPage> {
                 painter: _CropOverlayPainter(
                     box: _displayBox,
                     aspect: ctl.value.aspectRatio,
-                    accent: accent),
+                    accent: accent,
+                    viewScale: _previewScale,
+                    viewPan: _previewPan),
                 child: const SizedBox.expand(),
               ),
             ),
@@ -881,14 +893,17 @@ class _FancamPageState extends State<FancamPage> {
 
   _GestureMode? _hitTest(Offset pos, double aspect) {
     // 命中检测用当前显示框（手动=_box；自动=跟随框）——onPanStart 调用时
-    // _mode 尚为 null，_displayBox 即拖动前可见框
+    // _mode 尚为 null，_displayBox 即拖动前可见框；预览放大后框已映射到
+    // 屏幕域，命中必须用同一映射（F10）
     final display = _displayBox;
     final videoBox = _videoRect(aspect);
-    final boxPix = Rect.fromLTWH(
+    final contentBox = Rect.fromLTWH(
         videoBox.left + display.left * videoBox.width,
         videoBox.top + display.top * videoBox.height,
         display.w * videoBox.width,
         display.h * videoBox.height);
+    final boxPix = previewMappedRect(
+        contentBox, videoBox, _previewScale, _previewPan);
     // 角柄命中：右下角 36px 方块
     final handle = Rect.fromCenter(
         center: boxPix.bottomRight,
@@ -908,11 +923,17 @@ class _CropOverlayPainter extends CustomPainter {
     required this.box,
     required this.aspect,
     required this.accent,
+    this.viewScale = 1,
+    this.viewPan = Offset.zero,
   });
 
   final CropBox box; // 归一化
   final double aspect; // 视频宽高比
   final Color accent;
+
+  /// 预览查看变换（F10）：框 rect 与视频层同一映射；mask 仍铺满画布。
+  final double viewScale;
+  final Offset viewPan;
 
   @override
   void paint(Canvas canvas, Size size) {
@@ -925,11 +946,11 @@ class _CropOverlayPainter extends CustomPainter {
     final vx = (size.width - vw) / 2;
     final vy = (size.height - vh) / 2;
 
-    final bx = vx + box.left * vw;
-    final by = vy + box.top * vh;
-    final bw = box.w * vw;
-    final bh = box.h * vh;
-    final boxRect = Rect.fromLTWH(bx, by, bw, bh);
+    final contentBox = Rect.fromLTWH(
+        vx + box.left * vw, vy + box.top * vh, box.w * vw, box.h * vh);
+    // 框随预览缩放/平移（与点选逆变换、视频 Transform 同源）
+    final boxRect = previewMappedRect(
+        contentBox, Rect.fromLTWH(vx, vy, vw, vh), viewScale, viewPan);
 
     // 框外遮罩（even-odd 挖洞）
     final path = Path()
@@ -962,5 +983,8 @@ class _CropOverlayPainter extends CustomPainter {
 
   @override
   bool shouldRepaint(covariant _CropOverlayPainter old) =>
-      old.box != box || old.aspect != aspect;
+      old.box != box ||
+      old.aspect != aspect ||
+      old.viewScale != viewScale ||
+      old.viewPan != viewPan;
 }
