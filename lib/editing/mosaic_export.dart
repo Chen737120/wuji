@@ -29,3 +29,12 @@ String buildMosaicExportCommand({
       '${info.hasAudio ? '-c:a aac -ar 48000 -ac 2 -b:a 128k' : '-an'} '
       '-movflags +faststart';
 }
+
+/// 4K 判定（F12）：按 **display 尺寸**长边 ≥3840。旧实现只判
+/// `height > 2160`，正好 2160 的 4K 横屏漏判；竖拍 2160×3840 也要判到。
+bool is4kMedia(MediaInfo info) =>
+    info.displayWidth >= 3840 || info.displayHeight >= 3840;
+
+/// 打码导出前提示口径（spec §7）：4K 或时长超 5 分钟。
+bool mosaicExportNeedsNotice(MediaInfo info) =>
+    is4kMedia(info) || info.durationMs > 300000;

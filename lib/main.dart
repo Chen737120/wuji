@@ -411,11 +411,12 @@ class _AppRootState extends State<AppRoot> {
           const SnackBar(content: Text('请先添加打码区域')));
       return;
     }
-    // 规格 §7：4K 或超 5 分钟，先告知预计耗时再进导出
-    if (info.height > 2160 || info.durationMs > 300000) {
+    // 规格 §7：4K 或超 5 分钟，先告知预计耗时再进导出（F12：按 display
+    // 尺寸长边 ≥3840 判 4K，2160 高的 4K 横屏不再漏判）
+    if (mosaicExportNeedsNotice(info)) {
       final mins = (info.durationMs / 60000).round();
-      final why = info.height > 2160
-          ? '分辨率超过 4K'
+      final why = is4kMedia(info)
+          ? '分辨率达到 4K'
           : (mins > 0 ? '时长约 $mins 分钟' : '时长较长');
       final goOn = await showDialog<bool>(
         context: navCtx,

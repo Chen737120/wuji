@@ -69,6 +69,25 @@ void main() {
     expect(smallCmd, isNot(contains('-b:v 10M')));
   });
 
+  test('4K 提示口径（F12）：display 长边 ≥3840 或超 5 分钟；1440p/1080p 不误报', () {
+    MediaInfo mi({int w = 1920, int h = 1080, int rot = 0, int dur = 30000}) =>
+        MediaInfo(
+            durationMs: dur,
+            width: w,
+            height: h,
+            fps: 30,
+            hasAudio: true,
+            rotationDegrees: rot);
+    expect(is4kMedia(mi(w: 3840, h: 2160)), isTrue);
+    expect(is4kMedia(mi(w: 2160, h: 3840)), isTrue);
+    expect(is4kMedia(mi(w: 1920, h: 1080, rot: 90)), isFalse); // display 1080×1920
+    expect(is4kMedia(mi(w: 2560, h: 1440)), isFalse); // 2K 不误报
+    expect(is4kMedia(mi(w: 1920, h: 1080)), isFalse);
+    expect(mosaicExportNeedsNotice(mi(dur: 300000)), isFalse);
+    expect(mosaicExportNeedsNotice(mi(dur: 300001)), isTrue);
+    expect(mosaicExportNeedsNotice(mi(w: 3840, h: 2160)), isTrue);
+  });
+
   test('videoBitrateFor 分档与原 _videoBitrate 一致（公开化回归）', () {
     expect(videoBitrateFor(1080), '16M');
     expect(videoBitrateFor(720), '10M');
