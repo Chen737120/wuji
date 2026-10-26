@@ -68,6 +68,10 @@ class _FancamPreviewPageState extends State<FancamPreviewPage> {
   String? _followError; // 自动模式 cmds 落盘失败（按钮禁用＋参数单提示）
   ExportService? _svc;
 
+  /// 自动模式落盘的 sendcmd 命令文件；页面销毁或初始化失败时 best-effort 删除
+  ///（v1.5.26 走查 F8：原实现写后不删，cache 里 follow-*.txt 持续累积）。
+  String? _cmdsPath;
+
   @override
   void initState() {
     super.initState();
@@ -105,9 +109,18 @@ class _FancamPreviewPageState extends State<FancamPreviewPage> {
       final tmp = await getTemporaryDirectory();
       final dir = Directory('${tmp.path}/wuji-export');
       await dir.create(recursive: true);
+      // 落盘前再查 mounted：若页面在 await 期间退出，dispose 已执行过，
+      // 此时再写文件就会留下无人清理的 cmds（F8 的同一个缓存累积问题）
+      if (!mounted) return;
       final cmdsPath =
           '${dir.path}/follow-${DateTime.now().millisecondsSinceEpoch}.txt';
+      // 先记路径再写：写入中途失败也能在 catch 里清掉半截文件
+      _cmdsPath = cmdsPath;
       await File(cmdsPath).writeAsString(follow.buildSendCmd());
+      if (!mounted) {
+        _deleteCmdsFile(); // 写完才发现已退出：直接清掉
+        return;
+      }
       final (cropW, cropH) =
           followCropSize(follow.box, widget.srcW, widget.srcH);
       final (outW, outH) = fancamOutputSize(cropW, cropH);
@@ -130,8 +143,26 @@ class _FancamPreviewPageState extends State<FancamPreviewPage> {
         );
       });
     } catch (e) {
+      _deleteCmdsFile(); // 初始化失败：已落盘的 cmds 不再被引用，立即清
       if (mounted) setState(() => _followError = '跟踪数据准备失败：$e');
     }
+  }
+
+  /// 删除 cmds 临时文件（best-effort；缓存目录系统可回收，失败不打断流程）。
+  void _deleteCmdsFile() {
+    final p = _cmdsPath;
+    _cmdsPath = null;
+    if (p == null) return;
+    try {
+      final f = File(p);
+      if (f.existsSync()) f.deleteSync();
+    } catch (_) {}
+  }
+
+  @override
+  void dispose() {
+    _deleteCmdsFile();
+    super.dispose();
   }
 
   /// 第一步「保存到相册」：先只导出到临时文件并进入成片预览；
