@@ -1,4 +1,6 @@
 import 'dart:io';
+import 'dart:math' as math;
+
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:video_player/video_player.dart';
@@ -6,6 +8,25 @@ import 'package:video_player/video_player.dart';
 import 'widgets/save_to_gallery_button.dart';
 
 const _speeds = [0.5, 0.75, 1.0, 1.25, 1.5, 2.0];
+
+/// 视频基准渲染尺寸：AspectRatio 在视口松约束下的实际布局尺寸。
+/// 钳位必须用它而非视口尺寸——视频未填满的轴用视口口径会把画面拖出
+/// 屏外（2026-10-25 评审 Important 修正，见 spec §3.2）。
+Size videoBaseSize(Size viewport, double aspect) {
+  final w = math.min(viewport.width, viewport.height * aspect);
+  final h = math.min(viewport.height, viewport.width / aspect);
+  return Size(w, h);
+}
+
+/// 缩放平移钳位（视口中心系）：Transform.scale 绕中心缩放，视频放大后
+/// 单侧可拖余量 = (scale×content − viewport)/2；未溢出轴余量 0（拖不动）。
+/// scale=1 全轴归零＝与改前"拖动无反应"一致。
+Offset clampViewOffset(
+    Offset offset, double scale, Size content, Size viewport) {
+  final lx = math.max(0.0, (scale * content.width - viewport.width) / 2);
+  final ly = math.max(0.0, (scale * content.height - viewport.height) / 2);
+  return Offset(offset.dx.clamp(-lx, lx), offset.dy.clamp(-ly, ly));
+}
 
 /// 视频播放页（规格 §3.5）：默认竖屏播放，点画面显示/隐藏底部控制条；
 /// 控制条：播放暂停＋进度＋倍速＋全屏切换（全屏横屏沉浸）。支持捏合缩放。
@@ -24,6 +45,14 @@ class _PlayerPageState extends State<PlayerPage> {
   bool _fullscreen = false;
   bool _controls = true;
   String? _error;
+
+  // 捏合缩放（规格 §3.2）：只做捏合（1×~5×）＋放大后单指拖动看局部。
+  // _scaleBase 是手势起点基准——onScaleUpdate 里 setState 会更新
+  // _viewScale，而 d.scale 是自手势起点累计的值，直接相乘会复利放大
+  // （lib/ui/mosaic/mosaic_editor_page.dart:303 已文档化的同款坑）。
+  double _viewScale = 1.0;
+  Offset _viewOffset = Offset.zero;
+  double? _scaleBase;
 
   @override
   void initState() {
@@ -95,20 +124,52 @@ class _PlayerPageState extends State<PlayerPage> {
               : Stack(
                   alignment: Alignment.center,
                   children: [
+                    // 渲染：Transform.translate 用 build 内钳位后的有效偏移——
+                    // 全屏旋转后视口变化，下一帧自动按新边界重钳
+                    // （_setFullscreen 无需特殊处理）。
                     Center(
-                      child: InteractiveViewer(
-                        maxScale: 5,
-                        child: AspectRatio(
-                          aspectRatio: c.value.aspectRatio,
-                          child: VideoPlayer(c),
+                      child: Transform.translate(
+                        offset: clampViewOffset(
+                            _viewOffset,
+                            _viewScale,
+                            videoBaseSize(
+                                MediaQuery.sizeOf(context), c.value.aspectRatio),
+                            MediaQuery.sizeOf(context)),
+                        child: Transform.scale(
+                          scale: _viewScale,
+                          child: AspectRatio(
+                            aspectRatio: c.value.aspectRatio,
+                            child: VideoPlayer(c),
+                          ),
                         ),
                       ),
                     ),
-                    // 手势层：点画面切换控制条
+                    // 手势层：translucent 才能让下层不再被挡；一个识别器同时
+                    // 管 tap（切控制条）与 scale（捏合缩放／放大后拖动）。
+                    // 改前是 opaque + 只注册 onTap，InteractiveViewer 收不到
+                    // 任何事件——捏合缩放是死代码（spec §1 现状核实）。
                     Positioned.fill(
                       child: GestureDetector(
-                        behavior: HitTestBehavior.opaque,
+                        behavior: HitTestBehavior.translucent,
                         onTap: () => setState(() => _controls = !_controls),
+                        onScaleStart: (_) => _scaleBase = _viewScale,
+                        onScaleUpdate: (d) {
+                          final vp = MediaQuery.sizeOf(context);
+                          final content =
+                              videoBaseSize(vp, c.value.aspectRatio);
+                          setState(() {
+                            if (d.pointerCount >= 2) {
+                              _viewScale =
+                                  ((_scaleBase ?? 1.0) * d.scale).clamp(1.0, 5.0);
+                            }
+                            _viewOffset = clampViewOffset(
+                                _viewOffset + d.focalPointDelta,
+                                _viewScale,
+                                content,
+                                vp);
+                          });
+                        },
+                        onScaleEnd: (_) => _scaleBase = null,
                       ),
                     ),
                     Positioned(
