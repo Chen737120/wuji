@@ -140,6 +140,20 @@ void main() {
       await dir.delete(recursive: true);
     });
 
+    test('buildDecodeRawCommand：-t 是输出时长限制（在 -i 之后），按修剪时长截断', () {
+      final cmd = buildDecodeRawCommand(
+        videoPath: '/tmp/a.mp4',
+        ss: const Duration(seconds: 12),
+        duration: const Duration(seconds: 8, milliseconds: 500),
+        outPath: '/tmp/track.raw',
+      );
+      expect(cmd, contains('-ss 12.000 -i "/tmp/a.mp4"'));
+      expect(cmd, contains('-t 8.500'));
+      // -t 必须在 -i 之后（输入侧会变成“只读前 8.5s 源”，语义错位）
+      expect(cmd.indexOf('-t 8.500'), greaterThan(cmd.indexOf('-i "/tmp/a.mp4"')));
+      expect(cmd.indexOf('-t 8.500'), lessThan(cmd.indexOf('-f rawvideo')));
+    });
+
     test('用例5: cancel——done 完成 null、isolate 终止、raw 删除', () async {
       final dir = await Directory.systemTemp.createTemp('wuji-track-test');
       final rawPath = '${dir.path}${Platform.pathSeparator}track.raw';

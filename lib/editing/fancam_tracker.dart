@@ -171,8 +171,9 @@ class _NccTracker {
 /// 解码视频为 raw 临时文件（`<cache>/wuji-track/`，Task 4 页面侧创建并负责最终清理），
 /// 供 [startTracking] 逐帧读取。返回 outPath。
 ///
-/// [duration]/[fps] 不进入 ffmpeg 命令（命令不 cut 帧数，帧数以 raw 文件大小为准），
-/// 供调用方语义与断言（预期帧数 = duration×fps，由调用方校验）。
+/// [duration] 是**输出侧**时长限制（`-t` 放在 `-i` 之后）：只解码修剪区间，
+/// 否则长源视频会一直解码到结尾（v1.5.26 走查 F4：10 分钟源剪 40 秒会写
+/// 约 3GB raw）。[fps] 不进命令，仅供调用方语义/预期帧数。
 /// 失败抛异常（携带 ffmpeg 日志）。
 Future<String> decodeRawFrames({
   required String videoPath,
@@ -183,10 +184,12 @@ Future<String> decodeRawFrames({
 }) async {
   // ffmpeg 不会自动建目录：确保父目录存在（recursive 对已存在目录是幂等 no-op）。
   Directory(outPath).parent.createSync(recursive: true);
-  final ssSec = (ss.inMilliseconds / 1000).toStringAsFixed(3);
-  final session = await FFmpegKit.execute(
-    '-y -ss $ssSec -i "$videoPath" -vf scale=$W:$H,format=rgb24 -f rawvideo "$outPath"',
-  );
+  final session = await FFmpegKit.execute(buildDecodeRawCommand(
+    videoPath: videoPath,
+    ss: ss,
+    duration: duration,
+    outPath: outPath,
+  ));
   // 注：isValueSuccess 是方法（本包 3.6.7 非 getter，见 mosaic_snapshot.dart 踩坑注释）。
   final rc = await session.getReturnCode();
   if (rc?.isValueSuccess() != true) {
@@ -194,6 +197,21 @@ Future<String> decodeRawFrames({
     throw Exception('fancam decodeRawFrames 失败 rc=$rc: $logs');
   }
   return outPath;
+}
+
+/// raw 解码命令（纯函数可测）：
+/// `-y -ss <ss> -i "<path>" -vf scale=320:180,format=rgb24 -t <duration> -f rawvideo "<out>"`。
+/// **`-t` 必须在 `-i` 之后**（输出时长限制）；放到 `-i` 前面会变成输入
+/// 限制，只读源文件前 duration 秒，与修剪起点错位。
+String buildDecodeRawCommand({
+  required String videoPath,
+  required Duration ss,
+  required Duration duration,
+  required String outPath,
+}) {
+  String s(Duration d) => (d.inMilliseconds / 1000).toStringAsFixed(3);
+  return '-y -ss ${s(ss)} -i "$videoPath" '
+      '-vf scale=$W:$H,format=rgb24 -t ${s(duration)} -f rawvideo "$outPath"';
 }
 
 /// 一次跟踪运行：[done] 完成（成功=轨迹，失败/取消=null）；[cancel] 立即终止
