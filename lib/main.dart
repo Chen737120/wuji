@@ -6,6 +6,7 @@ import 'package:flutter_localizations/flutter_localizations.dart';
 import 'package:path_provider/path_provider.dart';
 import 'package:provider/provider.dart';
 import 'package:shared_preferences/shared_preferences.dart';
+import 'package:video_player/video_player.dart';
 import 'data/app_repository.dart';
 import 'app_services.dart';
 import 'data/db.dart';
@@ -365,21 +366,53 @@ class _AppRootState extends State<AppRoot> {
           const SnackBar(content: Text('视频不可读，请重新选择')));
       return;
     }
+    // 打码坐标域＝实际显示尺寸。真机实测 ffprobe_kit 的 getAllProperties
+    // 不返回 Display Matrix side data（rotation 丢成 0，编辑器按 1920×1080
+    // 建域、竖拍画面被横拉），而 video_player 的 size 已应用 rotation
+    //（直拍修剪页竖屏实证）。故优先用 video_player 尺寸，失败回退 probe。
+    final mosaicInfo = await _mosaicDisplayInfo(src.path, info);
+    if (!mounted) return;
     nav.push(MaterialPageRoute(
       builder: (_) => MosaicEditorPage(
         srcPath: src.path,
-        // 打码按显示方向建坐标域（竖拍 rotation=±90 时 ffprobe 的
-        // width/height 与 video_player/ffmpeg autorotate 后相反，F3）
-        srcW: info.displayWidth,
-        srcH: info.displayHeight,
-        durationMs: info.durationMs,
+        srcW: mosaicInfo.width,
+        srcH: mosaicInfo.height,
+        durationMs: mosaicInfo.durationMs,
         embedded: false,
         // 对话框/Snackbar 必须走根 Navigator 的 context（本 State 的
         // context 在 MaterialApp 之上，见 _showOnboardDialog 注释）
         onExport: (regions) =>
-            _exportMosaic(nav.context, src.path, info, regions),
+            _exportMosaic(nav.context, src.path, mosaicInfo, regions),
       ),
     ));
+  }
+
+  /// 打码用 MediaInfo：width/height 换成**显示尺寸**（rotation 已应用），
+  /// rotationDegrees 置 0——打码滤镜输入是 ffmpeg autorotate 后的画面，
+  /// 与 video_player 显示同域。探测失败时退回 probe 的 display 尺寸。
+  Future<MediaInfo> _mosaicDisplayInfo(String path, MediaInfo info) async {
+    var w = info.displayWidth;
+    var h = info.displayHeight;
+    final ctl = VideoPlayerController.file(File(path));
+    try {
+      await ctl.initialize().timeout(const Duration(seconds: 5));
+      final s = ctl.value.size;
+      if (s.width > 0 && s.height > 0) {
+        w = s.width.round();
+        h = s.height.round();
+      }
+    } catch (_) {
+      // 取不到就沿用 probe 的 display 尺寸（无旋转素材两者一致）
+    } finally {
+      await ctl.dispose();
+    }
+    return MediaInfo(
+      durationMs: info.durationMs,
+      width: w,
+      height: h,
+      fps: info.fps,
+      hasAudio: info.hasAudio,
+    );
   }
 
   /// 打码导出重入守卫（v1.5.26 走查 F7）：快速连点「导出」只允许一次
