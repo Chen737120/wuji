@@ -45,6 +45,24 @@ class KeyframeTrack {
       ..add(Keyframe(t: Duration.zero, box: box));
   }
 
+  /// 删除距 [t] 最近的关键帧，**保留其余帧原时间与框**（F6）。
+  /// 旧实现用 [reset] 重建：删 0s 帧时下一帧会被放到 0s，轨迹静默前移。
+  /// ≤1 帧返回 false（保单框语义，调用方据此禁止删除）。
+  bool remove(Duration t) {
+    if (_frames.length <= 1) return false;
+    var idx = 0;
+    var best = (_frames.first.t - t).abs();
+    for (var i = 1; i < _frames.length; i++) {
+      final d = (_frames[i].t - t).abs();
+      if (d < best) {
+        best = d;
+        idx = i;
+      }
+    }
+    _frames.removeAt(idx);
+    return true;
+  }
+
   /// t 处的框：分段缓动插值（smoothstep，与导出表达式一致，WYSIWYG）；
   /// 区间外取最近端点。
   CropBox boxAt(Duration t) {

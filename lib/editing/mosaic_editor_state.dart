@@ -102,25 +102,9 @@ class MosaicEditorState {
   }
 
   /// 轨道长按删除（≤1 帧时不允许，保单框语义）。
-  /// KeyframeTrack 无 remove API：走 reset 重建（≤10 帧成本可忽略）。
-  /// 局限：若删的是 0s 帧，次帧框会提前到 0s 占位（帧数不变，轨迹近似）。
+  /// 只移除最近帧；其余帧时间/框不变（F6：不再 reset 重建，避免删 0s 帧
+  /// 时把下一帧提前到 0s）。
   void removeKeyframeAt(Duration t) {
-    final r = selected;
-    if (r == null || r.track.frames.length <= 1) return;
-    final frames = r.track.frames.toList();
-    Keyframe? nearest;
-    for (final f in frames) {
-      if (nearest == null || (f.t - t).abs() < (nearest.t - t).abs()) {
-        nearest = f;
-      }
-    }
-    if (nearest != null && frames.length > 1) {
-      final remain = frames..remove(nearest);
-      final box = remain.first.box;
-      r.track.reset(box);
-      for (final f in remain.skip(1)) {
-        r.track.upsert(f.t, f.box);
-      }
-    }
+    selected?.track.remove(t);
   }
 }

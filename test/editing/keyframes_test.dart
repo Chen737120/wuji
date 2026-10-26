@@ -155,6 +155,32 @@ void main() {
       }
     });
 
+    test('remove：删除最近帧，其余帧时间/框不变；≤1 帧返回 false（F6）', () {
+      const b0 = CropBox(cx: 0.2, cy: 0.2, w: 0.3, h: 0.3);
+      const b5 = CropBox(cx: 0.5, cy: 0.5, w: 0.4, h: 0.4);
+      const b10 = CropBox(cx: 0.8, cy: 0.8, w: 0.5, h: 0.5);
+      final track = KeyframeTrack(duration: const Duration(seconds: 10));
+      track.upsert(Duration.zero, b0);
+      track.upsert(const Duration(seconds: 5), b5);
+      track.upsert(const Duration(seconds: 10), b10);
+
+      // 删 0s：后续帧保持原时间（旧 reset 重建会把 5s 帧提前到 0s）
+      expect(track.remove(Duration.zero), isTrue);
+      expect(track.frames.map((f) => f.t).toList(),
+          [const Duration(seconds: 5), const Duration(seconds: 10)]);
+      expect(track.frames[0].box.cx, 0.5);
+      expect(track.frames[1].box.cx, 0.8);
+
+      // 删中间：按最近匹配（4.9s → 5s 帧）
+      expect(track.remove(const Duration(seconds: 4, milliseconds: 900)), isTrue);
+      expect(track.frames.single.t, const Duration(seconds: 10));
+      expect(track.frames.single.box.cx, 0.8);
+
+      // ≤1 帧不可删（保单框语义）
+      expect(track.remove(const Duration(seconds: 10)), isFalse);
+      expect(track.frames, hasLength(1));
+    });
+
     test('reset：还原回单框', () {
       final track = KeyframeTrack(duration: const Duration(seconds: 10));
       track.upsert(Duration.zero, const CropBox(cx: 0.5, cy: 0.5, w: 0.5, h: 0.5));

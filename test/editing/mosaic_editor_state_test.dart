@@ -59,6 +59,20 @@ void main() {
     expect(s.removeRegion('nonexistent'), isFalse);
   });
 
+  test('删首个关键帧：只移除该帧，后续帧不被移到 0s（F6）', () {
+    final s = state()..addRegion();
+    s.seekTo(const Duration(seconds: 5));
+    s.moveSelectedBy(const Offset(0.1, 0)); // 5s 处落一帧（与 0s 帧框不同）
+    final track = s.selected!.track;
+    expect(track.frames.map((f) => f.t).toList(),
+        [Duration.zero, const Duration(seconds: 5)]);
+    final second = track.frames[1];
+    s.removeKeyframeAt(Duration.zero);
+    expect(track.frames, hasLength(1));
+    expect(track.frames.single.t, const Duration(seconds: 5));
+    expect(track.frames.single.box.cx, second.box.cx);
+  });
+
   test('关键帧轨道：打点→长按删除→剩 1 帧即单框；上限 10', () {
     final s = state()..addRegion();
     for (var i = 0; i < KeyframeTrack.maxFrames; i++) {
