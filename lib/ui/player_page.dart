@@ -102,6 +102,9 @@ class _PlayerPageState extends State<PlayerPage> {
   Widget build(BuildContext context) {
     final accent = Theme.of(context).colorScheme.primary;
     final c = _controller;
+    // 顶部按钮避开状态栏/刘海（F14）：竖屏正常态加状态栏高度，
+    // 全屏沉浸态 padding 为 0 时仍保留 10dp 边距。
+    final topInset = MediaQuery.paddingOf(context).top;
     return Scaffold(
       backgroundColor: Colors.black,
       body: _error != null
@@ -173,7 +176,7 @@ class _PlayerPageState extends State<PlayerPage> {
                       ),
                     ),
                     Positioned(
-                      top: 10,
+                      top: topInset + 10,
                       left: 10,
                       child: IconButton(
                         icon: const Icon(Icons.close, color: Colors.white),
@@ -183,7 +186,7 @@ class _PlayerPageState extends State<PlayerPage> {
                     // 保存到相册（规格 §3.1）：与左上关闭按钮对称、常驻显示，
                     // 不随控制条显隐——记录列表直达播放页时这是唯一保存入口
                     Positioned(
-                      top: 10,
+                      top: topInset + 10,
                       right: 10,
                       child: SaveToGalleryButton(path: widget.fileName),
                     ),
