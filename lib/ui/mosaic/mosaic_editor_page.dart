@@ -95,13 +95,44 @@ class _MosaicEditorPageState extends State<MosaicEditorPage> {
   /// 播放中随帧同步 state.position（否则叠加框/轨道不动）并刷新。
   /// 拖动/关键帧落点同样读 state.position，两处口径一致。
   void _onPlayerTick() {
-    final playing = _player.value.isPlaying;
+    final v = _player.value;
+    final playing = v.isPlaying;
     if (playing != _playing) {
       setState(() => _playing = playing);
+      // 暂停后恢复 WYSIWYG 快照（播放期间快照隐藏，视频帧即画面）
+      if (!playing) _refreshSnapshot();
     }
-    if (playing) {
-      setState(() => _state.seekTo(_trackPosition));
+    if (!playing) return;
+    // 播到修剪区间末端停住（F5；track 时间口径见 F1）
+    final end = widget.trimStart + _state.duration;
+    if (v.position >= end) {
+      _player.pause();
+      _player.seekTo(end);
+      setState(() => _state.seekTo(_state.duration));
+      return;
     }
+    setState(() => _state.seekTo(_trackPosition));
+  }
+
+  /// 播放/暂停（F5）：暂停中从当前位置继续；在修剪起点前或末端则先回起点。
+  Future<void> _togglePlay() async {
+    if (!_player.value.isInitialized) return;
+    if (_player.value.isPlaying) {
+      await _player.pause();
+      return;
+    }
+    final end = widget.trimStart + _state.duration;
+    if (_player.value.position < widget.trimStart ||
+        _player.value.position >= end) {
+      await _player.seekTo(widget.trimStart);
+      if (!mounted) return;
+      setState(() {
+        _state.seekTo(Duration.zero);
+        _snapshotPath = null;
+      });
+    }
+    await _player.play();
+    if (mounted) setState(() {});
   }
 
   @override
@@ -266,6 +297,8 @@ class _MosaicEditorPageState extends State<MosaicEditorPage> {
                 onDeleteRegion: _deleteSelectedRegion,
                 // 效果/强度切换后重拍快照（工具条回调由页面组合，裁决 3）
                 onAdjustEnd: () => _refreshSnapshot(),
+                isPlaying: _playing,
+                onTogglePlay: _togglePlay,
                 onPrimary: () {
                   if (widget.embedded) {
                     Navigator.pop(context, _state.regions);
@@ -472,6 +505,8 @@ class MosaicToolbar extends StatelessWidget {
     this.onAdjustEnd,
     this.onPrimary,
     this.primaryLabel,
+    this.isPlaying = false,
+    this.onTogglePlay,
   });
 
   final MosaicEditorState state;
@@ -479,6 +514,10 @@ class MosaicToolbar extends StatelessWidget {
   final VoidCallback onAddRegion;
   final VoidCallback onAddKeyframe;
   final VoidCallback onDeleteRegion;
+
+  /// 播放/暂停（F5）：移动目标靠关键帧跟随时，可边播边找落点。
+  final bool isPlaying;
+  final VoidCallback? onTogglePlay;
 
   /// 效果/强度切换后回调——宿主用于重拍快照（本组件不依赖快照实现）。
   final VoidCallback? onAdjustEnd;
@@ -530,6 +569,12 @@ class MosaicToolbar extends StatelessWidget {
             ),
         ]),
         Row(children: [
+          IconButton(
+            key: const ValueKey('mosaic-play-toggle'),
+            onPressed: onTogglePlay,
+            icon: Icon(isPlaying ? Icons.pause : Icons.play_arrow, size: 20),
+            tooltip: isPlaying ? '暂停' : '播放',
+          ),
           TextButton.icon(
               onPressed: onAddRegion,
               icon: const Icon(Icons.add),

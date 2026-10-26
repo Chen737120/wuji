@@ -131,6 +131,33 @@ void main() {
     expect(seeks, [const Duration(seconds: 5)]);
   });
 
+  testWidgets('播放/暂停按钮（F5）：图标随 isPlaying 切换，点击回调', (tester) async {
+    final state = MosaicEditorState(
+        duration: const Duration(seconds: 10), srcW: 1280, srcH: 720);
+    var toggles = 0;
+    Widget build(bool playing) => MaterialApp(
+          home: Scaffold(
+            body: MosaicToolbar(
+              state: state,
+              hasSelection: false,
+              onAddRegion: () {},
+              onAddKeyframe: () {},
+              onDeleteRegion: () {},
+              isPlaying: playing,
+              onTogglePlay: () => toggles++,
+            ),
+          ),
+        );
+    await tester.pumpWidget(build(false));
+    expect(find.byIcon(Icons.play_arrow), findsOneWidget);
+    await tester.tap(find.byIcon(Icons.play_arrow));
+    expect(toggles, 1);
+    await tester.pumpWidget(build(true));
+    expect(find.byIcon(Icons.pause), findsOneWidget);
+    await tester.tap(find.byIcon(Icons.pause));
+    expect(toggles, 2);
+  });
+
   testWidgets('onAdjustEnd 接线（Task 5）：强度切换与关键帧长按删除后触发', (tester) async {
     final state = MosaicEditorState(
         duration: const Duration(seconds: 10), srcW: 1280, srcH: 720)
