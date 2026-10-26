@@ -382,12 +382,27 @@ class _AppRootState extends State<AppRoot> {
     ));
   }
 
+  /// 打码导出重入守卫（v1.5.26 走查 F7）：快速连点「导出」只允许一次
+  /// 在途，避免并发两份导出/两个进度对话框。完成后复位可再次导出。
+  bool _mosaicExporting = false;
+
   /// 独立打码导出（规格 §5.3/§7）：无直拍的两步预览确认环节，
   /// run 默认 autoSave=true 直接搬进相册 Movies/wuji/；进度对话框
   /// 可取消（取消→ExportCancelled→静默关框）；成功提示相册路径。
   ///
   /// [navCtx] 必须是根 Navigator 的 context（对话框/Snackbar 出口）。
   Future<void> _exportMosaic(BuildContext navCtx, String srcPath,
+      MediaInfo info, List<MosaicRegion> regions) async {
+    if (_mosaicExporting) return;
+    _mosaicExporting = true;
+    try {
+      await _exportMosaicOnce(navCtx, srcPath, info, regions);
+    } finally {
+      _mosaicExporting = false;
+    }
+  }
+
+  Future<void> _exportMosaicOnce(BuildContext navCtx, String srcPath,
       MediaInfo info, List<MosaicRegion> regions) async {
     // 空区域时 filter_complex 直通但 -map "[…]" 无合法输出标签（编辑器
     // 「导出」按钮未拦），UI 侧前置拦截
