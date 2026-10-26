@@ -9,6 +9,7 @@ import '../../editing/overlap.dart';
 import '../../editing/side_transform.dart';
 import 'frame_adjust_view.dart';
 import 'align_view.dart';
+import 'playback_plan.dart';
 
 /// 同屏对比编辑页——深暗色（与选择页一致，用户 2026-10-05 指定风格）。
 /// 结构：顶部小 tab → 双画面 → 播放行 → 大 tab → 面板 → 音源+导出。
@@ -132,7 +133,13 @@ class _ComparePageState extends State<ComparePage> {
     if (t.value.isPlaying && !m.value.isPlaying) {
       if (!_atEnd(m.value)) m.play();
     } else if (!t.value.isPlaying && m.value.isPlaying) {
-      m.pause();
+      // 老师自然播完到结尾（非用户暂停）→ 让「我的」继续播完自己的剩余
+      // 时长：v1.5.22 起它被硬暂停在 dur-offset 处，永远差 offset 秒播不完
+      // （用户反馈「时间微调失效」的可见表现之一，缺陷会话 2026-10-26）。
+      // 「我的」播到自己结尾时 ExoPlayer 自动 ENDED，下一 tick 两分支都不
+      // 命中，状态稳定。边界（接受）：用户恰在老师结尾 80ms 内手动暂停也
+      // 会被视作播完，我的会多播完剩余部分。
+      if (!_atEnd(t.value)) m.pause();
     }
     if (_speed != _appliedSpeed) {
       _appliedSpeed = _speed;
@@ -170,32 +177,21 @@ class _ComparePageState extends State<ComparePage> {
       await m?.pause();
       return;
     }
-    // 从头播放（老师已到结尾再点播放）：两个控制器必须一起 pause →
-    // seekTo(0) → play。否则 Android 的 play() 在 ENDED 态只把老师一路
-    // 自动回零，我的视频从原地续播、播到结尾卡住；iOS 连老师都不回零。
-    // 先归零，再走下面的 offset 起点逻辑，两侧才会同步起播。
-    if (_atEnd(t.value)) {
-      await t.pause();
-      await m?.pause();
-      await t.seekTo(Duration.zero);
-      await m?.seekTo(Duration.zero);
+    // 起播/重播/续播统一由纯函数给出（缺陷会话 2026-10-26）：
+    // v1.5.22 的归零重播块每路连发 2 次 seek（归零 + offset 起点）且在
+    // 毫秒级内完成，ExoPlayer 逐次替换 seek 目标时真机出现 surface 灰块；
+    // 现在重播只剩「每路 1 次直达 seek」，中途续播则完全不 seek（语义与
+    // 改前一致）。null = 原地续播。
+    final plan = planPlayStart(
+      teacherPos: t.value.position,
+      teacherDur: t.value.duration,
+      minePos: m?.value.position ?? Duration.zero,
+      offset: _offset,
+    );
+    if (plan != null) {
+      await t.seekTo(plan.teacher);
+      await m?.seekTo(plan.mine);
     }
-    // 播放预览 = 时间微调后的效果（2026-10-05 用户反馈）：
-    // offset>0（我的延后）→ 老师从 offset 处先播、我的从 0；
-    // offset<0 → 我的从 |offset| 先播、老师从 0；同刻两路保持错位。
-    final offMs = _offset.inMilliseconds;
-    if (offMs > 0 && t.value.position < _offset) {
-      await t.seekTo(_offset);
-      final wantMine =
-          t.value.position - _offset;
-      await m?.seekTo(wantMine < Duration.zero ? Duration.zero : wantMine);
-    } else if (offMs < 0 && m != null && m.value.position < -_offset) {
-      await m.seekTo(-_offset);
-      final wantTeacher = m.value.position + _offset;
-      await t.seekTo(
-          wantTeacher < Duration.zero ? Duration.zero : wantTeacher);
-    }
-    await _syncMineToTeacher();
     await t.play();
     await m?.play();
   }
