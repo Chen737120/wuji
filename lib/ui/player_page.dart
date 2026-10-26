@@ -3,6 +3,8 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:video_player/video_player.dart';
 
+import 'widgets/save_to_gallery_button.dart';
+
 const _speeds = [0.5, 0.75, 1.0, 1.25, 1.5, 2.0];
 
 /// 视频播放页（规格 §3.5）：默认竖屏播放，点画面显示/隐藏底部控制条；
@@ -116,6 +118,13 @@ class _PlayerPageState extends State<PlayerPage> {
                         icon: const Icon(Icons.close, color: Colors.white),
                         onPressed: () => Navigator.pop(context),
                       ),
+                    ),
+                    // 保存到相册（规格 §3.1）：与左上关闭按钮对称、常驻显示，
+                    // 不随控制条显隐——记录列表直达播放页时这是唯一保存入口
+                    Positioned(
+                      top: 10,
+                      right: 10,
+                      child: SaveToGalleryButton(path: widget.fileName),
                     ),
                     Positioned(
                       left: 0,
