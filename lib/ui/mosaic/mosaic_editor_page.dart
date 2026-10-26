@@ -7,6 +7,7 @@ import '../../editing/keyframes.dart';
 import '../../editing/mosaic_editor_state.dart';
 import '../../editing/mosaic_region.dart';
 import '../../editing/mosaic_snapshot.dart';
+import '../../editing/mosaic_view.dart';
 import '../../editing/trim_timeline.dart';
 import '../../theme.dart';
 
@@ -207,12 +208,22 @@ class _MosaicEditorPageState extends State<MosaicEditorPage> {
                 child: AspectRatio(
                   aspectRatio: widget.srcW / widget.srcH,
                   child: Stack(fit: StackFit.expand, children: [
-                    if (_player.value.isInitialized)
-                      VideoPlayer(_player)
-                    else
-                      const ColoredBox(color: Colors.black12),
-                    if (!_playing && _snapshotPath != null)
-                      Image.file(File(_snapshotPath!), fit: BoxFit.fill),
+                    // 视频/快照共用查看变换（中心锚点，与 OverlayEditor 的
+                    // 框公式同源——F2：修复前框缩放而画面不动，框与画面脱节）
+                    Transform.translate(
+                      offset: _viewOffset,
+                      child: Transform.scale(
+                        scale: _viewScale,
+                        child: Stack(fit: StackFit.expand, children: [
+                          if (_player.value.isInitialized)
+                            VideoPlayer(_player)
+                          else
+                            const ColoredBox(color: Colors.black12),
+                          if (!_playing && _snapshotPath != null)
+                            Image.file(File(_snapshotPath!), fit: BoxFit.fill),
+                        ]),
+                      ),
+                    ),
                     OverlayEditor(
                       state: _state,
                       canvasSize: Size(
@@ -339,13 +350,9 @@ class _OverlayEditorState extends State<OverlayEditor> {
         final r = state.regions[i];
         final b = r.track.boxAt(state.position);
         final selected = r.id == state.selectedId;
-        // 归一化框 → 布局像素（乘 viewScale 平移 viewOffset 实现查看缩放）
-        final rect = Rect.fromLTWH(
-          (b.cx - b.w / 2) * w * widget.viewScale + widget.viewOffset.dx,
-          (b.cy - b.h / 2) * h * widget.viewScale + widget.viewOffset.dy,
-          b.w * w * widget.viewScale,
-          b.h * h * widget.viewScale,
-        );
+        // 归一化框 → 布局像素（中心锚点缩放＋平移，与视频层的 Transform 同源）
+        final rect = mosaicBoxRect(
+            b, Size(w, h), widget.viewScale, widget.viewOffset);
         return Positioned.fromRect(
           key: ValueKey('mosaic-box-$i'),
           rect: rect,
@@ -408,9 +415,13 @@ class _OverlayEditorState extends State<OverlayEditor> {
         onScaleStart: (_) => _scaleBase = widget.viewScale,
         onScaleUpdate: (d) {
           if (d.pointerCount < 2 || widget.onViewTransformed == null) return;
+          final scale =
+              ((_scaleBase ?? widget.viewScale) * d.scale).clamp(1.0, 4.0);
           widget.onViewTransformed!(
-            ((_scaleBase ?? widget.viewScale) * d.scale).clamp(1.0, 4.0),
-            widget.viewOffset + d.focalPointDelta,
+            scale,
+            // 中心锚点余量：画面未溢出的轴拖不走（与视频 Transform 同口径）
+            clampMosaicViewOffset(
+                widget.viewOffset + d.focalPointDelta, scale, Size(w, h)),
           );
         },
         onScaleEnd: (_) => _scaleBase = null,
