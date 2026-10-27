@@ -1,5 +1,6 @@
 import 'dart:convert';
 import 'dart:io';
+import 'dart:isolate';
 import 'package:archive/archive_io.dart';
 import 'package:file_selector/file_selector.dart';
 import 'package:flutter/material.dart';
@@ -17,6 +18,31 @@ import '../services/importer.dart';
 import '../services/manifest.dart';
 import '../services/saf_archive.dart';
 import '../theme.dart';
+
+/// 解压备份包到 [outDirPath]，返回成功条目数。
+/// 顶层函数：在 Isolate.run 内执行（archive 为纯 Dart，无平台通道）。
+/// zip-slip 过滤规则与旧实现一致：含 ../、/..、绝对路径、含 ':' 的条目跳过。
+int extractZipSafely(String zipPath, String outDirPath) {
+  final archive = ZipDecoder().decodeBuffer(InputFileStream(zipPath));
+  var n = 0;
+  for (final entry in archive.files) {
+    if (!entry.isFile) continue;
+    final name = entry.name.replaceAll('\\', '/');
+    if (name.contains('../') ||
+        name.contains('/..') ||
+        name.startsWith('/') ||
+        name.contains(':')) {
+      continue;
+    }
+    final out = File('$outDirPath${Platform.pathSeparator}$name');
+    out.parent.createSync(recursive: true);
+    final output = OutputFileStream(out.path);
+    entry.writeContent(output);
+    output.close();
+    n++;
+  }
+  return n;
+}
 
 /// 导入备份（规格 §7）：选 zip 或文件夹 → 预览 → 执行 → 报告。
 class ImportPage extends StatefulWidget {
@@ -80,24 +106,12 @@ class _ImportPageState extends State<ImportPage> {
       final extractDir = Directory('${(await getTemporaryDirectory()).path}/wuji-import-extract');
       if (extractDir.existsSync()) extractDir.deleteSync(recursive: true);
       extractDir.createSync(recursive: true);
-      // zip slip 防护（评审建议）：不用库的 extractArchiveToDisk——
-      // 手动逐条解包，条目名含 ../ 或绝对路径的直接跳过
-      final archive = ZipDecoder().decodeBuffer(InputFileStream(localZip));
-      for (final entry in archive.files) {
-        if (!entry.isFile) continue;
-        final name = entry.name.replaceAll('\\', '/');
-        if (name.contains('../') ||
-            name.contains('/..') ||
-            name.startsWith('/') ||
-            name.contains(':')) {
-          continue; // 可疑路径：跳过（清单解析收不到它，等同缺失文件）
-        }
-        final out = File('${extractDir.path}${Platform.pathSeparator}$name');
-        await out.parent.create(recursive: true);
-        final output = OutputFileStream(out.path);
-        entry.writeContent(output); // archive 3.6.1：同步写
-        output.close();
-      }
+      setState(() => _status = '解压备份包…（大包需要一点时间）');
+      // 解压整体移入 isolate（P1-4）：GB 级备份包逐条同步解压会占满 UI
+      // 线程数十秒触发 ANR。zip-slip 过滤在 extractZipSafely 内原样保留。
+      final zipPath = localZip; // 局部 String，避免闭包捕获 this
+      final outPath = extractDir.path;
+      await Isolate.run(() => extractZipSafely(zipPath, outPath));
       await _prepareSource(LocalArchiveFs(extractDir.path));
     } catch (e) {
       setState(() {
@@ -183,6 +197,7 @@ class _ImportPageState extends State<ImportPage> {
   }
 
   Future<void> _confirm() async {
+    if (_busy) return; // 防重入（P2-30）：并发导入会重复建行/拷贝
     if (_plan == null || _plan!.isEmpty) return;
     final total =
         _plan!.toCreate.fold<int>(0, (a, e) => a + e.media.length) +
