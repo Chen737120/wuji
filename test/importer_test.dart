@@ -1,4 +1,5 @@
 import 'dart:io';
+import 'package:drift/drift.dart' show Value;
 import 'package:flutter_test/flutter_test.dart';
 import 'package:wuji/data/app_repository.dart';
 import 'package:wuji/data/db.dart';
@@ -172,5 +173,64 @@ void main() {
     ];
     final plan = planImport(entries, []);
     expect(plan.describe(), '发现 1 节课 → 新建 1 节');
+  });
+
+  test('合并导入：库内课 id 与清单 id 不同，附件挂到实际存在的课（P1-2）',
+      () async {
+    final srcDir = Directory('${tmp.path}/src3/media/2026-09')
+      ..createSync(recursive: true);
+    File('${srcDir.path}/b.mp4').writeAsBytesSync([7, 7, 7]);
+    final sourceFs = LocalArchiveFs('${tmp.path}/src3');
+
+    // 库内已有同一节课（id=A），跨设备重装后清单里是另一套 id=B
+    final a = ClassRecord(
+      id: 'A',
+      date: '2026-09-24',
+      styleName: '韩舞',
+      teacherName: '阿哲',
+      sessionCount: 1,
+      minutesEach: 60,
+      createdAt: DateTime.now(),
+      updatedAt: DateTime.now(),
+    );
+    await db.into(db.classRecords).insert(ClassRecordsCompanion.insert(
+          id: a.id,
+          date: a.date,
+          styleName: const Value('韩舞'),
+          teacherName: const Value('阿哲'),
+          sessionCount: const Value(1),
+          minutesEach: const Value(60),
+          createdAt: a.createdAt,
+          updatedAt: a.updatedAt,
+        ));
+    const entries = [
+      ManifestEntry(
+          id: 'B',
+          date: '2026-09-24',
+          styleName: '韩舞',
+          teacherName: '阿哲',
+          sessionCount: 1,
+          minutesEach: 60,
+          media: [
+            ManifestMedia(
+                fileName: 'media/2026-09/b.mp4', type: 'video', sizeBytes: 3),
+          ]),
+    ];
+
+    final plan = planImport(entries, await repo.allRecords());
+    expect(plan.toPatch, hasLength(1));
+    final report = await executeImport(plan,
+        sourceFs: sourceFs, archive: store, repo: repo, taxonomy: taxonomy);
+
+    expect(report.patched, 1);
+    expect(report.created, 0);
+    expect(report.mediaCopied, 1);
+    final media = await repo.mediaOf('A');
+    expect(media, hasLength(1), reason: '附件应挂到匹配到的课 A，而不是清单 id B');
+    expect(media.single.classId, 'A');
+    expect(await store.fs.exists(media.single.fileName), isTrue);
+    // 不存在的 id B 不得落下任何孤儿附件
+    final all = await db.select(db.mediaAssets).get();
+    expect(all.every((m) => m.classId == 'A'), isTrue);
   });
 }

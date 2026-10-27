@@ -114,6 +114,11 @@ Future<ImportReport> executeImport(
       }
     }
 
+    // 附件行的 classId 必须指向库里实际存在的课行（P1-2）：
+    // 跨设备/重装的清单 id 与本地 id 不同，补回附件时要用匹配到的 record.id，
+    // 否则外键失败 → 整个事务回滚、导入全盘失败。
+    final targetClassId = record?.id ?? e.id;
+
     // 幂等参照：该课已登记附件的 (基名,字节数) 集合
     final haveKeys = <String>{};
     if (record != null) {
@@ -169,7 +174,7 @@ Future<ImportReport> executeImport(
 
       newMediaRows.add(MediaAssetsCompanion.insert(
         id: archive.newId(),
-        classId: e.id,
+        classId: targetClassId,
         type: m.type,
         fileName: targetRel,
         sourceName: Value(baseNameOf(m.fileName)),
