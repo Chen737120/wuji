@@ -101,6 +101,9 @@ Future<ImportReport> executeImport(
 
   // 先拷文件（幂等），再一次性事务登记 DB（终审 C2）
   final dbRows = <(ClassRecordsCompanion?, List<MediaAssetsCompanion>)>[];
+  // 本轮已写入存档的文件（含封面）：事务失败时补偿删除（P2-17），
+  // 否则大包反复失败会让存储成倍膨胀（重跑会复制新的 uuid 路径）
+  final copiedRels = <String>[];
 
   for (final e in [...plan.toCreate, ...plan.toPatch]) {
     ClassRecord? record = existingById[e.id];
@@ -149,6 +152,7 @@ Future<ImportReport> executeImport(
       final targetRel =
           archive.mediaRel(DateTime.parse(e.date), archive.newId(), _extOf(baseNameOf(m.fileName)));
       await archive.fs.write(targetRel, Stream<List<int>>.value(bytes));
+      copiedRels.add(targetRel);
 
       // 封面：清单带 thumbName 且源里存在 → 复制进存档（导入后封面不丢）
       String? thumbRel;
@@ -169,6 +173,7 @@ Future<ImportReport> executeImport(
           final tBytes = await _readAll(sourceFs, thumbSrc);
           thumbRel = 'thumbs/${archive.newId()}.jpg';
           await archive.fs.write(thumbRel, Stream<List<int>>.value(tBytes));
+          copiedRels.add(thumbRel);
         }
       }
 
@@ -229,16 +234,26 @@ Future<ImportReport> executeImport(
 
   // 单事务登记：要么全部入库，要么全部不入（中断重跑幂等）
   if (dbRows.isNotEmpty) {
-    await repo.db.transaction(() async {
-      for (final (recordRow, mediaRows) in dbRows) {
-        if (recordRow != null) {
-          await repo.db.into(repo.db.classRecords).insert(recordRow);
+    try {
+      await repo.db.transaction(() async {
+        for (final (recordRow, mediaRows) in dbRows) {
+          if (recordRow != null) {
+            await repo.db.into(repo.db.classRecords).insert(recordRow);
+          }
+          for (final row in mediaRows) {
+            await repo.db.into(repo.db.mediaAssets).insert(row);
+          }
         }
-        for (final row in mediaRows) {
-          await repo.db.into(repo.db.mediaAssets).insert(row);
-        }
+      });
+    } catch (e) {
+      // 事务回滚后文件层也没人引用：删掉本轮拷贝（P2-17，best-effort）
+      for (final rel in copiedRels) {
+        try {
+          await archive.fs.delete(rel);
+        } catch (_) {}
       }
-    });
+      rethrow;
+    }
   }
 
   return ImportReport(

@@ -6,6 +6,18 @@ import '../models/models.dart';
 import '../reload_bus.dart';
 import '../theme.dart';
 
+/// 重命名校验（P2-20）：空名或与本 kind 其他项（含停用）重名时返回提示文案；
+/// null = 可提交。停用行同样占用 UNIQUE(kind,name)，必须一并比对。
+String? validateRename(
+    String? input, List<TaxonomyItem> existing, String selfId) {
+  final name = input?.trim() ?? '';
+  if (name.isEmpty) return '名称不能为空';
+  for (final t in existing) {
+    if (t.id != selfId && t.name == name) return '已存在同名，换一个';
+  }
+  return null;
+}
+
 /// 名单管理页（规格 §3.6）：改名、删除（停用）自定义项；历史课快照不受影响。
 class ManagePage extends StatefulWidget {
   const ManagePage({super.key, required this.kind, required this.title});
@@ -57,7 +69,17 @@ class _ManagePageState extends State<ManagePage> {
     if (newName == null || newName.trim().isEmpty || newName.trim() == item.name) {
       return;
     }
+    // 同名（含停用行）会撞 UNIQUE(kind,name)：UI 先拦截给可读提示（P2-20）
+    final all = await _repo.byKind(widget.kind, includeInactive: true);
+    if (!mounted) return;
+    final err = validateRename(newName, all, item.id);
+    if (err != null) {
+      ScaffoldMessenger.of(context)
+          .showSnackBar(SnackBar(content: Text(err)));
+      return;
+    }
     await _repo.rename(item.id, newName);
+    if (!mounted) return;
     ReloadBus.instance.bump();
     setState(_reload);
   }
@@ -84,6 +106,7 @@ class _ManagePageState extends State<ManagePage> {
     );
     if (ok != true) return;
     await _repo.deactivate(item.id);
+    if (!mounted) return; // await 后再用 context/State（P2-30）
     ReloadBus.instance.bump();
     setState(_reload);
   }

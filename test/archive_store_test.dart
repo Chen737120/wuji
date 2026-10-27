@@ -35,6 +35,36 @@ class _RecordingFs implements ArchiveFs {
   Future<int?> freeBytes() async => null;
 }
 
+/// move 半途失败：先在目标留下半成品再抛（模拟 move 写到一半中断）。
+class _MoveFailsFs implements ArchiveFs {
+  final files = <String>{};
+
+  @override
+  Future<void> move(String from, String to) async {
+    files.add(to);
+    throw const FileSystemException('move failed mid-way');
+  }
+
+  @override
+  Future<void> delete(String rel) async {
+    files.remove(rel);
+  }
+
+  @override
+  Future<bool> exists(String rel) async => files.contains(rel);
+  @override
+  Future<void> write(String rel, Stream<List<int>> bytes) async {
+    files.add(rel);
+  }
+
+  @override
+  Stream<List<int>> read(String rel) => const Stream.empty();
+  @override
+  Future<List<String>> list(String prefix) async => const [];
+  @override
+  Future<int?> freeBytes() async => null;
+}
+
 void main() {
   late Directory tmp;
   late ArchiveStore store;
@@ -86,6 +116,16 @@ void main() {
   test('manifest write/read roundtrip', () async {
     await store.writeManifest('{"app":"舞记","version":1,"records":[]}');
     expect(await store.readManifest(), contains('舞记'));
+  });
+
+  test('commit：move 抛异常时删除目标半成品并上抛（P2-15）', () async {
+    final fake = _MoveFailsFs();
+    final s = ArchiveStore(fake);
+    await expectLater(
+      s.commit('media/.staging/x.mp4', DateTime(2026, 10, 2), 'abc', 'mp4'),
+      throwsA(isA<FileSystemException>()),
+    );
+    expect(fake.files, isEmpty, reason: '正式命名的半成品必须被清掉');
   });
 
   test('writeManifest 先写 .tmp 再转正：成功后无残留临时文件（P2-18）', () async {

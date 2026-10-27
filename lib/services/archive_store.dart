@@ -41,7 +41,16 @@ class ArchiveStore implements MediaLocator {
   Future<String> commit(
       String tempRel, DateTime date, String uuid, String ext) async {
     final finalRel = mediaRel(date, uuid, ext);
-    await fs.move(tempRel, finalRel);
+    try {
+      await fs.move(tempRel, finalRel);
+    } catch (e) {
+      // move 半途失败可能已在目标留下半成品（P2-15）：尽力删掉再上抛，
+      // 否则正式命名孤儿永不被 sweepOrphans 清理。
+      try {
+        await fs.delete(finalRel);
+      } catch (_) {}
+      rethrow;
+    }
     return finalRel;
   }
 

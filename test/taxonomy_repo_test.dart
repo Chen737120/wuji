@@ -2,6 +2,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:wuji/data/db.dart';
 import 'package:wuji/data/taxonomy_repo.dart';
 import 'package:wuji/models/models.dart';
+import 'package:wuji/ui/manage_pages.dart' show validateRename;
 
 void main() {
   late AppDatabase db;
@@ -92,5 +93,20 @@ void main() {
     await repo.ensureBuiltins();
     final all = await repo.byKind(TaxonomyKind.style, includeInactive: true);
     expect(all.where((e) => e.name == '爵士').single.isActive, isFalse);
+  });
+
+  test('validateRename：空名/重名（含停用项）拒绝，自身与唯一名放行（P2-20）',
+      () async {
+    final a = await repo.touchByName(TaxonomyKind.teacher, '张三');
+    final b = await repo.touchByName(TaxonomyKind.teacher, '李四');
+    await repo.deactivate(b.id);
+    final all = await repo.byKind(TaxonomyKind.teacher, includeInactive: true);
+
+    expect(validateRename('   ', all, a.id), '名称不能为空');
+    expect(validateRename(null, all, a.id), '名称不能为空');
+    // 停用行同样占用 UNIQUE(kind,name)
+    expect(validateRename('李四', all, a.id), '已存在同名，换一个');
+    expect(validateRename('张三', all, a.id), isNull); // 自身不改名
+    expect(validateRename('王五', all, a.id), isNull);
   });
 }

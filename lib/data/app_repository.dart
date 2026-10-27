@@ -230,9 +230,21 @@ class AppRepository implements ClassSaver {
     await _db.transaction(() async {
       await (_db.delete(_db.classRecords)..where((t) => t.id.equals(id))).go();
     });
+    // 文件删除 best-effort（P2-16）：SAF 权限被收回时不能让删课报错、
+    // 剩余文件不删、manifest 不刷；失败只记日志，孤儿留给用户手动清。
+    var failedDeletes = 0;
     for (final r in rows) {
-      await _archive.deleteRel(r.fileName);
-      if (r.thumbName != null) await _archive.deleteRel(r.thumbName!);
+      for (final rel in [r.fileName, if (r.thumbName != null) r.thumbName!]) {
+        try {
+          await _archive.deleteRel(rel);
+        } catch (e) {
+          failedDeletes++;
+          dev.log('删除文件失败 $rel: $e', name: 'wuji');
+        }
+      }
+    }
+    if (failedDeletes > 0) {
+      dev.log('deleteRecord 有 $failedDeletes 个文件未删除', name: 'wuji');
     }
     await _writeManifestQuietly();
   }

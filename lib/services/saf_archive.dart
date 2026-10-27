@@ -171,10 +171,14 @@ class SafArchiveFs implements ArchiveFs, MediaPathResolver {
     // 块（v1.5.21 ANR 同源），故复制失败才回退流式复制。
     try {
       final copied = await _saf.copyTo(fromUri, false, destDir);
-      final renamed = await _saf.rename(copied.uri, false, toSegs.last);
-      if (renamed.name == toSegs.last) {
-        await _saf.delete(fromUri, false); // 目标就绪后才删源（staging）
-        return;
+      try {
+        final renamed = await _saf.rename(copied.uri, false, toSegs.last);
+        if (renamed.name == toSegs.last) {
+          await _saf.delete(fromUri, false); // 目标就绪后才删源（staging）
+          return;
+        }
+      } catch (_) {
+        // rename 抛异常（P2-14）：中间副本留在正式目录无人认领，必须清掉
       }
       try {
         await _saf.delete(copied.uri, false); // 改名未生效：清中间副本
