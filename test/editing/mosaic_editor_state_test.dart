@@ -86,4 +86,38 @@ void main() {
     s.removeKeyframeAt(const Duration(seconds: 5));
     expect(s.selected!.track.frames, hasLength(9));
   });
+
+  group('editable 不变量（P1-10：播放中禁止落帧）', () {
+    test('默认可编辑', () {
+      expect(state().editable, isTrue);
+    });
+
+    test('editable=false 时拖动/缩放/打点全部 no-op', () {
+      final s = state()..addRegion();
+      final beforeFrames = s.selected!.track.frames.length;
+      final beforeBox = s.selected!.track.boxAt(Duration.zero);
+      s.editable = false;
+      s.seekTo(const Duration(seconds: 3));
+
+      s.scaleSelectedBy(1.2);
+      s.moveSelectedBy(const Offset(0.2, 0.2));
+      s.addKeyframeAtPosition();
+
+      expect(s.selected!.track.frames, hasLength(beforeFrames));
+      final afterBox = s.selected!.track.boxAt(Duration.zero);
+      expect(afterBox.cx, beforeBox.cx);
+      expect(afterBox.cy, beforeBox.cy);
+      expect(afterBox.w, beforeBox.w);
+      expect(afterBox.h, beforeBox.h);
+    });
+
+    test('editable=true 时同样调用按原逻辑生效（回归）', () {
+      final s = state()..addRegion();
+      s.seekTo(const Duration(seconds: 3));
+      s.moveSelectedBy(const Offset(0.1, 0));
+      s.addKeyframeAtPosition();
+      expect(s.selected!.track.frames, hasLength(2));
+      expect(s.selected!.track.frames.last.t, const Duration(seconds: 3));
+    });
+  });
 }

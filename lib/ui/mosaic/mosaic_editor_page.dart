@@ -98,7 +98,11 @@ class _MosaicEditorPageState extends State<MosaicEditorPage> {
     final v = _player.value;
     final playing = v.isPlaying;
     if (playing != _playing) {
-      setState(() => _playing = playing);
+      setState(() {
+        _playing = playing;
+        // 播放中禁止落帧（P1-10）：状态层不变量，UI 同步切换
+        _state.editable = !playing;
+      });
       // 暂停后恢复 WYSIWYG 快照（播放期间快照隐藏，视频帧即画面）
       if (!playing) _refreshSnapshot();
     }
@@ -420,6 +424,9 @@ class _OverlayEditorState extends State<OverlayEditor> {
                       alignment: Alignment.bottomRight,
                       child: GestureDetector(
                         behavior: HitTestBehavior.opaque,
+                        // 角柄内层 pan 会赢下手势竞技场，父框 onPanStart 不会触发，
+                        // 必须自己暂停（P1-10：否则播放中拖角柄按帧写关键帧）
+                        onPanStart: (_) => widget.onPause?.call(),
                         onPanUpdate: (d) {
                           final f = 1 +
                               (d.delta.dx + d.delta.dy) /

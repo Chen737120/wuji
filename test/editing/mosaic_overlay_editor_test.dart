@@ -206,4 +206,36 @@ void main() {
     expect(state.selected!.track.frames.length, 1);
     expect(adjustEnds, 3);
   });
+
+  testWidgets('角柄 onPanStart 触发 onPause（P1-10：播放中拖角柄先暂停）',
+      (tester) async {
+    final state = MosaicEditorState(
+        duration: const Duration(seconds: 10), srcW: 1280, srcH: 720)
+      ..addRegion();
+    var pauses = 0;
+    await tester.pumpWidget(MaterialApp(
+      home: Scaffold(
+        body: OverlayEditor(
+          state: state,
+          canvasSize: const Size(320, 180),
+          immersive: false,
+          onChanged: () {},
+          onToggleImmersive: () {},
+          onPause: () => pauses++,
+        ),
+      ),
+    ));
+    expect(find.byIcon(Icons.control_camera), findsOneWidget);
+    // 分步移动：位移必须超过 kTouchSlop（18px），否则 pan 不进 arena
+    final g = await tester.startGesture(
+        tester.getCenter(find.byIcon(Icons.control_camera)));
+    await g.moveBy(const Offset(20, 20));
+    await tester.pump();
+    await g.moveBy(const Offset(20, 20));
+    await tester.pump();
+    await g.up();
+    // 外层双击窗口的计时器走完，避免 pending timer
+    await tester.pump(const Duration(milliseconds: 400));
+    expect(pauses, 1, reason: '角柄内层 pan 必须自己回调 onPause');
+  });
 }

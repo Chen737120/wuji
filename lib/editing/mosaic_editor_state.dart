@@ -32,6 +32,10 @@ class MosaicEditorState {
   String? selectedId;
   Duration position = Duration.zero;
 
+  /// 播放中不允许落帧（UI 在播放时置 false，P1-10）：关键帧写入必须在
+  /// 暂停态发生，否则时间轴每 tick 前移会写出大量垃圾帧且无撤销。
+  bool editable = true;
+
   /// 手写查找：pubspec 未声明 collection，避免 depend_on_referenced_packages。
   MosaicRegion? get selected {
     for (final r in _regions) {
@@ -76,8 +80,9 @@ class MosaicEditorState {
   }
 
   /// 拖动/缩放统一落点：当前时刻 upsert（KeyframeTrack 同刻替换）。
-  /// 播放须先暂停（UI 职责），否则时间流逝会产生多余关键帧。
+  /// 播放中直接 no-op（[editable] 由 UI 维护），避免每帧写出垃圾关键帧。
   void _applyToSelected(CropBox Function(CropBox) transform) {
+    if (!editable) return;
     final r = selected;
     if (r == null) return;
     final cur = r.track.boxAt(position);
@@ -96,6 +101,7 @@ class MosaicEditorState {
 
   /// 「＋添加关键帧」：把当前插值框固化为关键帧（与直拍语义一致）。
   void addKeyframeAtPosition() {
+    if (!editable) return;
     final r = selected;
     if (r == null) return;
     r.track.upsert(position, r.track.boxAt(position));
