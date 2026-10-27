@@ -249,6 +249,21 @@ String buildDecodeRawCommand({
       '-vf scale=$W:$H,format=rgb24 -t ${s(duration)} -f rawvideo "$outPath"';
 }
 
+/// 用 raw 实际帧数反推真实帧率（P2-9）：fps 探测失败时页面会兜底 30，
+/// 但 60/25fps 源会让轨迹时间轴整体错位。raw 字节数是可靠的帧数来源，
+/// 与探测值偏差超过 1fps 时以实测为准。
+double? resolveTrackFps({
+  required int rawBytes,
+  required Duration duration,
+  required double probedFps,
+}) {
+  if (duration.inMilliseconds <= 0) return null;
+  final frames = rawBytes ~/ frameLen;
+  if (frames <= 0) return null;
+  final actual = frames * 1000 / duration.inMilliseconds;
+  return (actual - probedFps).abs() <= 1.0 ? probedFps : actual;
+}
+
 /// 一次跟踪运行：[done] 完成（成功=轨迹，失败/取消=null）；[cancel] 立即终止
 /// （isolate.kill ＋删 raw ＋done 完成 null——Review Focus #4：不能只置标志位）。
 class TrackingRun {

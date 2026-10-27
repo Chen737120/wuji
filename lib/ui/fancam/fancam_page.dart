@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:developer' as dev;
 import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:path_provider/path_provider.dart';
@@ -466,6 +467,16 @@ class _FancamPageState extends State<FancamPage> {
         ScaffoldMessenger.of(context)
             .showSnackBar(const SnackBar(content: Text('跟踪已取消')));
         return;
+      }
+      // fps 探测失败自校验（P2-9）：用 raw 实际帧数反推，偏差 >1fps 采用实测值
+      final resolved = resolveTrackFps(
+        rawBytes: await File(rawPath).length(),
+        duration: trackDur,
+        probedFps: _fps,
+      );
+      if (resolved != null && (resolved - _fps).abs() > 1.0) {
+        dev.log('跟踪帧率按 raw 实测修正：$_fps → $resolved', name: 'wuji');
+        _fps = resolved;
       }
       final run = startTracking(
         rawPath: rawPath,

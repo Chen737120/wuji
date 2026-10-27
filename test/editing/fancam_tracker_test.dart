@@ -289,8 +289,7 @@ void main() {
           reason: '结果已到达，不覆盖');
     });
 
-    test('decodeRawFrames 走全局串行闸：与 export 任务顺序执行（P2-13）', () async {
-      final tmp = await Directory.systemTemp.createTemp('wuji_gate_decode');
+    test('decodeRawFrames 走全局串行闸：与 export 任务顺序执行（P2-13）', () async {      final tmp = await Directory.systemTemp.createTemp('wuji_gate_decode');
       final timeline = <String>[];
       final decodeFuture = decodeRawFrames(
         videoPath: '/v.mp4',
@@ -315,6 +314,56 @@ void main() {
           ['enter:decode', 'exit:decode', 'enter:export', 'exit:export'],
           reason: 'decode 未走 gate 时会与 export 重叠');
       await tmp.delete(recursive: true);
+    });
+  });
+
+  group('T29 fps 探测失败自校验（P2-9）', () {
+    const dur10 = Duration(seconds: 10);
+    int bytesFor(int frames) => frames * frameLen;
+
+    test('10s/600 帧、probed 30 → 60（60fps 源纠正）', () {
+      expect(
+        resolveTrackFps(
+            rawBytes: bytesFor(600), duration: dur10, probedFps: 30),
+        60,
+      );
+    });
+
+    test('10s/300 帧、probed 30 → 30（不误改）', () {
+      expect(
+        resolveTrackFps(
+            rawBytes: bytesFor(300), duration: dur10, probedFps: 30),
+        30,
+      );
+    });
+
+    test('10s/305 帧、probed 30 → 30（偏差 ≤1 视为探测可信）', () {
+      expect(
+        resolveTrackFps(
+            rawBytes: bytesFor(305), duration: dur10, probedFps: 30),
+        30,
+      );
+    });
+
+    test('10s/250 帧、probed 30 → 25（25fps 源纠正）', () {
+      expect(
+        resolveTrackFps(
+            rawBytes: bytesFor(250), duration: dur10, probedFps: 30),
+        25,
+      );
+    });
+
+    test('duration=0 或不足一帧 → null（不猜）', () {
+      expect(
+        resolveTrackFps(
+            rawBytes: bytesFor(600), duration: Duration.zero, probedFps: 30),
+        isNull,
+      );
+      expect(
+        resolveTrackFps(
+            rawBytes: frameLen - 1, duration: dur10, probedFps: 30),
+        isNull,
+      );
     });
   });
 }
