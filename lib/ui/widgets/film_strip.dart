@@ -3,6 +3,10 @@ import 'dart:typed_data';
 import 'package:flutter/material.dart';
 import 'package:video_thumbnail/video_thumbnail.dart';
 
+/// 胶片条路径代际是否过期（P3 补强）：videoPath 变更后，旧循环的取帧结果
+/// 不得回写（否则新视频的胶片条会混入旧视频的帧）。
+bool staleFilmstripGeneration(int gen, int current) => gen != current;
+
 /// 视频缩略图胶片条（2026-10-07 需求 #2/#5 共用组件）：
 /// 均匀采样帧图横向拼接；拖动/点按回调 seek（上方/本页视频跟随显示该帧）；
 /// 可选区间遮罩（修剪页用：区间外暗化）+ 播放头指示。
@@ -47,6 +51,9 @@ class FilmStrip extends StatefulWidget {
 class _FilmStripState extends State<FilmStrip> {
   final Map<int, Uint8List?> _strip = {};
 
+  /// 取帧代际：换视频/重建时 +1，旧循环回写前比对（P3）
+  int _gen = 0;
+
   @override
   void initState() {
     super.initState();
@@ -63,21 +70,25 @@ class _FilmStripState extends State<FilmStrip> {
   }
 
   Future<void> _buildFilmstrip() async {
+    final gen = ++_gen;
+    // 本次循环固定路径/时长：循环中途换视频也不混帧
+    final path = widget.videoPath;
     final dur = widget.duration;
+    final count = widget.stripCount;
     if (dur <= Duration.zero) return;
-    for (var i = 0; i < widget.stripCount; i++) {
-      final ms = dur.inMilliseconds * (2 * i + 1) ~/ (2 * widget.stripCount);
+    for (var i = 0; i < count; i++) {
+      final ms = dur.inMilliseconds * (2 * i + 1) ~/ (2 * count);
       try {
         final bytes = await VideoThumbnail.thumbnailData(
-          video: widget.videoPath,
+          video: path,
           imageFormat: ImageFormat.JPEG,
           quality: 50,
           timeMs: ms,
         );
-        if (!mounted) return;
+        if (!mounted || staleFilmstripGeneration(gen, _gen)) return;
         setState(() => _strip[i] = bytes);
       } catch (_) {
-        if (!mounted) return;
+        if (!mounted || staleFilmstripGeneration(gen, _gen)) return;
         setState(() => _strip[i] = null);
       }
     }

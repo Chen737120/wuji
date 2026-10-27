@@ -96,14 +96,17 @@ class _TrendBarsState extends State<TrendBars> {
           // 卡片整体纵向拉高），下方留 18 标签行
           final barH =
               (constraints.maxWidth * 0.44).clamp(96.0, 168.0).toDouble();
-          // 纵轴刻度（分钟）：0 与峰值均分 4 段，左侧标签 + 横向网格线
-          final ticks = <int>[
-            0,
-            (peak * 0.25).round(),
-            (peak * 0.5).round(),
-            (peak * 0.75).round(),
-            peak,
-          ];
+          // 纵轴刻度（分钟）：0 与峰值均分 4 段，左侧标签 + 横向网格线。
+          // 空数据只画一个 0 刻度（P3-7：避免纵轴出现 5 个「0」）。
+          final ticks = peak == 0
+              ? const <int>[0]
+              : <int>[
+                  0,
+                  (peak * 0.25).round(),
+                  (peak * 0.5).round(),
+                  (peak * 0.75).round(),
+                  peak,
+                ];
           const labelW = 40.0;
           const labelH = 18.0;
           // 柱宽：按月 30px（12 根可滑动、图一观感），按天 17px
