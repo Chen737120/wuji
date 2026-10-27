@@ -12,7 +12,9 @@ import 'mosaic_region.dart';
 bool snapshotStillValid({required int regionCount}) => regionCount > 0;
 
 /// 快照抽帧命令（spec §6）：静置帧跑真实打码链，所见即所得。
-/// 双 -ss：输入侧关键帧快进到 t-1s（fast seek），输出侧精确补 1s（accurate）。
+/// 双 -ss：输入侧先定位到 t-1s（现代 ffmpeg 的输入 seek 会解码到精确位置），
+/// 输出侧再补 1s——两级配合兜住不同容器/关键帧间隔的 seek 精度差异，
+/// 保证抽到的是 at 时刻那一帧。
 /// 路径双引号包裹（FFmpegKit 参数解析同 shell 级引用，见
 /// export_service.tokenizeFfmpeg 注释；防路径含空格）。
 ///

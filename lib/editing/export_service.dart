@@ -127,7 +127,7 @@ class ExportJob {
   });
 
   final String command;
-  final String base; // '直拍' | '对比'
+  final String base; // '直拍' | '对比' | '打码'
   final String ext;
   final int? expectedDurationMs; // 进度分母；null = 不报进度
 }
@@ -253,7 +253,6 @@ class ExportService {
   /// 把 [run(autoSave: false)] 产出的临时成片存进相册（预览确认后调用）。
   Future<String> saveToGallery(String tempPath, String fileName) =>
       _mover.moveToGallery(tempPath, fileName);
-
   /// 回退发生时把第一轮的完整日志逐行打进 logcat（release 保留 print）。
   Future<void> _dumpLogs(String tag, int rc) async {
     var (_, full) = ('', '');
@@ -372,7 +371,3 @@ class GalleryMover implements FileMover {
     } catch (_) {}
   }
 }
-
-@visibleForTesting
-String buildOutputFileName(String base, DateTime now, {String ext = 'mp4'}) =>
-    '${base}_${DateFormat('yyyyMMdd_HHmm').format(now)}.$ext';

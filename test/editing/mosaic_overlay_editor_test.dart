@@ -20,7 +20,6 @@ void main() {
       home: Scaffold(
         body: OverlayEditor(
           state: state,
-          canvasSize: const Size(320, 180),
           immersive: false,
           onChanged: () {},
           onToggleImmersive: () {},
@@ -48,8 +47,7 @@ void main() {
           Expanded(
             child: OverlayEditor(
               state: state,
-              canvasSize: const Size(320, 180),
-              immersive: false,
+                  immersive: false,
               onChanged: () {},
               onToggleImmersive: () {},
             ),
@@ -80,8 +78,7 @@ void main() {
           Expanded(
             child: OverlayEditor(
               state: state,
-              canvasSize: const Size(320, 180),
-              immersive: false,
+                  immersive: false,
               onChanged: () {},
               onToggleImmersive: () {},
             ),
@@ -113,7 +110,6 @@ void main() {
       home: Scaffold(
         body: OverlayEditor(
           state: state,
-          canvasSize: const Size(320, 180),
           immersive: false,
           onChanged: () {},
           onToggleImmersive: () {},
@@ -171,8 +167,7 @@ void main() {
           Expanded(
             child: OverlayEditor(
               state: state,
-              canvasSize: const Size(320, 180),
-              immersive: false,
+                  immersive: false,
               onChanged: () {},
               onToggleImmersive: () {},
               onAdjustEnd: () => adjustEnds++,
@@ -217,7 +212,6 @@ void main() {
       home: Scaffold(
         body: OverlayEditor(
           state: state,
-          canvasSize: const Size(320, 180),
           immersive: false,
           onChanged: () {},
           onToggleImmersive: () {},

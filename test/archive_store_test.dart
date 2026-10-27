@@ -155,7 +155,7 @@ void main() {
     await store.fs.write(keep, Stream.value([1]));
     await store.fs.write(userRenamed, Stream.value([1]));
     await store.fs.write('media/.staging/x.part', Stream.value([2]));
-    await store.sweepOrphans(referencedRels: {keep});
+    await store.sweepOrphans();
     expect(await store.fs.exists(keep), isTrue);
     expect(await store.fs.exists(userRenamed), isTrue);
     expect(await store.fs.exists('media/.staging/x.part'), isFalse);
@@ -163,7 +163,7 @@ void main() {
 
   test('orphan sweep clears staging entirely', () async {
     await store.fs.write('media/.staging/x.part', Stream.value([9]));
-    await store.sweepOrphans(referencedRels: {});
+    await store.sweepOrphans();
     expect(await store.fs.exists('media/.staging/x.part'), isFalse);
   });
 

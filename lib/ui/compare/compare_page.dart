@@ -328,7 +328,6 @@ class _ComparePageState extends State<ComparePage> {
                 children: [
                   Expanded(
                       child: _side(context, t, '老师视频',
-                          dashed: false,
                           transform: _left,
                           selected: _selectedSide == 0,
                           onSelect: () => setState(() => _selectedSide = 0),
@@ -336,7 +335,6 @@ class _ComparePageState extends State<ComparePage> {
                   const SizedBox(width: 6),
                   Expanded(
                       child: _side(context, _mineCtl, '我的视频',
-                          dashed: true,
                           transform: _right,
                           selected: _selectedSide == 1,
                           onSelect: () => setState(() => _selectedSide = 1),
@@ -650,7 +648,6 @@ class _ComparePageState extends State<ComparePage> {
     BuildContext context,
     VideoPlayerController? ctl,
     String label, {
-    required bool dashed,
     required SideTransform transform,
     bool selected = false,
     VoidCallback? onSelect,

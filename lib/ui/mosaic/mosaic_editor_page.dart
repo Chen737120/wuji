@@ -278,8 +278,6 @@ class _MosaicEditorPageState extends State<MosaicEditorPage> {
                     ),
                     OverlayEditor(
                       state: _state,
-                      canvasSize: Size(
-                          widget.srcW.toDouble(), widget.srcH.toDouble()),
                       immersive: _immersive,
                       onChanged: () => setState(() {}),
                       // 拖框/角柄缩放结束、关键帧删除后重拍快照（裁决 3）
@@ -355,7 +353,6 @@ class OverlayEditor extends StatefulWidget {
   const OverlayEditor({
     super.key,
     required this.state,
-    required this.canvasSize,
     required this.immersive,
     required this.onChanged,
     required this.onToggleImmersive,
@@ -368,9 +365,6 @@ class OverlayEditor extends StatefulWidget {
   });
 
   final MosaicEditorState state;
-
-  /// 源画面归一化坐标系基准（语义标注；实际布局以 LayoutBuilder 约束为准）。
-  final Size canvasSize;
   final bool immersive;
   final VoidCallback onChanged;
   final VoidCallback onToggleImmersive;

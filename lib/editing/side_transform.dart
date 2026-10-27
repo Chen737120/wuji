@@ -21,8 +21,6 @@ class SideTransform {
   /// 画面框比例（v1.5.9 起全局共享，两侧一致）。
   String ratio;
 
-  SideTransform copy() => SideTransform(scale: scale, pan: pan, ratio: ratio);
-
   double get aspect {
     switch (ratio) {
       case '1:1':

@@ -109,7 +109,7 @@ class ArchiveStore implements MediaLocator {
   /// 存档里正式命名但未被 DB 引用的文件一律不动 —— 那可能是用户改名/放入的
   /// 文件，App 替用户删除违背「手动删才是真删」的约定；硬崩溃残留的正式命名
   /// 孤儿文件宁留勿删（可手动清理）。
-  Future<void> sweepOrphans({required Set<String> referencedRels}) async {
+  Future<void> sweepOrphans() async {
     final all = await fs.list('media/');
     for (final rel in all) {
       if (rel.startsWith('media/.staging/')) {

@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
+import '../app_version.dart';
 import '../data/app_repository.dart' show ClassSaver;
 import '../reload_bus.dart';
 import '../theme.dart';
@@ -113,8 +114,8 @@ class _MyPageState extends State<MyPage> {
                       sub: null, onTap: () => showDialog(context: context, builder: (ctx) => AlertDialog(
                         backgroundColor: Colors.white,
                         title: const Text('舞记', style: TextStyle(fontSize: 16)),
-                        content: const Text(
-                            'v1.5.24\n\n'
+                        content: Text(
+                            'v$appVersion\n\n'
                             '一个纯个人的舞蹈课记录本：数据全部保存在你的手机上，'
                             '没有账号，没有云端。\n\n'
                             '· 记录：课堂视频/图片 + 感受 + 日期舞种老师舞室，'

@@ -40,7 +40,6 @@ class _DateSheet extends StatefulWidget {
 class _DateSheetState extends State<_DateSheet> {
   late DateTime _month =
       DateTime(initial.year, initial.month); // 该月 1 号
-  DateTime? _selected;
 
   DateTime get initial => widget.initial;
   bool _pickingYear = false;
@@ -194,10 +193,6 @@ class _DateSheetState extends State<_DateSheet> {
                   Builder(builder: (context) {
                     final d = DateTime(_month.year, _month.month, day);
                     final enabled = _inRange(d);
-                    final isSelected = _selected != null &&
-                        _selected!.year == d.year &&
-                        _selected!.month == d.month &&
-                        _selected!.day == day;
                     final isToday = today0 == d;
                     final isInitial = initial.year == d.year &&
                         initial.month == d.month &&
@@ -211,8 +206,7 @@ class _DateSheetState extends State<_DateSheet> {
                           alignment: Alignment.center,
                           decoration: BoxDecoration(
                             shape: BoxShape.circle,
-                            color: isSelected ? accent : null,
-                            border: (isToday || isInitial) && !isSelected
+                            border: (isToday || isInitial)
                                 ? Border.all(
                                     color: accent.withValues(alpha: .6))
                                 : null,
@@ -222,10 +216,8 @@ class _DateSheetState extends State<_DateSheet> {
                                   fontSize: 13,
                                   color: !enabled
                                       ? AppColors.hairline
-                                      : isSelected
-                                          ? Colors.white
-                                          : AppColors.ink,
-                                  fontWeight: isSelected || isToday
+                                      : AppColors.ink,
+                                  fontWeight: isToday
                                       ? FontWeight.w700
                                       : FontWeight.w400)),
                         ),
@@ -253,7 +245,11 @@ class _DateSheetState extends State<_DateSheet> {
                         horizontal: 28, vertical: 8),
                   ),
                   onPressed: () => Navigator.pop(
-                      context, _selected ?? (initial.isBefore(widget.firstDate) || initial.isAfter(widget.lastDate) ? null : initial)),
+                      context,
+                      initial.isBefore(widget.firstDate) ||
+                              initial.isAfter(widget.lastDate)
+                          ? null
+                          : initial),
                   child: const Text('确定',
                       style: TextStyle(
                           fontSize: 13, fontWeight: FontWeight.w600)),

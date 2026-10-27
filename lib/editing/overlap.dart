@@ -18,14 +18,6 @@ class OverlapCalc {
     return raw < s ? s : raw;
   }
 
-  /// 重叠时长。
-  static Duration length(Duration teacherDur, Duration myDur, Duration offset) {
-    final s = start(offset);
-    final e = end(teacherDur, myDur, offset);
-    final ms = e.inMilliseconds - s.inMilliseconds;
-    return Duration(milliseconds: ms < 0 ? 0 : ms);
-  }
-
   /// 导出条件：重叠 ≥ 1 秒（规格 §7）。
   static bool exportable(Duration end, Duration start) =>
       end.inMilliseconds - start.inMilliseconds >= 1000;
