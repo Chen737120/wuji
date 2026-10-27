@@ -28,9 +28,11 @@ class MosaicRegion {
         _ => 8,
       };
 
-  /// boxblur 半径：按区域固定宽比例化（2%+3%·档位），clamp 1..20。
-  int blurRadius(int fixedWpx, int strength) {
-    final r = (fixedWpx * (0.02 + 0.03 * strength)).round();
-    return r.clamp(1, 20);
+  /// gblur 高斯 sigma：按区域**短边**比例化（spec §3.3）。
+  /// 旧 boxblur 半径按宽计算且上限 20，但 min 包未编译 boxblur（真机 APK
+  /// 实证），改用 gblur；gblur 的 sigma 无 chroma 半径硬限制。
+  double blurSigma(int fixedShortPx, int strength) {
+    final s = fixedShortPx * (0.012 + 0.018 * strength);
+    return s.clamp(0.5, 30.0).toDouble(); // num.clamp 返回 num，需转 double
   }
 }

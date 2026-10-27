@@ -18,12 +18,31 @@ void main() {
       expect(r.mosaicTargetWidth(2), 8);
     });
 
-    test('模糊半径按区域宽比例化并 clamp 1..20', () {
+    test('gblur sigma 参数化：短边 16..2000 × 三档恒 >0 且 <=30', () {
       final r = MosaicRegion(id: 'r1', track: KeyframeTrack(duration: const Duration(seconds: 10))..reset(const CropBox(cx: 0.5, cy: 0.5, w: 0.2, h: 0.2)));
-      expect(r.blurRadius(100, 0), 2); // 100*0.02
-      expect(r.blurRadius(100, 2), 8); // 100*0.08
-      expect(r.blurRadius(500, 2), 20); // clamp 上限
-      expect(r.blurRadius(30, 0), 1); // clamp 下限
+      for (var short = 16; short <= 2000; short += 16) {
+        for (var strength = 0; strength <= 2; strength++) {
+          final s = r.blurSigma(short, strength);
+          expect(s, greaterThan(0), reason: 'short=$short strength=$strength');
+          expect(s, lessThanOrEqualTo(30),
+              reason: 'short=$short strength=$strength');
+        }
+      }
+    });
+
+    test('gblur sigma：短边 324 / 中档 ≈ 9.72', () {
+      final r = MosaicRegion(id: 'r1', track: KeyframeTrack(duration: const Duration(seconds: 10))..reset(const CropBox(cx: 0.5, cy: 0.5, w: 0.2, h: 0.2)));
+      expect(r.blurSigma(324, 1), closeTo(9.72, 0.01));
+    });
+
+    test('gblur sigma：同一短边下强度越大 sigma 越大', () {
+      final r = MosaicRegion(id: 'r1', track: KeyframeTrack(duration: const Duration(seconds: 10))..reset(const CropBox(cx: 0.5, cy: 0.5, w: 0.2, h: 0.2)));
+      for (final short in [100, 324, 600]) {
+        expect(r.blurSigma(short, 0), lessThan(r.blurSigma(short, 1)),
+            reason: 'short=$short');
+        expect(r.blurSigma(short, 1), lessThan(r.blurSigma(short, 2)),
+            reason: 'short=$short');
+      }
     });
 
     test('maxRegions = 5', () => expect(MosaicRegion.maxRegions, 5));

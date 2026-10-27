@@ -61,10 +61,25 @@ void main() {
     expect(out, 'mo1');
   });
 
-  test('模糊模式：boxblur luma_radius 按比例', () {
+  test('模糊模式：gblur sigma 按短边比例化', () {
     final (g, _) = buildMosaicGraph([region('r1', MosaicEffect.blur, strength: 1)],
         srcW: 1280, srcH: 720, inputLabel: '0:v');
-    expect(g, contains('boxblur=luma_radius=13')); // blurRadius(256,1)=round(256*0.05)=13
+    // 框 256×144，短边 144 → 144*0.03=4.32
+    expect(g, contains('gblur=sigma=4.32:steps=2'));
+    expect(g.contains('boxblur'), isFalse);
+  });
+
+  test('扁框 576×54：短边比例仍生成合法 gblur 命令', () {
+    final track = KeyframeTrack(duration: const Duration(seconds: 10))
+      ..reset(const CropBox(cx: 0.5, cy: 0.5, w: 0.45, h: 0.075));
+    final flat = MosaicRegion(
+        id: 'r1', track: track, effect: MosaicEffect.blur, strength: 1);
+    final (g, out) = buildMosaicGraph([flat],
+        srcW: 1280, srcH: 720, inputLabel: '0:v');
+    // 0.45*1280=576、0.075*720=54（均偶数）→ 短边 54 → 54*0.03=1.62
+    expect(g, contains('crop=576:54:'));
+    expect(g, contains('gblur=sigma=1.62:steps=2'));
+    expect(out, 'mo0');
   });
 
   test('PC ffmpeg 冒烟（真滤镜解析，非断言测试）：常量链抽一帧成功', () {

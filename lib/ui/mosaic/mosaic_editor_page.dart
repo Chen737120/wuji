@@ -176,7 +176,7 @@ class _MosaicEditorPageState extends State<MosaicEditorPage> {
         setState(() => _snapshotPath = path);
         if (path == null && _snapshotAnnounce) {
           ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
-              content: Text('快照生成失败，导出不受影响')));
+              content: Text('快照生成失败，可重试')));
         }
       }
     } finally {
