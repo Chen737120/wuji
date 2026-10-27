@@ -833,7 +833,8 @@ class _RecordCardState extends State<RecordCard> {
     final messenger = ScaffoldMessenger.of(context);
     try {
       final path = await AbsPathCache.resolve(
-          context.read<MediaPathResolver?>(), m.fileName);
+          context.read<MediaPathResolver?>(), m.fileName,
+          paced: true); // 播放前的 SAF 拷贝：分块让出避免 ANR（P2-7）
       if (!mounted) return;
       if (path == null) {
         // 解析失败绝不把相对路径交给播放器（P1-13：必然 Source error）

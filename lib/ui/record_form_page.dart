@@ -199,7 +199,8 @@ class _RecordFormPageState extends State<RecordFormPage> {
   Future<void> _previewExisting(ExistingMedia em) async {
     final messenger = ScaffoldMessenger.of(context);
     final path =
-        await context.read<MediaPathResolver?>()?.toAbsolutePath(em.fileName);
+        await context.read<MediaPathResolver?>()?.toAbsolutePath(em.fileName,
+            paced: true); // 播放前的 SAF 拷贝走分块（P2-7）
     if (!mounted) return;
     if (path == null) {
       // 同 P1-13：解析失败不把相对路径交给播放器

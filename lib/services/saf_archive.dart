@@ -49,6 +49,25 @@ Stream<Uint8List> chunkedBytes(Stream<List<int>> source,
   if (buf.isNotEmpty) yield buf.takeBytes();
 }
 
+/// 把 SAF 文件分块泵进 [sink]（P2-7）：`readFileBytes` 在原生 Dispatchers.IO
+/// 读，每块 256KB；[paced] 时块间让出 UI 线程 2ms（后台预热用）。
+/// 非 paced 的播放路径同样走分块——旧实现的 readFileStream 分块泵是 Dart
+/// UI 线程上的同步 JNI 循环，大文件会把输入派发打满（ANR，v1.5.20 同源）。
+Future<void> pumpSafFile({
+  required Future<Uint8List> Function(int start, int count) readBytes,
+  required IOSink sink,
+  bool paced = false,
+}) async {
+  var start = 0;
+  while (true) {
+    final bytes = await readBytes(start, 256 * 1024);
+    if (bytes.isEmpty) break;
+    start += bytes.length;
+    sink.add(bytes);
+    if (paced) await Future<void>.delayed(const Duration(milliseconds: 2));
+  }
+}
+
 /// Android SAF 存档（规格 §5.1）：用户授权的文件夹（默认「下载/舞记」）。
 /// 卸载不清空；相对路径映射为 treeUri 下的子路径。
 class SafArchiveFs implements ArchiveFs, MediaPathResolver {
@@ -232,23 +251,13 @@ class SafArchiveFs implements ArchiveFs, MediaPathResolver {
     final part = File('$dest.part');
     final sink = part.openWrite();
     try {
-      if (paced) {
-        // 预热专用。readFileStream 的分块泵是 Dart UI 线程上的同步 JNI
-        // 循环（v1.5.20 全量预热曾把它打满 → 输入派发 5s 超时 ANR）；
-        // 改走 readFileBytes——原生侧在 Dispatchers.IO 读，每块之间
-        // 让出 UI 线程 2ms，滚动/帧调度随时可插入。
-        var start = 0;
-        while (true) {
-          final bytes = await _stream.readFileBytes(uri,
-              start: start, count: 256 * 1024);
-          if (bytes.isEmpty) break;
-          start += bytes.length;
-          sink.add(bytes);
-          await Future<void>.delayed(const Duration(milliseconds: 2));
-        }
-      } else {
-        await sink.addStream(read(rel));
-      }
+      // 两条路径统一分块原生读（P2-7）：paced 仅额外让出 2ms
+      await pumpSafFile(
+        readBytes: (start, count) =>
+            _stream.readFileBytes(uri, start: start, count: count),
+        sink: sink,
+        paced: paced,
+      );
       await sink.flush();
     } finally {
       await sink.close();

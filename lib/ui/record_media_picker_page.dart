@@ -46,7 +46,8 @@ class _RecordMediaPickerPageState extends State<RecordMediaPickerPage> {
   Future<void> _pick(ClassVideoGroup group, MediaAsset video) async {
     final messenger = ScaffoldMessenger.of(context);
     final resolver = context.read<MediaPathResolver?>();
-    final path = await AbsPathCache.resolve(resolver, video.fileName);
+    final path =
+        await AbsPathCache.resolve(resolver, video.fileName, paced: true);
     if (!mounted) return;
     if (path == null) {
       // 解析失败不 pop：把相对路径带走会让上层播放必然 Source error（P1-13）

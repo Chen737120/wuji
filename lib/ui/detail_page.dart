@@ -375,7 +375,7 @@ class _DetailPageState extends State<DetailPage> {
                         try {
                           final path = await context
                               .read<MediaPathResolver?>()
-                              ?.toAbsolutePath(m.fileName);
+                              ?.toAbsolutePath(m.fileName, paced: true);
                           nav.pop();
                           if (!context.mounted) return;
                           if (path == null) {
