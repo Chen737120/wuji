@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:io';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:wuji/editing/export_service.dart';
@@ -10,10 +11,13 @@ class FakeRunner implements CommandRunner {
   List<String> lastArgs = const [];
   @override
   Future<int> run(List<String> args,
-      {void Function(double)? onProgress, int? expectedDurationMs}) async {
+      {void Function(double)? onProgress,
+      int? expectedDurationMs,
+      bool Function()? cancelled}) async {
     calls++;
     lastArgs = args;
     onProgress?.call(0.5);
+    if (cancelled?.call() ?? false) return -1;
     return exitCode;
   }
 
@@ -32,10 +36,50 @@ class CancelMidRunRunner extends FakeRunner {
   final void Function() onRun;
   @override
   Future<int> run(List<String> args,
-      {void Function(double)? onProgress, int? expectedDurationMs}) {
+      {void Function(double)? onProgress,
+      int? expectedDurationMs,
+      bool Function()? cancelled}) {
     onRun();
     return super.run(args,
-        onProgress: onProgress, expectedDurationMs: expectedDurationMs);
+        onProgress: onProgress,
+        expectedDurationMs: expectedDurationMs,
+        cancelled: cancelled);
+  }
+}
+
+/// 首次 run 期间触发取消并返回 255；之后正常成功（实例复用场景）。
+class CancelFirstRunner extends FakeRunner {
+  CancelFirstRunner(this.onFirstRun);
+  final void Function() onFirstRun;
+  @override
+  Future<int> run(List<String> args,
+      {void Function(double)? onProgress,
+      int? expectedDurationMs,
+      bool Function()? cancelled}) async {
+    calls++;
+    lastArgs = args;
+    if (calls == 1) {
+      onFirstRun();
+      return 255;
+    }
+    return 0;
+  }
+}
+
+/// 排队中的任务：run 卡在 [gate] 上，取消后返回 -1（模拟串行闸排队期取消）。
+class QueuedRunner extends FakeRunner {
+  QueuedRunner(this.gate);
+  final Future<void> gate;
+  @override
+  Future<int> run(List<String> args,
+      {void Function(double)? onProgress,
+      int? expectedDurationMs,
+      bool Function()? cancelled}) async {
+    calls++;
+    lastArgs = args;
+    await gate;
+    if (cancelled?.call() ?? false) return -1;
+    return 0;
   }
 }
 
@@ -52,6 +96,14 @@ class FakeMover implements FileMover {
   @override
   Future<void> cleanTemp(String path) async {
     cleanedTemps.add(path);
+  }
+}
+
+/// 搬迁失败（相册权限/空间）——临时成片必须被清理。
+class ThrowingMover extends FakeMover {
+  @override
+  Future<String> moveToGallery(String tempPath, String fileName) async {
+    throw const FileSystemException('gallery write failed');
   }
 }
 
@@ -179,23 +231,90 @@ void main() {
     expect(mover.moved, isEmpty);
   });
 
-  test('cancel: marks job cancelled and cleans temp', () async {
-    final runner = FakeRunner();
+  test('cancel 期间取消：ExportCancelled 且清半成品；同一实例下一次正常（P2-1）',
+      () async {
+    late final ExportService svc;
+    final runner = CancelFirstRunner(() => svc.cancel());
     final mover = FakeMover();
-    final svc = ExportService(
+    svc = ExportService(
       runner: runner,
       mover: mover,
+      probeHasVideo: FakeProbe().call,
       tempDirProvider: () async => Directory.systemTemp,
       clock: () => DateTime(2026, 10, 4),
     );
-    // 模拟用户在 run 期间点取消：runner 返回前 svc.cancel() 已被调
-    svc.cancel();
     await expectLater(
       svc.run(ExportJob(command: 'x', base: '直拍', ext: 'mp4')),
       throwsA(isA<ExportCancelled>()),
     );
     expect(runner.cancels, 1); // 透传给 runner 取消 FFmpeg 会话
     expect(mover.cleanedTemps, hasLength(1));
+    expect(mover.moved, isEmpty);
+
+    // 入口复位：取消不污染下一次 run
+    final p = await svc.run(ExportJob(command: 'x', base: '直拍', ext: 'mp4'));
+    expect(p, contains('Movies/wuji/'));
+    expect(mover.moved, hasLength(1));
+  });
+
+  test('run 正常完成后再 cancel()，下一次 run 仍正常完成（入口复位，P2-1）',
+      () async {
+    final runner = FakeRunner();
+    final mover = FakeMover();
+    var tick = 0;
+    final svc = ExportService(
+      runner: runner,
+      mover: mover,
+      probeHasVideo: FakeProbe().call,
+      tempDirProvider: () async => Directory.systemTemp,
+      // 两次 run 用不同时间戳，避免临时文件名相同（mover 以路径为键）
+      clock: () => DateTime(2026, 10, 4, 0, tick++),
+    );
+    await svc.run(ExportJob(command: 'x', base: '直拍', ext: 'mp4'));
+    svc.cancel(); // 完成后误触（页面销毁/按钮残留）
+    final p = await svc.run(ExportJob(command: 'x', base: '直拍', ext: 'mp4'));
+    expect(p, contains('Movies/wuji/'));
+    expect(mover.moved, hasLength(2));
+  });
+
+  test('排队期取消：启动会话前返回 -1 → ExportCancelled，mover 未被调用（P2-1）',
+      () async {
+    final gate = Completer<void>();
+    final runner = QueuedRunner(gate.future);
+    final mover = FakeMover();
+    final svc = ExportService(
+      runner: runner,
+      mover: mover,
+      probeHasVideo: FakeProbe().call,
+      tempDirProvider: () async => Directory.systemTemp,
+      clock: () => DateTime(2026, 10, 4),
+    );
+    final future =
+        svc.run(ExportJob(command: 'x', base: '打码', ext: 'mp4'));
+    await Future<void>.delayed(Duration.zero);
+    svc.cancel(); // 还在队列里
+    gate.complete();
+    await expectLater(future, throwsA(isA<ExportCancelled>()));
+    expect(runner.calls, 1);
+    expect(mover.moved, isEmpty);
+    expect(mover.cleanedTemps, hasLength(1)); // 半成品清理
+  });
+
+  test('搬迁失败：临时成片被清理且异常上抛（P2-6）', () async {
+    final mover = ThrowingMover();
+    final svc = ExportService(
+      runner: FakeRunner(),
+      mover: mover,
+      probeHasVideo: FakeProbe().call,
+      tempDirProvider: () async => Directory.systemTemp,
+      clock: () => DateTime(2026, 10, 4),
+    );
+    await expectLater(
+      svc.run(ExportJob(command: 'x', base: '直拍', ext: 'mp4')),
+      throwsA(isA<FileSystemException>()),
+    );
+    expect(mover.cleanedTemps, hasLength(1));
+    expect(mover.moved, isEmpty);
   });
 
   test('run: 导出中取消不当硬编失败——不进 mpeg4 软编回退，直接 ExportCancelled', () async {

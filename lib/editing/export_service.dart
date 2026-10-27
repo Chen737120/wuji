@@ -32,10 +32,14 @@ class ExportFailed implements Exception {
 /// FFmpeg 命令执行器（窄接口：宿主测试注入 fake，设备端包 FFmpegKit）。
 abstract class CommandRunner {
   /// 返回进程退出码，0 = 成功。参数已含输出路径（最后一个参数）。
+  ///
+  /// [cancelled] 在真正启动 FFmpeg 前再查一次：串行闸排队期间用户点取消时，
+  /// 任务不必再跑完整段（P2-1）。
   Future<int> run(
     List<String> args, {
     void Function(double progress)? onProgress,
     int? expectedDurationMs,
+    bool Function()? cancelled,
   });
 
   /// 取消当前/下一个 FFmpeg 会话。
@@ -146,7 +150,11 @@ class ExportService {
   final Future<Directory> Function()? _tempDir;
   bool _cancelRequested = false;
 
-  /// 用户取消：立即透传给 runner 杀 FFmpeg 会话，并在本次 run 里生效。
+  /// 用户取消：置位并立即透传给 runner 杀 FFmpeg 会话。
+  ///
+  /// 注意副作用：[FFmpegKitRunner.cancel] 是 `FFmpegKit.cancel()`（无参 =
+  /// 取消**所有**会话），同期在跑的快照会被一起取消（快照失败非致命）。
+  /// 按 sessionId 精确取消列为后续可选优化（P2-1）。
   void cancel() {
     _cancelRequested = true;
     _runner.cancel();
@@ -154,6 +162,10 @@ class ExportService {
 
   Future<String> run(ExportJob job,
       {void Function(double p)? onProgress, bool autoSave = true}) async {
+    // 取消标记在入口复位（P2-1/P2-6）：compare_page 与 fancam_preview_page
+    // 跨次导出复用同一实例，若在 finally 复位，导出完成后误触一次「取消」
+    // 会把标记留给下一次 run，下一次导出刚进 run() 就被错误取消。
+    _cancelRequested = false;
     final now = (_clock ?? DateTime.now)();
     final stamp = DateFormat('yyyyMMdd_HHmmss').format(now);
     final fileName = '${job.base}_$stamp.${job.ext}';
@@ -165,12 +177,12 @@ class ExportService {
     // FFmpeg 导出（直拍/对比）期间屏幕常亮
     await PhotoManagerBridge.setKeepScreenOn(true);
     try {
-      if (_cancelRequested) throw ExportCancelled();
       // 数组形式执行（评审建议）：文件名含引号/特殊字符也不会破坏命令
       var args = tokenizeFfmpeg('${job.command} $temp');
       var rc = await _runner.run(args,
           onProgress: onProgress,
-          expectedDurationMs: job.expectedDurationMs);
+          expectedDurationMs: job.expectedDurationMs,
+          cancelled: () => _cancelRequested);
       // 缺陷 2 修复：rc==0 不等于成片可用。AVD/部分设备上 mediacodec 会
       // 静默产出零包（退出码 0、成片仅音频轨、UI 零报错），搬运前必须用
       // FFprobe 校验输出含视频流（probe 在 mover 之前，半成品走 finally 清理）。
@@ -202,7 +214,8 @@ class ExportService {
         args = [...args.sublist(0, ci), 'mpeg4', '-q:v', '4', ...args.sublist(ci + 1)];
         rc = await _runner.run(args,
             onProgress: onProgress,
-            expectedDurationMs: job.expectedDurationMs);
+            expectedDurationMs: job.expectedDurationMs,
+            cancelled: () => _cancelRequested);
         videoOk = false;
         if (rc == 0 && !_cancelRequested) {
           videoOk = await _probeHasVideo(temp);
@@ -226,8 +239,11 @@ class ExportService {
         moved = true;
         return temp;
       }
-      moved = true; // 成功：mover 搬进相册并消费临时文件
-      return await _mover.moveToGallery(temp, fileName);
+      // 搬迁成功后才算「已消费临时文件」（P2-6）：mover 抛异常时临时成片
+      // 仍由 finally 清理，不在 cache 里留几百 MB 垃圾
+      final saved = await _mover.moveToGallery(temp, fileName);
+      moved = true;
+      return saved;
     } finally {
       await PhotoManagerBridge.setKeepScreenOn(false);
       if (!moved) await _mover.cleanTemp(temp); // 失败/取消：清半成品
@@ -303,8 +319,11 @@ class FFmpegKitRunner implements CommandRunner {
     List<String> args, {
     void Function(double progress)? onProgress,
     int? expectedDurationMs,
+    bool Function()? cancelled,
   }) {
     return ffmpegGate.run(() {
+      // 排队期间已取消：不启动会话，直接返回非零（P2-1）
+      if (cancelled?.call() ?? false) return Future.value(-1);
       final completer = Completer<int>();
       FFmpegKit.executeWithArgumentsAsync(args.toList(),
           (FFmpegSession session) async {
