@@ -88,5 +88,5 @@ void main() {
     // C:/Users/chen/tools/ffmpeg/ffmpeg-9.0.2-essentials_build/bin/ffmpeg.exe -y -ss 1 -i testdata/fancam-motion-demo/src.mp4 \
     //   -filter_complex "<graph>" -map "[mo0]" -frames:v 1 build/mosaic-smoke.jpg
     // 预期：rc=0，jpg 生成，打开目检马赛克块位置居中。
-  });
+  }, skip: '手动执行：PC ffmpeg 冒烟，不在 CI 跑');
 }

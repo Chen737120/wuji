@@ -20,6 +20,29 @@ CropBox _box340x604() =>
 CropBox _box272x484() =>
     CropBox(cx: 0.5, cy: 0.5, w: 272 / 1280, h: 484 / 720);
 
+// (名, CSV, boxW, boxH, 时长)——gen_d5 Conf 口径：340×604/340×604/272×484，
+// 时长 32.45/36.0/26.8333s（原型"跟踪可靠段"裁剪）。
+const _fixtureConfs = [
+  ('v1', 'testdata/fancam-follow/track_v1.csv', 340, 604,
+      Duration(milliseconds: 32450)),
+  ('v3', 'testdata/fancam-follow/track_v3.csv', 340, 604,
+      Duration(seconds: 36)),
+  ('v4', 'testdata/fancam-follow/track_v4.csv', 272, 484,
+      Duration(milliseconds: 26833)),
+];
+
+/// 缺 fixture 时的 skip 说明（显示为 skip 而不是 pass）。
+final String? _fixtureSkip = () {
+  final missing = [
+    for (final c in _fixtureConfs)
+      if (!File(c.$2).existsSync()) c.$1,
+  ];
+  if (missing.isEmpty) return null;
+  return '缺 testdata/fancam-follow/track_${missing.join('/')}.csv'
+      '（PC 上 WUJI_GEN_FIXTURE=1 flutter test '
+      'test/editing/fancam_follow_fixture_gen_test.dart 生成）';
+}();
+
 void main() {
   group('fancam_follow_controller（骑行跟随，gen_d5 逐行移植）', () {
     test('用例1: 静止目标——HOLD 全程 centers 等于初始 clamp 位置', () {
@@ -252,25 +275,8 @@ void main() {
     });
 
     test('用例6: 三素材指标回归——maxE ≤ z·box+20、中心出框 0 帧（缺失即跳过）', () {
-      const confs = [
-        // (名, CSV, boxW, boxH, 时长)——gen_d5 Conf 口径：340×604/340×604/272×484，
-        // 时长 32.45/36.0/26.8333s（原型"跟踪可靠段"裁剪）
-        ('v1', 'testdata/fancam-follow/track_v1.csv', 340, 604,
-            Duration(milliseconds: 32450)),
-        ('v3', 'testdata/fancam-follow/track_v3.csv', 340, 604,
-            Duration(seconds: 36)),
-        ('v4', 'testdata/fancam-follow/track_v4.csv', 272, 484,
-            Duration(milliseconds: 26833)),
-      ];
-      for (final c in confs) {
+      for (final c in _fixtureConfs) {
         final f = File(c.$2);
-        if (!f.existsSync()) {
-          // ignore: avoid_print
-          print('skip ${c.$1}: 缺 ${c.$2}（CI 无 testdata；PC 上 '
-              'WUJI_GEN_FIXTURE=1 flutter test '
-              'test/editing/fancam_follow_fixture_gen_test.dart 生成）');
-          continue;
-        }
         final pts = <TrackPoint>[];
         for (final line in f.readAsLinesSync()) {
           final p = line.split(',');
@@ -301,6 +307,6 @@ void main() {
         expect(s.statsX.outFrames, 0, reason: '${c.$1} 横轴中心出框 0 帧');
         expect(s.statsY.outFrames, 0, reason: '${c.$1} 纵轴中心出框 0 帧');
       }
-    });
+    }, skip: _fixtureSkip);
   });
 }

@@ -15,6 +15,9 @@ analyzer:
     - android/**
     - ios/**
     - githubresouce/**
+    # 原型/素材脚本不是产品代码（P3-9）：不参与 analyze，避免真问题被噪音掩盖
+    - docs/**
+    - testdata/**
 
 linter:
   # The lint rules applied to this project can be customized in the
