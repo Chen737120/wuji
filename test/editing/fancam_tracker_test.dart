@@ -5,6 +5,7 @@
 // 方块必须带纹理（R 通道垂直渐变 170..225）：均匀方块会使模板 tStd 退化到 1e-9 下限、
 // NCC 相关值全为舍入噪声，跟踪器永不移动（PC 仿真验证）；真实人像模板天然有纹理。
 import 'dart:io';
+import 'dart:math';
 import 'dart:typed_data';
 
 import 'package:flutter_test/flutter_test.dart';
@@ -176,6 +177,104 @@ void main() {
       expect(pts, isNull);
       expect(File(rawPath).existsSync(), isFalse, reason: 'cancel 应删除 raw');
       await dir.delete(recursive: true);
+    });
+  });
+
+  group('T4 模板取用户当前帧（P2-35）', () {
+    // 可重复的低对比棋盘格背景（NCC 需要纹理，但不能用纯色），
+    // 40×56 高对比纹理化目标块：点选帧（第 6 帧）出现在点击处，之后每帧右移 10px。
+    //
+    // 与任务书「从 x=40 每帧右移」的偏差（实测后调整）：目标若在点选前就经过
+    // 点击位置，跟踪器会在第 5 帧先咬住它（距离 10px 在搜索窗内）并得到负速度，
+    // 到第 6 帧搜索中心被 EMA 拉到 87，目标已到 100（偏 13px > SR=12）→ 漏帧。
+    // 这是跟踪器既有动态特性，与模板取帧无关；为让对照只体现模板来源，
+    // 点选前画面不放目标块。判据与断言原样保留。
+    int hash(int x, int y) => ((x * 7919 + y * 104729) ^ (x * y * 31)) & 255;
+
+    Uint8List frameAt(int i) {
+      final f = Uint8List(fLen);
+      for (var y = 0; y < fh; y++) {
+        for (var x = 0; x < fw; x++) {
+          final o = (y * fw + x) * 3;
+          final v = ((x ~/ 8) + (y ~/ 8)) % 2 == 0 ? 100 : 130;
+          f[o] = v;
+          f[o + 1] = v;
+          f[o + 2] = v;
+        }
+      }
+      if (i < 6) return f;
+      final cx = 100 + 10 * (i - 6);
+      for (var y = 62; y < 118; y++) {
+        for (var x = cx - 20; x < cx + 20; x++) {
+          final o = (y * fw + x) * 3;
+          // 纹理随目标移动（局部坐标）：若按绝对坐标，目标平移后重叠区像素不变，
+          // dx=0 的部分重叠反而拿到高相关，测不出跟踪能力。
+          final v = hash(x - cx, y);
+          f[o] = v;
+          f[o + 1] = 255 - v;
+          f[o + 2] = (v * 3) & 255;
+        }
+      }
+      return f;
+    }
+
+    // 点击第 6 帧目标块中心：ds(100,90) → 全分辨率 (400,360)
+    const initCx = 400 / 1280;
+    const initCy = 360 / 720;
+    double trueX(int i) => (100 + 10 * (i - 6)) * 4.0; // 全分辨率
+    const trueY = 360.0;
+
+    List<TrackPoint> run(int templateFrameIndex) => trackRgbFrames(
+          frames: [for (var i = 0; i < 12; i++) frameAt(i)],
+          initCxNorm: initCx,
+          initCyNorm: initCy,
+          srcW: 1280,
+          srcH: 720,
+          fps: 30,
+          templateFrameIndex: templateFrameIndex,
+        );
+
+    double dist(TrackPoint p, int i) {
+      final dx = p.x - trueX(i);
+      final dy = p.y - trueY;
+      return sqrt(dx * dx + dy * dy);
+    }
+
+    double meanDistFrom6(List<TrackPoint> pts) {
+      var sum = 0.0;
+      for (var i = 6; i < 12; i++) {
+        sum += dist(pts[i], i);
+      }
+      return sum / 6;
+    }
+
+    test('模板取第 6 帧：6~11 帧贴合真值，显著优于首帧模板', () {
+      final a = run(0); // 旧行为：首帧抓模板
+      final b = run(6); // 修复后：用户点选帧抓模板
+      final distA = meanDistFrom6(a);
+      final distB = meanDistFrom6(b);
+      expect(distB, lessThan(20), reason: '平均距离 < 20px，实际 $distB');
+      expect(distB, lessThan(distA * 0.5),
+          reason: '修复有效性的对照：B=$distB 应 < A=$distA 的一半');
+    });
+
+    test('时间轴与帧数不变：B[6].t=6/30、B.length=12', () {
+      final b = run(6);
+      expect(b.length, 12);
+      expect(b[6].t, closeTo(6 / 30, 1e-9));
+    });
+
+    test('点选之前的帧停在点击位置附近（±48px 内）', () {
+      final b = run(6);
+      final dx = b[0].x - 400; // 点击坐标全分辨率 (400,360)
+      final dy = b[0].y - 360;
+      expect(sqrt(dx * dx + dy * dy), lessThan(48),
+          reason: 'B[0]=(${b[0].x}, ${b[0].y})，点击坐标=(400,360)');
+    });
+
+    test('templateFrameIndex 越界时 clamp 到末帧，不抛', () {
+      final pts = run(99);
+      expect(pts.length, 12);
     });
   });
 }

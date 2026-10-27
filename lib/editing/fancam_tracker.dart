@@ -38,6 +38,9 @@ class TrackPoint {
 
 /// 纯核心：吃内存中的 RGB24 帧序列（每帧 W×H×3 = 172800 字节），返回逐帧 TrackPoint。
 /// initNorm 为用户点击处相对源画面的归一化坐标（点谁跟谁，位置任意）。
+///
+/// [templateFrameIndex] > 0 时先用该帧预抓模板（T4：用户播放中途点选，
+/// 模板必须取自用户看到的那一帧）；为 0 时保持「首帧 grab、score=1.0」。
 List<TrackPoint> trackRgbFrames({
   required List<Uint8List> frames,
   required double initCxNorm,
@@ -45,6 +48,7 @@ List<TrackPoint> trackRgbFrames({
   required int srcW,
   required int srcH,
   required double fps,
+  int templateFrameIndex = 0,
 }) {
   final tracker = _NccTracker(
     initCxNorm: initCxNorm,
@@ -53,6 +57,10 @@ List<TrackPoint> trackRgbFrames({
     srcH: srcH,
     fps: fps,
   );
+  if (templateFrameIndex > 0 && frames.isNotEmpty) {
+    final idx = templateFrameIndex.clamp(0, frames.length - 1);
+    tracker.seedTemplate(frames[idx]);
+  }
   return [for (final f in frames) tracker.feed(f)];
 }
 
@@ -100,6 +108,18 @@ class _NccTracker {
       s += (v - tMean) * (v - tMean);
     }
     tStd = sqrt(max(s / tmpl.length, 1e-9));
+  }
+
+  /// 用指定帧预抓模板（T4）：用户在播放中途点选时，模板必须取自
+  /// 用户看到的那一帧，而不是视频第一帧。算法其他部分不变。
+  void seedTemplate(List<int> f) {
+    if (haveTmpl) return;
+    for (var i = 0; i < W * H; i++) {
+      final o = i * 3;
+      lum[i] = 0.299 * f[o] + 0.587 * f[o + 1] + 0.114 * f[o + 2];
+    }
+    grab(f, fx, fy);
+    haveTmpl = true;
   }
 
   /// 喂入一帧，返回该帧 TrackPoint。丢帧沿用是内在行为：best<0.5 时 fx/fy 不动。
@@ -240,6 +260,7 @@ TrackingRun startTracking({
   required int srcW,
   required int srcH,
   required double fps,
+  Duration templateAt = Duration.zero,
   void Function(double p)? onProgress,
 }) {
   final completer = Completer<List<TrackPoint>?>();
@@ -294,6 +315,7 @@ TrackingRun startTracking({
       srcW: srcW,
       srcH: srcH,
       fps: fps,
+      templateAt: templateAt,
     ),
     onExit: exitPort.sendPort,
   ).then((iso) {
@@ -334,6 +356,7 @@ class _TrackRequest {
     required this.srcW,
     required this.srcH,
     required this.fps,
+    this.templateAt = Duration.zero,
   });
 
   final SendPort send;
@@ -343,6 +366,10 @@ class _TrackRequest {
   final int srcW;
   final int srcH;
   final double fps;
+
+  /// 模板取帧时刻（相对 raw 起点）：由同步的 startTracking 原样携带，
+  /// 帧号在 `_readAndTrack` 算出帧总数后再换算（T4）。
+  final Duration templateAt;
 }
 
 /// Isolate 入口：无论成败都发一次结果消息（成功=轨迹 / 失败=null），
@@ -373,23 +400,39 @@ Future<List<TrackPoint>?> _readAndTrack(_TrackRequest req) async {
     fps: req.fps,
   );
   final buf = Uint8List(frameLen); // 每帧复用（feed 不持有帧引用）
-  final points = <TrackPoint>[];
-  var lastReported = -1;
-  // 每帧单独 open/close（开销 ~µs 级，NCC 每帧 ~10ms 才是大头）：句柄锁窗口缩到
-  // 单帧之内，cancel 被 kill 后文件能尽快删除（Windows 下长期持锁会阻塞删除）。
-  for (var i = 0; i < total; i++) {
+
+  /// 读第 [index] 帧进 [buf]；文件比预期短返回 false。
+  Future<bool> readFrame(int index) async {
+    // 每帧单独 open/close（开销 ~µs 级，NCC 每帧 ~10ms 才是大头）：句柄锁窗口缩到
+    // 单帧之内，cancel 被 kill 后文件能尽快删除（Windows 下长期持锁会阻塞删除）。
     final raf = await file.open();
     try {
-      await raf.setPosition(i * frameLen);
+      await raf.setPosition(index * frameLen);
       var got = 0;
       while (got < frameLen) {
         final n = await raf.readInto(buf, got);
-        if (n <= 0) return null; // 文件比 total 帧短 → 失败
+        if (n <= 0) return false; // 文件比 total 帧短 → 失败
         got += n;
       }
+      return true;
     } finally {
       await raf.close();
     }
+  }
+
+  // T4：模板取自用户点选时看到的那一帧（templateAt 换算成帧号）。
+  // 仅 >0 时预抓，保证 t=0 场景下「首帧 grab、score=1.0」语义不变。
+  final fIdx = (req.templateAt.inMicroseconds * req.fps / 1e6).round();
+  final templateIndex = fIdx.clamp(0, total - 1).toInt(); // num.clamp 返回 num
+  if (templateIndex > 0) {
+    if (!await readFrame(templateIndex)) return null;
+    tracker.seedTemplate(buf);
+  }
+
+  final points = <TrackPoint>[];
+  var lastReported = -1;
+  for (var i = 0; i < total; i++) {
+    if (!await readFrame(i)) return null;
     points.add(tracker.feed(buf));
     if (i - lastReported >= 24) {
       lastReported = i;

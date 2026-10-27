@@ -460,6 +460,11 @@ class _FancamPageState extends State<FancamPage> {
         srcW: _srcW,
         srcH: _srcH,
         fps: _fps,
+        // T4：模板取用户点选时看到的那一帧（track 时间，相对修剪起点）
+        templateAt: Duration(
+            microseconds: _trackTime.inMicroseconds
+                .clamp(0, trackDur.inMicroseconds)
+                .toInt()),
         onProgress: (p) => _trackProgress.value = p,
       );
       _tracking = run;
