@@ -1,5 +1,6 @@
 import 'dart:convert';
 import 'dart:io';
+import 'dart:typed_data';
 import 'package:archive/archive.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:wuji/data/db.dart';
@@ -117,4 +118,86 @@ void main() {
     expect(targetDir.listSync().whereType<File>().any((f) => f.path.endsWith('.zip')),
         isFalse);
   });
+
+  test('exportSingleFolder 流式拷贝：大文件字节一致（P1-3）', () async {
+    // ~4MB 确定性字节：证明逐块读写不改变内容
+    final big = Uint8List(4 * 1024 * 1024);
+    for (var i = 0; i < big.length; i++) {
+      big[i] = (i * 31 + 7) & 0xff;
+    }
+    const rel = 'media/2026-09/big.mp4';
+    await source.fs.write(rel, Stream.value(big));
+    final exporter = Exporter(source);
+    final record = rec('r9', '2026-09-30', '爵士');
+    await exporter.exportSingleFolder(
+      record,
+      [
+        MediaAsset(
+            id: 'm9',
+            classId: 'r9',
+            type: 'video',
+            fileName: rel,
+            sizeBytes: big.length,
+            createdAt: DateTime(2026, 9, 30)),
+      ],
+      targetDir: targetDir.path,
+    );
+    final out = File('${targetDir.path}/2026-09-30_爵士/big.mp4');
+    expect(out.existsSync(), isTrue);
+    final written = await out.readAsBytes();
+    expect(written.length, big.length);
+    expect(written, equals(big));
+  });
+
+  test('exportSingleFolder 读取中途失败：删除半成品并上抛（P1-3）', () async {
+    final exporter = Exporter(ArchiveStore(_FailingReadFs()));
+    final record = rec('r8', '2026-09-30', '爵士');
+    await expectLater(
+      exporter.exportSingleFolder(
+        record,
+        [
+          MediaAsset(
+              id: 'm8',
+              classId: 'r8',
+              type: 'video',
+              fileName: 'media/2026-09/broken.mp4',
+              sizeBytes: 10,
+              createdAt: DateTime(2026, 9, 30)),
+        ],
+        targetDir: targetDir.path,
+      ),
+      throwsA(isA<FileSystemException>()),
+    );
+    final folder = Directory('${targetDir.path}/2026-09-30_爵士');
+    expect(folder.existsSync(), isTrue);
+    // 半成品 mp4 不得留下（感受.txt 在媒体循环后才写，也不存在）
+    expect(folder.listSync().whereType<File>(), isEmpty);
+  });
+}
+
+/// 读取时先吐一块再抛异常：模拟 SAF 拷贝中途断开。
+class _FailingReadFs implements ArchiveFs {
+  @override
+  Stream<List<int>> read(String rel) async* {
+    yield [1, 2, 3];
+    throw const FileSystemException('read failed mid-stream');
+  }
+
+  @override
+  Future<bool> exists(String rel) async => true;
+
+  @override
+  Future<void> write(String rel, Stream<List<int>> bytes) async {}
+
+  @override
+  Future<void> delete(String rel) async {}
+
+  @override
+  Future<void> move(String from, String to) async {}
+
+  @override
+  Future<List<String>> list(String prefix) async => const [];
+
+  @override
+  Future<int?> freeBytes() async => null;
 }

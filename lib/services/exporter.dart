@@ -91,6 +91,7 @@ class Exporter {
       };
       for (final tn in thumbNames) {
         if (!await _store.exists(tn)) continue;
+        // 缩略图只有几十 KB，允许整读（大视频走上面的流式拷贝）
         final bytes = await _store.readBytes(tn);
         encoder.addArchiveFile(ar.ArchiveFile(tn, bytes.length, bytes));
       }
@@ -131,8 +132,23 @@ class Exporter {
       final n = (used[name] ?? 0) + 1;
       used[name] = n;
       final finalName = n == 1 ? name : _withSeq(name, n);
-      final bytes = await _store.readBytes(m.fileName);
-      await File('${dir.path}/$finalName').writeAsBytes(bytes);
+      // 流式写盘（P1-3）：内存不随文件大小增长——394MB 视频整读会 OOM
+      final out = File('${dir.path}/$finalName');
+      final sink = out.openWrite();
+      try {
+        await sink.addStream(_store.fs.read(m.fileName));
+        await sink.flush();
+        await sink.close();
+      } catch (e) {
+        try {
+          await sink.close();
+        } catch (_) {}
+        // 半成品必须删掉，否则用户看到的是个损坏的视频文件
+        try {
+          if (out.existsSync()) out.deleteSync();
+        } catch (_) {}
+        rethrow;
+      }
     }
     await File('${dir.path}/感受.txt')
         .writeAsString(feelingsTxt(record), encoding: utf8);
