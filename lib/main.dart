@@ -176,6 +176,30 @@ class _AppRootState extends State<AppRoot> {
 
   /// 存档位置切换（规格 §5.1）：重选文件夹 → 重建仓库 → 从新存档恢复。
   Future<void> _switchArchive() async {
+    // 库非空时切换会让所有相对路径指向旧存档（P1-6）：必须二次确认
+    final nav = _navigatorKey.currentState;
+    if (nav == null) return;
+    final existing = await _repo.allRecords();
+    if (existing.isNotEmpty && mounted) {
+      final ok = await showDialog<bool>(
+        context: nav.context, // 本 State 的 context 在 MaterialApp 之上
+        builder: (ctx) => AlertDialog(
+          backgroundColor: Colors.white,
+          title: const Text('更换存档文件夹'),
+          content: Text('当前 ${existing.length} 节课的视频仍在原文件夹。\n'
+              '更换后这些课会显示「文件已丢失」，需要从备份重新导入。\n\n是否继续？'),
+          actions: [
+            TextButton(
+                onPressed: () => Navigator.pop(ctx, false),
+                child: const Text('取消')),
+            TextButton(
+                onPressed: () => Navigator.pop(ctx, true),
+                child: const Text('仍要更换')),
+          ],
+        ),
+      );
+      if (ok != true || !mounted) return;
+    }
     final uri = await pickAndEnsureWujiArchive();
     if (uri == null || !mounted) return;
     final sp = await SharedPreferences.getInstance();

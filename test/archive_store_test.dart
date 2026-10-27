@@ -88,6 +88,27 @@ void main() {
     expect(await store.readManifest(), contains('舞记'));
   });
 
+  test('writeManifest 先写 .tmp 再转正：成功后无残留临时文件（P2-18）', () async {
+    await store.writeManifest('{"v":1}');
+    expect(File('${tmp.path}${Platform.pathSeparator}舞记数据.json').existsSync(),
+        isTrue);
+    expect(
+        File('${tmp.path}${Platform.pathSeparator}舞记数据.json.tmp')
+            .existsSync(),
+        isFalse);
+    expect(await store.readManifest(), '{"v":1}');
+  });
+
+  test('目标已存在时二次写入能覆盖（Windows rename 分支）', () async {
+    await store.writeManifest('{"v":1}');
+    await store.writeManifest('{"v":2}');
+    expect(await store.readManifest(), '{"v":2}');
+    expect(
+        File('${tmp.path}${Platform.pathSeparator}舞记数据.json.tmp')
+            .existsSync(),
+        isFalse);
+  });
+
   test('orphan sweep keeps formal-named files (user data), clears staging only', () async {
     final keep = 'media/2026-10/keep.mp4';
     final userRenamed = 'media/2026-10/orphan.mp4';

@@ -54,8 +54,28 @@ class ArchiveStore implements MediaLocator {
     await fs.delete(rel);
   }
 
-  Future<void> writeManifest(String json) =>
-      fs.write(manifestRel, Stream<List<int>>.value(utf8.encode(json)));
+  /// 先写 `.tmp` 再转正（P2-18）：中断时最多留下临时文件，不会产生截断的
+  /// 正式清单（DB 清空后无法重建的不可恢复类故障就出在这里）。
+  Future<void> writeManifest(String json) async {
+    final bytes = utf8.encode(json);
+    final tmp = '$manifestRel.tmp';
+    await fs.write(tmp, Stream<List<int>>.value(bytes));
+    try {
+      await fs.move(tmp, manifestRel); // POSIX 原子覆盖；Windows 已存在会抛
+    } catch (_) {
+      try {
+        await fs.delete(manifestRel);
+      } catch (_) {}
+      try {
+        await fs.move(tmp, manifestRel);
+      } catch (_) {
+        await fs.write(manifestRel, Stream<List<int>>.value(bytes)); // 最后兜底
+      }
+    }
+    try {
+      if (await fs.exists(tmp)) await fs.delete(tmp);
+    } catch (_) {}
+  }
 
   Future<String?> readManifest() async {
     if (!await fs.exists(manifestRel)) return null;

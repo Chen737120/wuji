@@ -184,8 +184,7 @@ void main() {
     await db3.close();
   });
 
-  test('停用老师后编辑含该名称的历史课仍能保存（P1-1）', () async {
-    final record = ClassRecord(
+  test('停用老师后编辑含该名称的历史课仍能保存（P1-1）', () async {    final record = ClassRecord(
       id: 'r7',
       date: '2026-10-02',
       styleName: '爵士',
@@ -212,4 +211,67 @@ void main() {
     expect(teachers.single.isActive, isTrue, reason: '同名停用项应复活');
     expect((await repo.allRecords()).single.teacherName, '张三');
   });
+
+  test('当前存档抽样全缺失时拒写 manifest（P1-6）', () async {
+    final tmp2 = await Directory.systemTemp.createTemp('wuji_manifest_guard');
+    final db2 = appDatabaseForTest();
+    addTearDown(() async {
+      await db2.close();
+      try {
+        await tmp2.delete(recursive: true);
+      } catch (_) {}
+    });
+    final emptyDir = Directory('${tmp2.path}/empty')..createSync();
+    final counting = _CountingStore(LocalArchiveFs(emptyDir.path));
+    final repo2 = AppRepository(db2, counting, TaxonomyRepo(db2));
+
+    final now = DateTime(2026, 10, 27);
+    await db2.into(db2.classRecords).insert(ClassRecordsCompanion.insert(
+          id: 'g1',
+          date: '2026-10-27',
+          createdAt: now,
+          updatedAt: now,
+        ));
+    for (var i = 0; i < 3; i++) {
+      await db2.into(db2.mediaAssets).insert(MediaAssetsCompanion.insert(
+            id: 'gm$i',
+            classId: 'g1',
+            type: 'video',
+            fileName: 'media/2026-10/gm$i.mp4',
+            createdAt: now,
+          ));
+    }
+
+    await repo2.saveDraft(ClassDraft(
+      record: ClassRecord(
+        id: 'g1',
+        date: '2026-10-27',
+        sessionCount: 1,
+        minutesEach: 90,
+        createdAt: now,
+        updatedAt: now,
+      ),
+      newMedia: const [],
+      removeMediaIds: const [],
+    ));
+
+    expect(counting.manifestWrites, 0, reason: '抽样 3 个文件全缺失应拒写');
+    expect(
+        File('${emptyDir.path}${Platform.pathSeparator}舞记数据.json')
+            .existsSync(),
+        isFalse);
+  });
+}
+
+/// 计数版存档门面：统计 writeManifest 调用次数。
+class _CountingStore extends ArchiveStore {
+  _CountingStore(super.fs);
+
+  int manifestWrites = 0;
+
+  @override
+  Future<void> writeManifest(String json) async {
+    manifestWrites++;
+    await super.writeManifest(json);
+  }
 }

@@ -99,6 +99,10 @@ void main() {
 
   test('补生成成功会刷新 manifest', () async {
     await seedVideos(1);
+    // 真实场景里媒体文件在存档内；manifest 抽样守卫会检查存在性（P1-6）
+    File('${tmp.path}${Platform.pathSeparator}media'
+            '${Platform.pathSeparator}2026-10${Platform.pathSeparator}m0.mp4')
+        .createSync(recursive: true);
     final repo = repoWith((src) async => 'thumbs/x.jpg');
     expect(await repo.backfillMissingThumbs(), 1);
     final manifest = await store.readManifest();

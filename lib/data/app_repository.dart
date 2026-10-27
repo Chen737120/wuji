@@ -366,7 +366,23 @@ class AppRepository implements ClassSaver {
   /// manifest 写失败不回滚保存（可由下次对账重建），只静默。
   Future<void> _writeManifestQuietly() async {
     try {
-      final json = buildManifestJson(await allRecords(), await allMedia());
+      final records = await allRecords();
+      final media = await allMedia();
+      // 存档切换后 DB 仍指向旧存档（P1-6）：抽样全缺失时拒写，
+      // 避免把引用旧路径的全量清单覆写进新存档（会毁掉他档重建依据）
+      if (media.isNotEmpty) {
+        final sample = media.take(3).toList();
+        var missing = 0;
+        for (final m in sample) {
+          if (!await _archive.exists(m.fileName)) missing++;
+        }
+        if (missing == sample.length) {
+          dev.log('manifest 跳过写入：抽样 ${sample.length} 个文件均不在当前存档',
+              name: 'wuji');
+          return;
+        }
+      }
+      final json = buildManifestJson(records, media);
       await _archive.writeManifest(json);
     } catch (_) {}
   }
