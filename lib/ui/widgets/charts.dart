@@ -40,7 +40,9 @@ class _TrendBarsState extends State<TrendBars> {
   @override
   void didUpdateWidget(covariant TrendBars old) {
     super.didUpdateWidget(old);
-    if (old.mode != widget.mode || old.points != widget.points) {
+    // 只在模式切换（daily 60 根 / monthly 12 根）时定位到最右（P1-7）；
+    // points 每次 build 都是新 List，引用比较恒真，会把用户左滑的历史位置弹回。
+    if (old.mode != widget.mode) {
       _jumpToEnd();
     }
   }
