@@ -170,10 +170,16 @@ class _RecordFormPageState extends State<RecordFormPage> {
   }
 
   Future<void> _previewExisting(ExistingMedia em) async {
+    final messenger = ScaffoldMessenger.of(context);
     final path =
-        await context.read<MediaPathResolver?>()?.toAbsolutePath(em.fileName) ??
-            em.fileName;
+        await context.read<MediaPathResolver?>()?.toAbsolutePath(em.fileName);
     if (!mounted) return;
+    if (path == null) {
+      // 同 P1-13：解析失败不把相对路径交给播放器
+      messenger.showSnackBar(
+          const SnackBar(content: Text('视频文件已丢失，可从备份导入恢复')));
+      return;
+    }
     if (em.isVideo) {
       await Navigator.push(context,
           MaterialPageRoute(builder: (_) => PlayerPage(fileName: path)));

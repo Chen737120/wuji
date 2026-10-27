@@ -4,6 +4,15 @@ import 'package:provider/provider.dart';
 import 'package:wuji/data/app_repository.dart';
 import 'package:wuji/data/db.dart';
 import 'package:wuji/editing/media_source_picker.dart';
+import 'package:wuji/services/archive_fs.dart' show MediaPathResolver;
+
+/// 假解析器：把存档相对路径映射成本用例约定的绝对路径（P1-13 后
+/// 无 resolver 时 resolve 返回 null，选中路径必须由 resolver 给出）。
+class _FakeResolver implements MediaPathResolver {
+  @override
+  Future<String?> toAbsolutePath(String rel, {bool paced = false}) async =>
+      '/abs/${rel.split('/').last}';
+}
 
 ClassRecord rec(String id, String date) => ClassRecord(
     id: id, date: date, sessionCount: 1, minutesEach: 90,
@@ -104,8 +113,11 @@ void main() {
     ]);
     PickedSource? picked;
     await tester.pumpWidget(
-      Provider<ClassSaver>.value(
-        value: repo,
+      MultiProvider(
+        providers: [
+          Provider<ClassSaver>.value(value: repo),
+          Provider<MediaPathResolver>.value(value: _FakeResolver()),
+        ],
         child: MaterialApp(
           home: Scaffold(
             body: Center(
@@ -133,7 +145,7 @@ void main() {
     expect(picked, isNotNull);
     expect(picked!.classId, 'a');
     expect(picked!.fromArchive, isTrue);
-    expect(picked!.path, 'media/2026-09/v1.mp4'); // 无 resolver 时回退相对路径
+    expect(picked!.path, '/abs/v1.mp4'); // 绝对路径由 resolver 提供
   });
 }
 

@@ -44,13 +44,20 @@ class _RecordMediaPickerPageState extends State<RecordMediaPickerPage> {
   }
 
   Future<void> _pick(ClassVideoGroup group, MediaAsset video) async {
+    final messenger = ScaffoldMessenger.of(context);
     final resolver = context.read<MediaPathResolver?>();
     final path = await AbsPathCache.resolve(resolver, video.fileName);
     if (!mounted) return;
+    if (path == null) {
+      // 解析失败不 pop：把相对路径带走会让上层播放必然 Source error（P1-13）
+      messenger.showSnackBar(
+          const SnackBar(content: Text('视频文件已丢失，可从备份导入恢复')));
+      return;
+    }
     Navigator.pop(
       context,
       PickedSource(
-        path: path ?? video.fileName,
+        path: path,
         name: '${group.date} ${_groupTitle(group)}',
         fromArchive: true,
         classId: group.classId,

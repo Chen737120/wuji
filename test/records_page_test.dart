@@ -4,6 +4,7 @@ import 'package:provider/provider.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:wuji/data/app_repository.dart';
 import 'package:wuji/data/db.dart';
+import 'package:wuji/ui/player_page.dart';
 import 'package:wuji/ui/records_page.dart';
 import 'helpers/fake_saver.dart';
 
@@ -127,5 +128,38 @@ void main() {
     await tester.tap(find.byIcon(Icons.close));
     await tester.pumpAndSettle();
     expect(find.text('标题二'), findsOneWidget);
+  });
+
+  testWidgets('视频解析失败：提示丢失且不 push 播放页（P1-13）', (tester) async {
+    SharedPreferences.setMockInitialValues({});
+    tester.view.physicalSize = const Size(400, 2000);
+    tester.view.devicePixelRatio = 1.0;
+    addTearDown(tester.view.reset);
+    final now = DateTime.now();
+    final d1 = DateTime(now.year, now.month, now.day);
+    final saver = FakeSaver(
+      records: [rec('r1', iso(d1), style: '爵士')],
+      media: [
+        MediaAsset(
+          id: 'm1',
+          classId: 'r1',
+          type: 'video',
+          fileName: 'media/2026-10/u1.mp4',
+          sizeBytes: 4,
+          createdAt: DateTime(2026, 10, 27),
+        ),
+      ],
+    );
+    // 无 MediaPathResolver → resolve 返回 null（相对路径不得回退给播放器）
+    await tester.pumpWidget(MultiProvider(providers: [
+      Provider<ClassSaver>.value(value: saver),
+    ], child: const MaterialApp(home: RecordsPage())));
+    await tester.pumpAndSettle();
+
+    await tester.tap(find.byIcon(Icons.play_arrow));
+    await tester.pumpAndSettle();
+
+    expect(find.text('视频文件已丢失，可从备份导入恢复'), findsOneWidget);
+    expect(find.byType(PlayerPage), findsNothing);
   });
 }

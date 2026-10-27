@@ -4,8 +4,17 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:provider/provider.dart';
 import 'package:wuji/data/app_repository.dart';
 import 'package:wuji/data/db.dart';
+import 'package:wuji/services/archive_fs.dart' show MediaPathResolver;
 import 'package:wuji/services/media_importer.dart';
 import 'package:wuji/ui/record_form_page.dart';
+
+/// 假解析器：表单里旧附件封面/预览需要它（P1-13 后无 resolver 时
+/// resolve 返回 null，页面按「文件已丢失」处理）。
+class _FakeResolver implements MediaPathResolver {
+  @override
+  Future<String?> toAbsolutePath(String rel, {bool paced = false}) async =>
+      '/abs/$rel';
+}
 
 class FakeImporter implements MediaImporter {
   FakeImporter(this.files);
@@ -61,6 +70,7 @@ void main() {
 
   Widget host(Widget child) => MultiProvider(providers: [
         Provider<ClassSaver>.value(value: repo),
+        Provider<MediaPathResolver>.value(value: _FakeResolver()),
       ], child: MaterialApp(home: child));
 
   PickedMedia pm(String path, {bool video = true, int size = 10}) =>
@@ -163,7 +173,7 @@ void main() {
     ];
     await tester.pumpWidget(host(RecordFormPage(existing: existing)));
     await tester.pumpAndSettle();
-    // resolver 为 null → cover=rel 本身，Image.file 仍会构建（errorBuilder 兜底）
+    // resolver 给出绝对路径（/abs/…）→ Image.file 构建（errorBuilder 兜底）
     expect(find.byType(Image), findsOneWidget);
     expect(find.text('def.mp4'), findsOneWidget);
   });

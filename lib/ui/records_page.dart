@@ -833,9 +833,14 @@ class _RecordCardState extends State<RecordCard> {
     final messenger = ScaffoldMessenger.of(context);
     try {
       final path = await AbsPathCache.resolve(
-              context.read<MediaPathResolver?>(), m.fileName) ??
-          m.fileName;
+          context.read<MediaPathResolver?>(), m.fileName);
       if (!mounted) return;
+      if (path == null) {
+        // 解析失败绝不把相对路径交给播放器（P1-13：必然 Source error）
+        messenger.showSnackBar(
+            const SnackBar(content: Text('视频文件已丢失，可从备份导入恢复')));
+        return;
+      }
       Navigator.push(
           context, AppRoute(builder: (_) => PlayerPage(fileName: path)));
     } catch (e) {

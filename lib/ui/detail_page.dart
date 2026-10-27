@@ -343,11 +343,17 @@ class _DetailPageState extends State<DetailPage> {
                           ),
                         );
                         try {
-                          final path =
-                              await context.read<MediaPathResolver?>()?.toAbsolutePath(m.fileName) ??
-                                  m.fileName;
+                          final path = await context
+                              .read<MediaPathResolver?>()
+                              ?.toAbsolutePath(m.fileName);
                           nav.pop();
                           if (!context.mounted) return;
+                          if (path == null) {
+                            // 解析失败绝不把相对路径交给播放器（P1-13）
+                            messenger.showSnackBar(const SnackBar(
+                                content: Text('视频文件已丢失，可从备份导入恢复')));
+                            return;
+                          }
                           await Navigator.push(context,
                               MaterialPageRoute(builder: (_) => PlayerPage(fileName: path)));
                         } catch (e) {

@@ -1,3 +1,5 @@
+import 'dart:io';
+
 import 'archive_fs.dart';
 
 /// 存档相对路径 → 临时绝对路径 的进程内缓存。
@@ -11,9 +13,13 @@ class AbsPathCache {
 
   static Future<String?> resolve(MediaPathResolver? resolver, String rel,
       {bool paced = false}) {
-    if (resolver == null) return Future.value(rel);
+    // 无法解析 ≠ 相对路径可用（P1-13：相对路径交给播放器必然 Source error）
+    if (resolver == null) return Future.value(null);
     final hit = _cache[rel];
-    if (hit != null) return Future.value(hit);
+    if (hit != null) {
+      if (File(hit).existsSync()) return Future.value(hit);
+      _cache.remove(rel); // 系统清缓存/拷贝被清理：重解析
+    }
     final running = _inflight[rel];
     if (running != null) return running;
     final f = resolver.toAbsolutePath(rel, paced: paced).then((p) {
@@ -23,4 +29,7 @@ class AbsPathCache {
     _inflight[rel] = f;
     return f.whenComplete(() => _inflight.remove(rel));
   }
+
+  /// 仅测试用：清空进程内缓存。
+  static void clearCache() => _cache.clear();
 }
