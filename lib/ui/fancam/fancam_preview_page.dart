@@ -9,7 +9,8 @@ import '../../editing/keyframes.dart';
 import '../../editing/mosaic_region.dart';
 import '../../theme.dart';
 
-/// 直拍预览页（规格 §5.3）：参数单＋「返回调整」＋「保存到相册」。
+/// 直拍预览页（规格 §5.3）：参数单＋「返回调整」＋「生成成片」，
+/// 出片后进入成片预览再「保存到相册」两步确认（P2-34）。
 /// 预览画面简化为参数单（参数即所见：框区域裁剪+1080 高）。
 /// 手动模式命令同步构建；自动跟踪模式（[FancamPreviewPage.follow] 非空）在
 /// initState 异步落盘 cmds 文件后构建 sendcmd 命令（ruling 5）。
@@ -57,10 +58,16 @@ class FancamPreviewPage extends StatefulWidget {
   State<FancamPreviewPage> createState() => _FancamPreviewPageState();
 }
 
+/// 未保存的临时成片是否需要删除（P2-34）：生成后直接返回不留垃圾。
+bool shouldDiscardTemp({required String? path, required bool saved}) =>
+    path != null && !saved;
+
 class _FancamPreviewPageState extends State<FancamPreviewPage> {
   bool _exporting = false;
   double _progress = 0;
   bool _saving = false;
+  /// 成片是否已写入相册；false 时页面销毁要删掉临时成片。
+  bool _savedToGallery = false;
   // 手动模式 initState 同步构建；自动模式 cmds 落盘后异步赋值（落盘前按钮禁用）
   String? _command;
   int _outWidth = 0;
@@ -162,6 +169,12 @@ class _FancamPreviewPageState extends State<FancamPreviewPage> {
   @override
   void dispose() {
     _deleteCmdsFile();
+    if (shouldDiscardTemp(path: _exportedPath, saved: _savedToGallery)) {
+      try {
+        final f = File(_exportedPath!);
+        if (f.existsSync()) f.deleteSync();
+      } catch (_) {}
+    }
     super.dispose();
   }
 
@@ -200,13 +213,14 @@ class _FancamPreviewPageState extends State<FancamPreviewPage> {
     }
   }
 
-  /// 预览确认后的「完成」：此时才把成片写入系统相册，然后返回编辑页。
+  /// 预览确认后「保存到相册」：此时才把成片写入系统相册，然后返回编辑页。
   Future<void> _finish() async {
     if (_saving || _exportedPath == null || _svc == null) return;
     setState(() => _saving = true);
     try {
       final fileName = _exportedPath!.split(Platform.pathSeparator).last;
       await _svc!.saveToGallery(_exportedPath!, fileName);
+      _savedToGallery = true;
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(content: Text('已保存到相册 Movies/wuji/')));
@@ -265,7 +279,7 @@ class _FancamPreviewPageState extends State<FancamPreviewPage> {
                       padding: const EdgeInsets.symmetric(vertical: 10),
                     ),
                     onPressed: _saving ? null : _finish,
-                    child: Text(_saving ? '保存中…' : '完成',
+                    child: Text(_saving ? '保存中…' : '保存到相册',
                         style: const TextStyle(
                             fontSize: 13, fontWeight: FontWeight.w600)),
                   ),
@@ -349,7 +363,7 @@ class _FancamPreviewPageState extends State<FancamPreviewPage> {
                 padding: const EdgeInsets.symmetric(vertical: 12),
               ),
               onPressed: _command == null ? null : _export,
-              child: const Text('保存到相册',
+              child: const Text('生成成片',
                   style: TextStyle(fontSize: 14, fontWeight: FontWeight.w600)),
             ),
             const SizedBox(height: 8),
