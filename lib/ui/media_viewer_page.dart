@@ -9,6 +9,11 @@ class ImageViewerPage extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    // 解码上限（P2-29）：4800×6400 照片全解码约 117MB，连翻会卡顿/被杀
+    final cacheWidth = (MediaQuery.sizeOf(context).width *
+            MediaQuery.devicePixelRatioOf(context) *
+            2)
+        .round();
     return Scaffold(
       backgroundColor: Colors.black,
       body: Stack(
@@ -18,6 +23,7 @@ class ImageViewerPage extends StatelessWidget {
               maxScale: 5,
               child: Image.file(File(path),
                   fit: BoxFit.contain,
+                  cacheWidth: cacheWidth,
                   errorBuilder: (_, _, _) => const Center(
                       child: Text('图片无法显示',
                           style:

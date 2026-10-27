@@ -110,34 +110,58 @@ class _DetailPageState extends State<DetailPage> {
     if (mounted) Navigator.pop(context);
   }
 
+  /// 保存中标记（P2-28）：多视频循环数十秒，期间再次点菜单会并发两轮
+  /// 导致相册重复入库。
+  bool _savingAll = false;
+
   Future<void> _saveToAlbum() async {
+    if (_savingAll) return;
     final messenger = ScaffoldMessenger.of(context);
+    setState(() => _savingAll = true);
     var saved = 0;
     var failed = 0;
     Object? lastErr;
-    for (final m in _media) {
-      if (_missing.contains(m.fileName)) continue;
-      try {
-        final path = await _absolutePath(m.fileName);
-        if (path == null) {
-          failed++;
-          continue;
-        }
-        if (m.type == 'video') {
-          await PhotoManagerBridge.saveVideo(path);
-        } else {
-          await PhotoManagerBridge.saveImage(path);
-        }
-        saved++;
-      } catch (e) {
-        failed++;
-        lastErr = e;
-      }
+    final total =
+        _media.where((m) => !_missing.contains(m.fileName)).length;
+    var done = 0;
+    void progress(int n) {
+      messenger.removeCurrentSnackBar(); // 进度条不排队，只保留最新一条
+      messenger.showSnackBar(SnackBar(
+          duration: const Duration(seconds: 1),
+          content: Text('保存中 $n/$total')));
     }
-    messenger.showSnackBar(SnackBar(
-        content: Text(failed == 0
-            ? '已保存 $saved 个到相册'
-            : '已保存 $saved 个到相册，$failed 个失败${lastErr == null ? '' : '：$lastErr'}')));
+
+    try {
+      for (final m in _media) {
+        if (_missing.contains(m.fileName)) continue;
+        try {
+          final path = await _absolutePath(m.fileName);
+          if (path == null) {
+            failed++;
+            continue;
+          }
+          if (m.type == 'video') {
+            await PhotoManagerBridge.saveVideo(path);
+          } else {
+            await PhotoManagerBridge.saveImage(path);
+          }
+          saved++;
+        } catch (e) {
+          failed++;
+          lastErr = e;
+        } finally {
+          done++;
+          progress(done);
+        }
+      }
+      messenger.removeCurrentSnackBar();
+      messenger.showSnackBar(SnackBar(
+          content: Text(failed == 0
+              ? '已保存 $saved 个到相册'
+              : '已保存 $saved 个到相册，$failed 个失败${lastErr == null ? '' : '：$lastErr'}')));
+    } finally {
+      if (mounted) setState(() => _savingAll = false);
+    }
   }
 
   Future<String?> _absolutePath(String rel) async {
@@ -164,9 +188,15 @@ class _DetailPageState extends State<DetailPage> {
               if (v == 'delete') _confirmDelete();
               if (v == 'album') _saveToAlbum();
             },
-            itemBuilder: (_) => const [
-              PopupMenuItem(value: 'album', child: Text('保存到相册', style: TextStyle(fontSize: 13))),
-              PopupMenuItem(value: 'delete', child: Text('删除这节课', style: TextStyle(fontSize: 13))),
+            itemBuilder: (_) => [
+              PopupMenuItem(
+                  value: 'album',
+                  enabled: !_savingAll, // 保存中禁用（P2-28）
+                  child: const Text('保存到相册',
+                      style: TextStyle(fontSize: 13))),
+              const PopupMenuItem(
+                  value: 'delete',
+                  child: Text('删除这节课', style: TextStyle(fontSize: 13))),
             ],
           ),
         ],
