@@ -61,17 +61,32 @@ class _PlayerPageState extends State<PlayerPage> {
   }
 
   Future<void> _init() async {
+    VideoPlayerController? created;
     try {
       final c = VideoPlayerController.file(File(widget.fileName));
+      created = c;
       await c.initialize();
       await c.setPlaybackSpeed(_speed);
       await c.play();
-      if (!mounted) return;
+      if (!mounted) {
+        // 加载大文件期间退出：必须回收持 GB 级文件句柄的 ExoPlayer（P2-21）
+        await _disposeQuietly(created);
+        return;
+      }
       setState(() => _controller = c);
     } catch (e) {
+      await _disposeQuietly(created); // 初始化失败同样回收
       if (!mounted) return;
       setState(() => _error = '视频加载失败：$e');
     }
+  }
+
+  /// initialize 失败的控制器 dispose 也可能抛，逐个吞掉。
+  Future<void> _disposeQuietly(VideoPlayerController? c) async {
+    if (c == null) return;
+    try {
+      await c.dispose();
+    } catch (_) {}
   }
 
   void _setFullscreen(bool v) {

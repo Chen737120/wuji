@@ -133,14 +133,22 @@ class _SourceCard extends StatefulWidget {
   State<_SourceCard> createState() => _SourceCardState();
 }
 
+/// 异步初始化是否已被更新的一次操作淘汰（P2-23）：快速换源时旧控制器
+/// 的回写会覆盖新预览（画面与文件名不符）并泄漏。
+bool staleGeneration(int gen, int current) => gen != current;
+
 class _SourceCardState extends State<_SourceCard> {
   VideoPlayerController? _ctl;
+
+  /// 预览初始化代际：换源/移除都会 +1，作废在途的旧初始化
+  int _initGen = 0;
 
   @override
   void didUpdateWidget(covariant _SourceCard old) {
     super.didUpdateWidget(old);
     final newPath = widget.source?.path;
     if (newPath != old.source?.path) {
+      _initGen++; // 作废在途初始化（换源/移除都算）
       _ctl?.dispose();
       _ctl = null;
       if (newPath != null) _initPreview(newPath);
@@ -148,16 +156,28 @@ class _SourceCardState extends State<_SourceCard> {
   }
 
   Future<void> _initPreview(String path) async {
+    final gen = ++_initGen;
+    VideoPlayerController? c;
     try {
-      final c = VideoPlayerController.file(File(path));
+      c = VideoPlayerController.file(File(path));
       await c.initialize();
       await c.pause();
       await c.seekTo(Duration.zero);
-      if (!mounted) {
-        await c.dispose();
+      if (staleGeneration(gen, _initGen) || !mounted) {
+        await _disposeQuietly(c);
         return;
       }
       setState(() => _ctl = c);
+    } catch (_) {
+      await _disposeQuietly(c);
+    }
+  }
+
+  /// initialize 失败的控制器 dispose 也可能抛，吞掉。
+  Future<void> _disposeQuietly(VideoPlayerController? c) async {
+    if (c == null) return;
+    try {
+      await c.dispose();
     } catch (_) {}
   }
 

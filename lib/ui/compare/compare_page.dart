@@ -96,17 +96,19 @@ class _ComparePageState extends State<ComparePage> {
   }
 
   Future<void> _initPlayers() async {
+    VideoPlayerController? t;
+    VideoPlayerController? m;
     try {
       // mixWithOthers（排查报告 P0）：不抢音频焦点——默认行为下第二个
       // 播放器请求焦点会把第一个卡住/暂停，表现为"只有一个视频能播"
-      final t = VideoPlayerController.file(File(widget.teacher.path),
+      t = VideoPlayerController.file(File(widget.teacher.path),
           videoPlayerOptions: VideoPlayerOptions(mixWithOthers: true));
-      final m = VideoPlayerController.file(File(widget.mine.path),
+      m = VideoPlayerController.file(File(widget.mine.path),
           videoPlayerOptions: VideoPlayerOptions(mixWithOthers: true));
       await Future.wait([t.initialize(), m.initialize()]);
       if (!mounted) {
-        await t.dispose();
-        await m.dispose();
+        await _disposeQuietly(t);
+        await _disposeQuietly(m);
         return;
       }
       setState(() {
@@ -114,9 +116,23 @@ class _ComparePageState extends State<ComparePage> {
         _mineCtl = m;
       });
       t.addListener(_onTeacherTick);
+      // 所有权已转交 State，避免 catch 里二次 dispose
+      t = null;
+      m = null;
     } catch (_) {
-      // 初始化失败（文件缺失/测试环境）：页面保持可交互，画面用占位
+      // 初始化失败（文件缺失/测试环境）：已创建成功的控制器必须回收（P2-22），
+      // 否则页面终身持有无法重试的 ExoPlayer
+      await _disposeQuietly(t);
+      await _disposeQuietly(m);
     }
+  }
+
+  /// initialize 失败的控制器 dispose 也可能抛，逐个吞掉。
+  Future<void> _disposeQuietly(VideoPlayerController? c) async {
+    if (c == null) return;
+    try {
+      await c.dispose();
+    } catch (_) {}
   }
 
   /// 是否已播到结尾（video_player 无播放结束回调，用 80ms 阈值判定）。
