@@ -1,7 +1,10 @@
+import 'dart:developer' as dev;
+
 import 'package:drift/drift.dart';
 import 'db.dart';
 import 'taxonomy_repo.dart';
 import '../models/models.dart';
+import '../services/archive_fs.dart' show MediaPathResolver;
 import '../services/archive_store.dart';
 import '../services/manifest.dart';
 import '../services/save_flow.dart' as space_check
@@ -232,6 +235,42 @@ class AppRepository implements ClassSaver {
       if (r.thumbName != null) await _archive.deleteRel(r.thumbName!);
     }
     await _writeManifestQuietly();
+  }
+
+  /// 补齐缺失封面（P2-36）：导入包没有 thumbName、或历史失败的行。
+  /// 每次最多 [limit] 条，失败跳过；fire-and-forget，绝不阻塞启动。
+  Future<int> backfillMissingThumbs({int limit = 10}) async {
+    final maker = thumbMaker;
+    if (maker == null) return 0;
+    final rows = await (_db.select(_db.mediaAssets)
+          ..where((t) => t.type.equals('video') & t.thumbName.isNull())
+          ..limit(limit))
+        .get();
+    final fs = _archive.fs;
+    var done = 0;
+    for (final r in rows) {
+      try {
+        final String? abs;
+        if (fs is MediaPathResolver) {
+          abs = await (fs as MediaPathResolver)
+              .toAbsolutePath(r.fileName, paced: true);
+        } else {
+          abs = null; // SAF/Local 之外的实现不支持取绝对路径
+        }
+        if (abs == null) continue;
+        final rel = await maker(abs);
+        if (rel == null) continue;
+        await (_db.update(_db.mediaAssets)
+              ..where((t) => t.id.equals(r.id)))
+            .write(MediaAssetsCompanion(thumbName: Value(rel)));
+        done++;
+      } catch (e) {
+        dev.log('thumb 补生成失败 ${r.fileName.split('/').last}: $e',
+            name: 'wuji');
+      }
+    }
+    if (done > 0) await _writeManifestQuietly();
+    return done;
   }
 
   /// 启动对账（规格 §5.2，终审 C2/C3 收窄后的安全版）：

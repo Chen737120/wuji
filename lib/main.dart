@@ -158,6 +158,9 @@ class _AppRootState extends State<AppRoot> {
     if (!mounted) return;
     setState(() => _booting = false);
     _maybeOnboard();
+    // P2-36：后台补齐缺失封面（导入包无 thumbName / 历史生成失败），
+    // 每次最多 10 条，失败跳过，不阻塞启动
+    unawaited(_repo.backfillMissingThumbs().catchError((_) => 0));
     // 2026-10-09 需求 #4：开屏结束后后台继续全量预热其余图片（不阻塞、
     // 逐张让出事件循环）——滑到过往记录/切历史月份时已是成图
     final navCtx = _navigatorKey.currentState?.context;
