@@ -62,6 +62,14 @@ class FancamPreviewPage extends StatefulWidget {
 bool shouldDiscardTemp({required String? path, required bool saved}) =>
     path != null && !saved;
 
+/// 导出中是否允许离开页面（P2-10）：导出仍在跑时返回会留下无人认领的
+/// 临时成片，且 dispose 删 cmds 可能与 ffmpeg 读取竞态。
+bool canPopDuringExport(bool exporting) => !exporting;
+
+/// 是否可以删除 sendcmd 临时文件（P2-10）：导出中 ffmpeg 可能仍在读，
+/// 此时不删；导出结束/未导出则安全。
+bool shouldDeleteCmds(bool exporting) => !exporting;
+
 class _FancamPreviewPageState extends State<FancamPreviewPage> {
   bool _exporting = false;
   double _progress = 0;
@@ -168,7 +176,7 @@ class _FancamPreviewPageState extends State<FancamPreviewPage> {
 
   @override
   void dispose() {
-    _deleteCmdsFile();
+    if (shouldDeleteCmds(_exporting)) _deleteCmdsFile();
     if (shouldDiscardTemp(path: _exportedPath, saved: _savedToGallery)) {
       try {
         final f = File(_exportedPath!);
@@ -290,6 +298,7 @@ class _FancamPreviewPageState extends State<FancamPreviewPage> {
         ),
       );
     }
+    // 导出中禁止返回（P2-10）：否则临时成片无人认领、cmds 删除竞态
     return Scaffold(
       backgroundColor: AppColors.bg,
       appBar: AppBar(
@@ -297,12 +306,14 @@ class _FancamPreviewPageState extends State<FancamPreviewPage> {
         elevation: 0,
         leading: IconButton(
             icon: const Icon(Icons.arrow_back, color: AppColors.secondary),
-            onPressed: () => Navigator.pop(context)),
+            onPressed: _exporting ? null : () => Navigator.pop(context)),
         centerTitle: true,
         title: const Text('直拍预览',
             style: TextStyle(fontSize: 14, fontWeight: FontWeight.w600)),
       ),
-      body: ListView(
+      body: PopScope(
+        canPop: canPopDuringExport(_exporting),
+        child: ListView(
         padding: const EdgeInsets.all(16),
         children: [
           Container(
@@ -375,6 +386,7 @@ class _FancamPreviewPageState extends State<FancamPreviewPage> {
             ),
           ],
         ],
+        ),
       ),
     );
   }
