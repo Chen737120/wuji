@@ -17,6 +17,8 @@ import 'dart:typed_data';
 
 import 'package:ffmpeg_kit_flutter_new_min/ffmpeg_kit.dart';
 
+import 'ffmpeg_serial.dart';
+
 const int W = 320, H = 180; // 跟踪分辨率（源 1/4）
 const int PW = 40, PH = 56; // 模板尺寸（ds px，≈全分辨率 160x224 躯干）
 const int SR = 12; // 搜索半径（ds px，≈±48px 全分辨率/帧）
@@ -188,6 +190,20 @@ class _NccTracker {
   }
 }
 
+/// raw 解码执行器（单测注入点）：返回 FFmpeg 退出码。
+typedef RawDecoder = Future<int> Function(String command);
+
+Future<int> _defaultDecode(String command) async {
+  final session = await FFmpegKit.execute(command);
+  // 注：isValueSuccess 是方法（本包 3.6.7 非 getter，见 mosaic_snapshot.dart 踩坑注释）。
+  final rc = await session.getReturnCode();
+  if (rc?.isValueSuccess() != true) {
+    final logs = await session.getAllLogsAsString();
+    throw Exception('fancam decodeRawFrames 失败 rc=$rc: $logs');
+  }
+  return rc!.getValue();
+}
+
 /// 解码视频为 raw 临时文件（`<cache>/wuji-track/`，Task 4 页面侧创建并负责最终清理），
 /// 供 [startTracking] 逐帧读取。返回 outPath。
 ///
@@ -195,27 +211,26 @@ class _NccTracker {
 /// 否则长源视频会一直解码到结尾（v1.5.26 走查 F4：10 分钟源剪 40 秒会写
 /// 约 3GB raw）。[fps] 不进命令，仅供调用方语义/预期帧数。
 /// 失败抛异常（携带 ffmpeg 日志）。
+///
+/// 命令经全局 [ffmpegGate] 串行（P2-13）：decode 曾直调 FFmpegKit.execute
+/// 绕过闸，与导出/快照并发会重现随机 SIGABRT。
 Future<String> decodeRawFrames({
   required String videoPath,
   required Duration ss,
   required Duration duration,
   required double fps,
   required String outPath,
+  RawDecoder? decode, // 仅单测注入（测试库无需 FFmpegKit 平台通道）
 }) async {
   // ffmpeg 不会自动建目录：确保父目录存在（recursive 对已存在目录是幂等 no-op）。
   Directory(outPath).parent.createSync(recursive: true);
-  final session = await FFmpegKit.execute(buildDecodeRawCommand(
+  final cmd = buildDecodeRawCommand(
     videoPath: videoPath,
     ss: ss,
     duration: duration,
     outPath: outPath,
-  ));
-  // 注：isValueSuccess 是方法（本包 3.6.7 非 getter，见 mosaic_snapshot.dart 踩坑注释）。
-  final rc = await session.getReturnCode();
-  if (rc?.isValueSuccess() != true) {
-    final logs = await session.getAllLogsAsString();
-    throw Exception('fancam decodeRawFrames 失败 rc=$rc: $logs');
-  }
+  );
+  await ffmpegGate.run(() => (decode ?? _defaultDecode)(cmd));
   return outPath;
 }
 
@@ -249,6 +264,12 @@ class TrackingRun {
     _onCancel();
   }
 }
+
+/// isolate 非取消退出时的兜底决策（P2-11）：入口函数若异常死亡、没走到
+/// finally 的 send，结果消息永不到达 → 进度模态永久卡死。此情形须用 null
+/// 完成 done。正常退出由结果分支完成，cancelled 由 deleteRawThenComplete 收尾。
+bool shouldCompleteOnExit({required bool cancelled, required bool completed}) =>
+    !cancelled && !completed;
 
 /// 后台 Isolate 跟踪：逐帧读 raw 文件喂核心，onProgress 每 ≥24 帧报一次
 /// （分母 = raw 文件大小÷每帧字节数）。正常结束由 isolate 侧删除 raw（finally 语义）；
@@ -301,7 +322,14 @@ TrackingRun startTracking({
   // 且 exit 消息不保证 VM 已回收 isolate 的文件句柄（Windows 锁）——删除需退避重试。
   exitPort.listen((_) {
     exitPort.close();
-    if (cancelled) deleteRawThenComplete(0);
+    if (cancelled) {
+      deleteRawThenComplete(0);
+    } else if (shouldCompleteOnExit(
+        cancelled: cancelled, completed: completer.isCompleted)) {
+      // isolate 异常死亡（未走到入口 finally 的 send）：进度模态不能永久卡死
+      completer.complete(null);
+      port.close();
+    }
     // 非 cancel 的正常退出：入口 finally 必发结果消息，由结果分支完成。
   });
 

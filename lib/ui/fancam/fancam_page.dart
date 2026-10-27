@@ -21,6 +21,15 @@ import '../widgets/film_strip.dart';
 /// 逐帧轨迹→拖框插锚点纠正（spec §3）。
 enum FancamEditMode { manual, follow }
 
+/// 跟踪时长提示阈值（P2-12）：30fps 下 90s 的 raw 约 466MB。是否**硬限制**
+/// 属产品决策，本版只提示、继续跟踪（产品确认后再加阻断）。
+const trackWarnThreshold = Duration(seconds: 90);
+
+/// 是否需要提示「视频较长」：严格大于阈值（恰好 90s 不提示）。
+bool shouldWarnLongTracking(Duration d,
+        {Duration threshold = trackWarnThreshold}) =>
+    d > threshold;
+
 /// 模式开关（ruling 6：抽成顶层小 widget 以便单测——FancamPage 全页测试受
 /// video_player 平台通道限制，代码库无 fancam_page 测试先例；禁止为可测性
 /// 大改页面结构，故只外提本开关，回调与选中态在 test/ui 测）。
@@ -387,6 +396,11 @@ class _FancamPageState extends State<FancamPage> {
     await (_fpsProbe ??= _probeFps());
     if (!mounted) return;
     final trackDur = widget.trimmedEnd - widget.trimStart;
+    // 长视频只提示不阻断（P2-12，硬限制待产品确认）
+    if (shouldWarnLongTracking(trackDur) && mounted) {
+      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
+          content: Text('视频较长，跟踪可能需要数分钟')));
+    }
     var userCancelled = false;
     // 取消唯一入口（取消按钮）：decode 期 _tracking 尚为 null（no-op），
     // 由 decode 后的 userCancelled 短路兜住；跟踪期 run.cancel() 即刻终止

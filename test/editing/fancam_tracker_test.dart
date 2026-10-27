@@ -10,6 +10,7 @@ import 'dart:typed_data';
 
 import 'package:flutter_test/flutter_test.dart';
 import 'package:wuji/editing/fancam_tracker.dart';
+import 'package:wuji/editing/ffmpeg_serial.dart';
 
 const int fw = 320, fh = 180, fLen = 320 * 180 * 3;
 
@@ -275,6 +276,45 @@ void main() {
     test('templateFrameIndex 越界时 clamp 到末帧，不抛', () {
       final pts = run(99);
       expect(pts.length, 12);
+    });
+  });
+
+  group('T20 跟踪管线（P2-11/13）', () {
+    test('shouldCompleteOnExit：isolate 异常死亡才用 null 兜底', () {
+      expect(shouldCompleteOnExit(cancelled: false, completed: false), isTrue,
+          reason: '异常退出且未收到结果 → 必须 complete(null)');
+      expect(shouldCompleteOnExit(cancelled: true, completed: false), isFalse,
+          reason: '取消路径由 deleteRawThenComplete 收尾');
+      expect(shouldCompleteOnExit(cancelled: false, completed: true), isFalse,
+          reason: '结果已到达，不覆盖');
+    });
+
+    test('decodeRawFrames 走全局串行闸：与 export 任务顺序执行（P2-13）', () async {
+      final tmp = await Directory.systemTemp.createTemp('wuji_gate_decode');
+      final timeline = <String>[];
+      final decodeFuture = decodeRawFrames(
+        videoPath: '/v.mp4',
+        ss: Duration.zero,
+        duration: const Duration(seconds: 1),
+        fps: 30,
+        outPath: '${tmp.path}${Platform.pathSeparator}x.raw',
+        decode: (cmd) async {
+          timeline.add('enter:decode');
+          await Future<void>.delayed(const Duration(milliseconds: 30));
+          timeline.add('exit:decode');
+          return 0;
+        },
+      );
+      final exportFuture = ffmpegGate.run(() async {
+        timeline.add('enter:export');
+        await Future<void>.delayed(const Duration(milliseconds: 10));
+        timeline.add('exit:export');
+      });
+      await Future.wait([decodeFuture, exportFuture]);
+      expect(timeline,
+          ['enter:decode', 'exit:decode', 'enter:export', 'exit:export'],
+          reason: 'decode 未走 gate 时会与 export 重叠');
+      await tmp.delete(recursive: true);
     });
   });
 }
