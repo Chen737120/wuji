@@ -324,89 +324,89 @@ class _RecordFormPageState extends State<RecordFormPage> {
         // 系统返回键同样在保存中禁用（P2-24）
         canPop: !_saving,
         child: ListView(
-        padding: const EdgeInsets.symmetric(horizontal: 16),
-        children: [
-          _mediaArea(),
-          const SizedBox(height: 10),
-          Row(
-            children: [
-              _fieldBox('♪', '舞种', _style?.name, selected: _style != null,
-                  onTap: () async {
-                final it = await showStyleSheet(context, _taxonomyRepo);
-                if (it != null) setState(() => _style = it);
-              }),
-              const SizedBox(width: 6),
-              _fieldBox('🕐', '时长', _durationLabel, selected: true,
-                  onTap: () async {
-                final r = await showDurationSheet(context,
-                    sessions: _sessions, minutesEach: _minutesEach);
-                if (r != null) {
-                  setState(() {
-                    _sessions = r.$1;
-                    _minutesEach = r.$2;
-                  });
-                }
-              }),
-              const SizedBox(width: 6),
-              _fieldBox('👤', '老师', _teacher?.name ?? '选填',
-                  selected: _teacher != null, onTap: () async {
-                final it = await showTextSheet(context, _taxonomyRepo,
-                    TaxonomyKind.teacher, title: '授课老师', hint: '老师名字');
-                if (it != null) setState(() => _teacher = it);
-              }),
-              const SizedBox(width: 6),
-              _fieldBox('📍', '舞室', _studio?.name ?? '选填',
-                  selected: _studio != null, onTap: () async {
-                final it = await showTextSheet(context, _taxonomyRepo,
-                    TaxonomyKind.studio, title: '舞室名称', hint: '舞室名称');
-                if (it != null) setState(() => _studio = it);
-              }),
-            ],
-          ),
-          const SizedBox(height: 10),
-          const Text('记录你的感受',
-              style: TextStyle(fontSize: 11, letterSpacing: 2, color: AppColors.secondary)),
-          const SizedBox(height: 6),
-          TextField(
-            controller: _noteController,
-            maxLines: 5,
-            minLines: 3,
-            decoration: InputDecoration(
-              hintText: '这节课的感觉、突破、想记下来的瞬间…',
-              hintStyle: const TextStyle(color: AppColors.faint),
-              filled: true,
-              fillColor: Colors.white,
-              border: OutlineInputBorder(
-                borderRadius: BorderRadius.circular(10),
-                borderSide: const BorderSide(color: AppColors.hairline),
-              ),
-              enabledBorder: OutlineInputBorder(
-                borderRadius: BorderRadius.circular(10),
-                borderSide: const BorderSide(color: AppColors.hairline),
+          padding: const EdgeInsets.symmetric(horizontal: 16),
+          children: [
+            _mediaArea(),
+            const SizedBox(height: 10),
+            Row(
+              children: [
+                _fieldBox('♪', '舞种', _style?.name, selected: _style != null,
+                    onTap: () async {
+                  final it = await showStyleSheet(context, _taxonomyRepo);
+                  if (it != null) setState(() => _style = it);
+                }),
+                const SizedBox(width: 6),
+                _fieldBox('🕐', '时长', _durationLabel, selected: true,
+                    onTap: () async {
+                  final r = await showDurationSheet(context,
+                      sessions: _sessions, minutesEach: _minutesEach);
+                  if (r != null) {
+                    setState(() {
+                      _sessions = r.$1;
+                      _minutesEach = r.$2;
+                    });
+                  }
+                }),
+                const SizedBox(width: 6),
+                _fieldBox('👤', '老师', _teacher?.name ?? '选填',
+                    selected: _teacher != null, onTap: () async {
+                  final it = await showTextSheet(context, _taxonomyRepo,
+                      TaxonomyKind.teacher, title: '授课老师', hint: '老师名字');
+                  if (it != null) setState(() => _teacher = it);
+                }),
+                const SizedBox(width: 6),
+                _fieldBox('📍', '舞室', _studio?.name ?? '选填',
+                    selected: _studio != null, onTap: () async {
+                  final it = await showTextSheet(context, _taxonomyRepo,
+                      TaxonomyKind.studio, title: '舞室名称', hint: '舞室名称');
+                  if (it != null) setState(() => _studio = it);
+                }),
+              ],
+            ),
+            const SizedBox(height: 10),
+            const Text('记录你的感受',
+                style: TextStyle(fontSize: 11, letterSpacing: 2, color: AppColors.secondary)),
+            const SizedBox(height: 6),
+            TextField(
+              controller: _noteController,
+              maxLines: 5,
+              minLines: 3,
+              decoration: InputDecoration(
+                hintText: '这节课的感觉、突破、想记下来的瞬间…',
+                hintStyle: const TextStyle(color: AppColors.faint),
+                filled: true,
+                fillColor: Colors.white,
+                border: OutlineInputBorder(
+                  borderRadius: BorderRadius.circular(10),
+                  borderSide: const BorderSide(color: AppColors.hairline),
+                ),
+                enabledBorder: OutlineInputBorder(
+                  borderRadius: BorderRadius.circular(10),
+                  borderSide: const BorderSide(color: AppColors.hairline),
+                ),
               ),
             ),
-          ),
-          const SizedBox(height: 14),
-          SizedBox(
-            width: double.infinity,
-            child: FilledButton(
-              style: FilledButton.styleFrom(
-                backgroundColor: accent,
-                shape: const StadiumBorder(),
-                padding: const EdgeInsets.symmetric(vertical: 12),
+            const SizedBox(height: 14),
+            SizedBox(
+              width: double.infinity,
+              child: FilledButton(
+                style: FilledButton.styleFrom(
+                  backgroundColor: accent,
+                  shape: const StadiumBorder(),
+                  padding: const EdgeInsets.symmetric(vertical: 12),
+                ),
+                onPressed: _saving ? null : _save,
+                child: Text(_saving ? '保存中…' : '保存',
+                    style: const TextStyle(fontSize: 14, fontWeight: FontWeight.w600)),
               ),
-              onPressed: _saving ? null : _save,
-              child: Text(_saving ? '保存中…' : '保存',
-                  style: const TextStyle(fontSize: 14, fontWeight: FontWeight.w600)),
             ),
-          ),
-          const SizedBox(height: 8),
-          Center(
-            child: Text('只记感受不选视频也可以保存 · 选填项都可留空',
-                style: TextStyle(fontSize: 9, color: AppColors.faint)),
-          ),
-          const SizedBox(height: 16),
-        ],
+            const SizedBox(height: 8),
+            Center(
+              child: Text('只记感受不选视频也可以保存 · 选填项都可留空',
+                  style: TextStyle(fontSize: 9, color: AppColors.faint)),
+            ),
+            const SizedBox(height: 16),
+          ],
         ),
       ),
     );

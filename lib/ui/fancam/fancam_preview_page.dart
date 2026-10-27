@@ -314,78 +314,78 @@ class _FancamPreviewPageState extends State<FancamPreviewPage> {
       body: PopScope(
         canPop: canPopDuringExport(_exporting),
         child: ListView(
-        padding: const EdgeInsets.all(16),
-        children: [
-          Container(
-            padding: const EdgeInsets.all(16),
-            decoration: BoxDecoration(
-              color: Colors.white,
-              borderRadius: BorderRadius.circular(14),
-              border: Border.all(color: AppColors.hairline),
-            ),
-            child: Column(
-              children: [
-                Text('参数单',
-                    style: TextStyle(
-                        fontSize: 11,
-                        letterSpacing: 2,
-                        color: AppColors.secondary)),
-                const SizedBox(height: 12),
-                _row('比例', widget.ratio),
-                _row('输出分辨率',
-                    _outWidth <= 0 ? '—' : '$_outWidth × $_outHeight'),
-                _row('音频', widget.hasAudio ? '源视频完整原声' : '静音'),
-                // 模式行（Task 4 ruling 5）：自动跟踪（锚点 N 个）/ 手动打点
-                // （关键帧 M 个）——自动模式锚点数取 session，手动取关键帧数
-                _row('模式', widget.follow != null
-                    ? '自动跟踪（锚点 ${widget.follow!.anchors.length} 个）'
-                    : '手动打点（关键帧 ${widget.keyframeCount} 个）'),
-                _row('打码',
-                    widget.mosaicRegionCount == 0 ? '无' : '${widget.mosaicRegionCount} 个区域'),
-                if (widget.trimEnd != null)
-                  _row('时长',
-                      '${((widget.trimEnd! - widget.trimStart).inMilliseconds / 1000).toStringAsFixed(1)} 秒（已修剪）'),
-                _row('保存位置', '确认预览后存入相册 Movies/wuji/'),
-                if (_followError != null)
-                  Padding(
-                    padding: const EdgeInsets.only(top: 8),
-                    child: Text(_followError!,
-                        style: const TextStyle(
-                            fontSize: 11, color: Colors.redAccent)),
-                  ),
-              ],
-            ),
-          ),
-          const SizedBox(height: 20),
-          if (_exporting)
-            Column(
-              children: [
-                LinearProgressIndicator(value: _progress <= 0 ? null : _progress),
-                const SizedBox(height: 8),
-                Text('导出中 ${(_progress * 100).round()}%',
-                    style: TextStyle(fontSize: 11, color: AppColors.secondary)),
-              ],
-            )
-          else ...[
-            FilledButton(
-              style: FilledButton.styleFrom(
-                backgroundColor: accent,
-                shape: const StadiumBorder(),
-                padding: const EdgeInsets.symmetric(vertical: 12),
+          padding: const EdgeInsets.all(16),
+          children: [
+            Container(
+              padding: const EdgeInsets.all(16),
+              decoration: BoxDecoration(
+                color: Colors.white,
+                borderRadius: BorderRadius.circular(14),
+                border: Border.all(color: AppColors.hairline),
               ),
-              onPressed: _command == null ? null : _export,
-              child: const Text('生成成片',
-                  style: TextStyle(fontSize: 14, fontWeight: FontWeight.w600)),
+              child: Column(
+                children: [
+                  Text('参数单',
+                      style: TextStyle(
+                          fontSize: 11,
+                          letterSpacing: 2,
+                          color: AppColors.secondary)),
+                  const SizedBox(height: 12),
+                  _row('比例', widget.ratio),
+                  _row('输出分辨率',
+                      _outWidth <= 0 ? '—' : '$_outWidth × $_outHeight'),
+                  _row('音频', widget.hasAudio ? '源视频完整原声' : '静音'),
+                  // 模式行（Task 4 ruling 5）：自动跟踪（锚点 N 个）/ 手动打点
+                  // （关键帧 M 个）——自动模式锚点数取 session，手动取关键帧数
+                  _row('模式', widget.follow != null
+                      ? '自动跟踪（锚点 ${widget.follow!.anchors.length} 个）'
+                      : '手动打点（关键帧 ${widget.keyframeCount} 个）'),
+                  _row('打码',
+                      widget.mosaicRegionCount == 0 ? '无' : '${widget.mosaicRegionCount} 个区域'),
+                  if (widget.trimEnd != null)
+                    _row('时长',
+                        '${((widget.trimEnd! - widget.trimStart).inMilliseconds / 1000).toStringAsFixed(1)} 秒（已修剪）'),
+                  _row('保存位置', '确认预览后存入相册 Movies/wuji/'),
+                  if (_followError != null)
+                    Padding(
+                      padding: const EdgeInsets.only(top: 8),
+                      child: Text(_followError!,
+                          style: const TextStyle(
+                              fontSize: 11, color: Colors.redAccent)),
+                    ),
+                ],
+              ),
             ),
-            const SizedBox(height: 8),
-            Center(
-              child: TextButton(
-                  onPressed: () => Navigator.pop(context),
-                  child: const Text('← 返回调整',
-                      style: TextStyle(fontSize: 12))),
-            ),
+            const SizedBox(height: 20),
+            if (_exporting)
+              Column(
+                children: [
+                  LinearProgressIndicator(value: _progress <= 0 ? null : _progress),
+                  const SizedBox(height: 8),
+                  Text('导出中 ${(_progress * 100).round()}%',
+                      style: TextStyle(fontSize: 11, color: AppColors.secondary)),
+                ],
+              )
+            else ...[
+              FilledButton(
+                style: FilledButton.styleFrom(
+                  backgroundColor: accent,
+                  shape: const StadiumBorder(),
+                  padding: const EdgeInsets.symmetric(vertical: 12),
+                ),
+                onPressed: _command == null ? null : _export,
+                child: const Text('生成成片',
+                    style: TextStyle(fontSize: 14, fontWeight: FontWeight.w600)),
+              ),
+              const SizedBox(height: 8),
+              Center(
+                child: TextButton(
+                    onPressed: () => Navigator.pop(context),
+                    child: const Text('← 返回调整',
+                        style: TextStyle(fontSize: 12))),
+              ),
+            ],
           ],
-        ],
         ),
       ),
     );
