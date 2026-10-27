@@ -193,29 +193,32 @@ class _RecordFormPageState extends State<RecordFormPage> {
 
   Future<void> _save() async {
     if (_saving) return;
-    // 空间预检（规格 §8）：SAF 不可查询时恒 false 自动跳过
-    final willWarn = await _repo.needsSpaceWarningFor(
-        _picked.map((p) => p.toInput()).toList());
-    if (willWarn && mounted) {
-      final goOn = await showDialog<bool>(
-        context: context,
-        builder: (ctx) => AlertDialog(
-          backgroundColor: Colors.white,
-          title: const Text('手机空间可能不够', style: TextStyle(fontSize: 15)),
-          content: const Text('剩余空间小于所选视频/图片的总大小，保存可能失败。仍要保存吗？',
-              style: TextStyle(fontSize: 13)),
-          actions: [
-            TextButton(onPressed: () => Navigator.pop(ctx, false), child: const Text('取消')),
-            TextButton(
-                onPressed: () => Navigator.pop(ctx, true),
-                child: Text('仍要保存', style: TextStyle(color: Theme.of(context).colorScheme.primary))),
-          ],
-        ),
-      );
-      if (goOn != true) return;
-    }
+    // 防重入置位前置（P1-5）：预检/确认框都有 await，晚置位会让双击并发
+    // 越过守卫，媒体各用独立 uuid → 附件双份入库
     setState(() => _saving = true);
+    final repo = _repo; // await 前捕获（context.read 不能在 await 后用）
     try {
+      // 空间预检（规格 §8）：SAF 不可查询时恒 false 自动跳过
+      final willWarn = await repo.needsSpaceWarningFor(
+          _picked.map((p) => p.toInput()).toList());
+      if (willWarn && mounted) {
+        final goOn = await showDialog<bool>(
+          context: context,
+          builder: (ctx) => AlertDialog(
+            backgroundColor: Colors.white,
+            title: const Text('手机空间可能不够', style: TextStyle(fontSize: 15)),
+            content: const Text('剩余空间小于所选视频/图片的总大小，保存可能失败。仍要保存吗？',
+                style: TextStyle(fontSize: 13)),
+            actions: [
+              TextButton(onPressed: () => Navigator.pop(ctx, false), child: const Text('取消')),
+              TextButton(
+                  onPressed: () => Navigator.pop(ctx, true),
+                  child: Text('仍要保存', style: TextStyle(color: Theme.of(context).colorScheme.primary))),
+            ],
+          ),
+        );
+        if (goOn != true) return;
+      }
       final id = widget.existing?.id ?? _newUuid();
       final record = ClassRecord(
         id: id,
@@ -229,7 +232,7 @@ class _RecordFormPageState extends State<RecordFormPage> {
         createdAt: widget.existing?.createdAt ?? DateTime.now(),
         updatedAt: DateTime.now(),
       );
-      await _repo.saveDraft(ClassDraft(
+      await repo.saveDraft(ClassDraft(
         record: record,
         newMedia: [for (final p in _picked) p.toInput()],
         removeMediaIds: _removedIds,

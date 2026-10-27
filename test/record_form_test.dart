@@ -35,10 +35,12 @@ class FakeFormRepo implements ClassSaver {
   final drafts = <ClassDraft>[];
   List<MediaAsset> mediaRows = const [];
   final Completer<void> gate = Completer<void>(); // 控制保存完成时机
+  bool failNextSave = false; // 模拟保存失败（异常路径用）
 
   @override
   Future<void> saveDraft(ClassDraft d) async {
     drafts.add(d);
+    if (failNextSave) throw StateError('disk full');
     return gate.future;
   }
 
@@ -222,5 +224,47 @@ void main() {
     await tester.pumpAndSettle();
     expect(find.text('保存中…'), findsNothing);
     expect(find.text('open'), findsOneWidget); // 已 pop 回来
+  });
+
+  testWidgets('同一帧内连点两次保存只调用一次 saveDraft（P1-5 防重入）',
+      (tester) async {
+    await tester.pumpWidget(host(RecordFormPage(
+      importer: FakeImporter([pm('/x/a.mp4')]),
+    )));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('视频 / 图片'));
+    await tester.pumpAndSettle();
+
+    // 不 pump：第二次点击时按钮仍可点（重启前旧实现会并发进入 _save）
+    await tester.tap(find.text('保存'));
+    await tester.tap(find.text('保存'));
+    await tester.pump();
+    expect(find.text('保存中…'), findsOneWidget);
+
+    await tester.runAsync(() async {
+      repo.gate.complete();
+      await Future<void>.delayed(const Duration(milliseconds: 100));
+    });
+    await tester.pumpAndSettle();
+    expect(repo.drafts, hasLength(1), reason: '双击不得并发保存两份媒体');
+  });
+
+  testWidgets('保存失败后 _saving 复位，按钮可再次点击（P1-5）', (tester) async {
+    repo.failNextSave = true;
+    await tester.pumpWidget(host(RecordFormPage(
+      importer: FakeImporter([pm('/x/a.mp4')]),
+    )));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('视频 / 图片'));
+    await tester.pumpAndSettle();
+
+    await tester.tap(find.text('保存'));
+    await tester.pumpAndSettle();
+
+    expect(find.text('保存中…'), findsNothing);
+    final button =
+        tester.widget<FilledButton>(find.widgetWithText(FilledButton, '保存'));
+    expect(button.onPressed, isNotNull, reason: '失败后必须能再次保存');
+    expect(find.text('保存失败，请重试'), findsOneWidget);
   });
 }
