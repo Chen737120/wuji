@@ -10,6 +10,7 @@
         android:maxSdkVersion="32" />
     <application
         android:label="舞记"
+        android:allowBackup="false"
         android:name="${applicationName}"
         android:icon="@mipmap/ic_launcher">
         <activity
