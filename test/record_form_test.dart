@@ -267,4 +267,119 @@ void main() {
     expect(button.onPressed, isNotNull, reason: '失败后必须能再次保存');
     expect(find.text('保存失败，请重试'), findsOneWidget);
   });
+
+  test('shouldRetryCover：失败过的键不再重试，清除后可重试（P2-26）', () {
+    final failed = <String>{'/x/a.mp4'};
+    expect(shouldRetryCover('/x/a.mp4', failed), isFalse);
+    expect(shouldRetryCover('/x/b.mp4', failed), isTrue);
+    failed.remove('/x/a.mp4'); // 用户重选同一文件时的动作
+    expect(shouldRetryCover('/x/a.mp4', failed), isTrue);
+  });
+
+  testWidgets('保存中关闭按钮禁用（P2-24）', (tester) async {
+    await tester.pumpWidget(MultiProvider(
+      providers: [Provider<ClassSaver>.value(value: repo)],
+      child: MaterialApp(
+        home: Builder(
+          builder: (context) => Center(
+            child: TextButton(
+              onPressed: () => Navigator.push(
+                context,
+                MaterialPageRoute(builder: (_) => const RecordFormPage()),
+              ),
+              child: const Text('open'),
+            ),
+          ),
+        ),
+      ),
+    ));
+    await tester.tap(find.text('open'));
+    await tester.pumpAndSettle();
+
+    await tester.tap(find.text('保存'));
+    await tester.pump();
+    expect(find.text('保存中…'), findsOneWidget);
+    final closeBtn = tester.widget<IconButton>(
+        find.widgetWithIcon(IconButton, Icons.close).first);
+    expect(closeBtn.onPressed, isNull, reason: '保存中不得退出，否则本次保存丢失');
+
+    await tester.runAsync(() async {
+      repo.gate.complete();
+      await Future<void>.delayed(const Duration(milliseconds: 100));
+    });
+    await tester.pumpAndSettle();
+  });
+
+  testWidgets('removeMediaIds 传快照：保存中再删附件不影响本次保存（P2-27）',
+      (tester) async {
+    final now = DateTime.now();
+    final existing = ClassRecord(
+      id: 'r3',
+      date: '2026-10-01',
+      sessionCount: 1,
+      minutesEach: 60,
+      createdAt: now,
+      updatedAt: now,
+    );
+    repo.mediaRows = [
+      MediaAsset(
+          id: 'm1',
+          classId: 'r3',
+          type: 'video',
+          fileName: 'media/2026-10/a.mp4',
+          sizeBytes: 1,
+          createdAt: now),
+      MediaAsset(
+          id: 'm2',
+          classId: 'r3',
+          type: 'video',
+          fileName: 'media/2026-10/b.mp4',
+          sizeBytes: 1,
+          createdAt: now),
+    ];
+    await tester.pumpWidget(MultiProvider(
+      providers: [Provider<ClassSaver>.value(value: repo)],
+      child: MaterialApp(
+        home: Builder(
+          builder: (context) => Center(
+            child: TextButton(
+              onPressed: () => Navigator.push(
+                context,
+                MaterialPageRoute(
+                    builder: (_) => RecordFormPage(existing: existing)),
+              ),
+              child: const Text('open'),
+            ),
+          ),
+        ),
+      ),
+    ));
+    await tester.tap(find.text('open'));
+    await tester.pumpAndSettle();
+
+    // 按标题定位附件行（AppBar ✕ 与附件 ✕ 的树序不稳定，不用下标）
+    Finder removeButtonFor(String name) => find.descendant(
+          of: find.ancestor(of: find.text(name), matching: find.byType(Row)).first,
+          matching: find.byIcon(Icons.close),
+        );
+    expect(removeButtonFor('a.mp4'), findsOneWidget);
+    await tester.tap(removeButtonFor('a.mp4')); // 删 m1
+    await tester.pump();
+
+    await tester.tap(find.text('保存'));
+    await tester.pump();
+    // 保存仍挂起：再删 m2（UI 可操作）
+    await tester.tap(removeButtonFor('b.mp4'));
+    await tester.pump();
+
+    await tester.runAsync(() async {
+      repo.gate.complete();
+      await Future<void>.delayed(const Duration(milliseconds: 100));
+    });
+    await tester.pumpAndSettle();
+
+    expect(repo.drafts, hasLength(1));
+    expect(repo.drafts.single.removeMediaIds, ['m1'],
+        reason: '保存中的后续删除不得混进本次快照');
+  });
 }

@@ -34,6 +34,9 @@ class RecordFormPage extends StatefulWidget {
   State<RecordFormPage> createState() => _RecordFormPageState();
 }
 
+/// 封面是否还值得自动重试（P2-26）：失败过的键不再触发原生取帧。
+bool shouldRetryCover(String key, Set<String> failed) => !failed.contains(key);
+
 class _RecordFormPageState extends State<RecordFormPage> {
   late DateTime _date;
   final _noteController = TextEditingController();
@@ -54,6 +57,10 @@ class _RecordFormPageState extends State<RecordFormPage> {
   final _coverPaths = <String, String>{};
   final _coverPending = <String>{}; // 生成中/解析中，防重复触发
 
+  /// 封面失败记忆（P2-26）：损坏视频每次 rebuild 重取帧是秒级原生解码，
+  /// 失败过的键不再自动重试；用户重选同一文件时清除（见 _pickMedia）。
+  final _coverFailed = <String>{};
+
   /// 为本次新选的视频生成临时封面（56×42 小图，maxWidth 200 够用）。
   Future<void> _generateVideoCover(String coverKey, String videoPath) async {
     _coverPending.add(coverKey);
@@ -63,15 +70,20 @@ class _RecordFormPageState extends State<RecordFormPage> {
           imageFormat: ImageFormat.JPEG,
           quality: 60,
           maxWidth: 200);
-      if (bytes == null || bytes.isEmpty) return;
+      if (bytes == null || bytes.isEmpty) {
+        _coverFailed.add(coverKey); // 失败记忆：不每帧重试（P2-26）
+        return;
+      }
       final tmp = await getTemporaryDirectory();
       final dir = Directory('${tmp.path}/wuji-form-thumb');
       if (!dir.existsSync()) dir.createSync(recursive: true);
       final f = File('${dir.path}/${const Uuid().v4()}.jpg');
       await f.writeAsBytes(bytes);
+      _coverFailed.remove(coverKey);
       if (mounted) setState(() => _coverPaths[coverKey] = f.path);
     } catch (_) {
-      // 测试环境/取帧失败：留图标占位，不阻塞表单
+      // 测试环境/取帧失败：留图标占位，不阻塞表单；记下失败避免反复重取
+      _coverFailed.add(coverKey);
     } finally {
       _coverPending.remove(coverKey);
     }
@@ -83,10 +95,14 @@ class _RecordFormPageState extends State<RecordFormPage> {
     final resolver = context.read<MediaPathResolver?>();
     try {
       final path = await AbsPathCache.resolve(resolver, rel);
-      if (path != null && mounted) {
-        setState(() => _coverPaths[coverKey] = path);
+      if (path != null) {
+        _coverFailed.remove(coverKey);
+        if (mounted) setState(() => _coverPaths[coverKey] = path);
+      } else {
+        _coverFailed.add(coverKey); // 解析失败记忆（P2-26）
       }
     } catch (_) {
+      _coverFailed.add(coverKey);
     } finally {
       _coverPending.remove(coverKey);
     }
@@ -123,6 +139,13 @@ class _RecordFormPageState extends State<RecordFormPage> {
         isActive: true,
       );
 
+  @override
+  void dispose() {
+    // 每次进出表单泄漏一个持有感受全文的 controller（P2-25）
+    _noteController.dispose();
+    super.dispose();
+  }
+
   Future<void> _loadExistingMedia() async {
     final rows = await _repo.mediaOf(widget.existing!.id);
     if (!mounted) return;
@@ -148,6 +171,10 @@ class _RecordFormPageState extends State<RecordFormPage> {
       return;
     }
     setState(() => _picked.addAll(result.picked));
+    // 重选同一文件必须清除失败记忆，否则该路径一旦失败就永不重试（P2-26）
+    for (final p in result.picked) {
+      _coverFailed.remove(p.path);
+    }
     if (result.failedNames.isNotEmpty && mounted) {
       ScaffoldMessenger.of(context).showSnackBar(SnackBar(
           content: Text('${result.failedNames.length} 个文件读取失败，已跳过')));
@@ -235,7 +262,8 @@ class _RecordFormPageState extends State<RecordFormPage> {
       await repo.saveDraft(ClassDraft(
         record: record,
         newMedia: [for (final p in _picked) p.toInput()],
-        removeMediaIds: _removedIds,
+        // 快照语义（P2-27）：保存期间用户仍可能删附件，传副本而非引用
+        removeMediaIds: [..._removedIds],
       ));
       ReloadBus.instance.bump(); // 统计/记录两页常驻 IndexedStack，广播刷新
       if (mounted) Navigator.pop(context, id);
@@ -264,7 +292,8 @@ class _RecordFormPageState extends State<RecordFormPage> {
         centerTitle: true,
         leading: IconButton(
           icon: const Icon(Icons.close, color: AppColors.faint),
-          onPressed: () => Navigator.pop(context),
+          // 保存中禁止退出（P2-24）：大视频保存数十秒，一按就丢
+          onPressed: _saving ? null : () => Navigator.pop(context),
         ),
         title: Text(widget.existing == null ? '记录一节课' : '编辑这节课',
             style: const TextStyle(
@@ -290,7 +319,10 @@ class _RecordFormPageState extends State<RecordFormPage> {
           ),
         ],
       ),
-      body: ListView(
+      body: PopScope(
+        // 系统返回键同样在保存中禁用（P2-24）
+        canPop: !_saving,
+        child: ListView(
         padding: const EdgeInsets.symmetric(horizontal: 16),
         children: [
           _mediaArea(),
@@ -374,6 +406,7 @@ class _RecordFormPageState extends State<RecordFormPage> {
           ),
           const SizedBox(height: 16),
         ],
+        ),
       ),
     );
   }
@@ -472,7 +505,9 @@ class _RecordFormPageState extends State<RecordFormPage> {
       cover = pickedPath; // 新选图片：原图即封面
     } else {
       cover = _coverPaths[coverKey];
-      if (cover == null && !_coverPending.contains(coverKey)) {
+      if (cover == null &&
+          !_coverPending.contains(coverKey) &&
+          shouldRetryCover(coverKey, _coverFailed)) {
         if (pickedPath != null) {
           _generateVideoCover(coverKey, pickedPath);
         } else if (rel != null) {
