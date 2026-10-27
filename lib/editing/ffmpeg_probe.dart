@@ -27,8 +27,9 @@ class MediaInfo {
   /// 显示尺寸（video_player / ffmpeg autorotate 后的像素域）：90/270 度时
   /// 宽高交换。打码编辑器与导出滤镜必须用这套值。
   ///
-  /// 注意不要把 [width]/[height] 改成显示尺寸——它们是编码尺寸，对比页
-  ///（compare_page）等仍按编码域使用（F3 约束：不误伤 compare）。
+  /// 注意不要把 [width]/[height] 改成显示尺寸——它们是编码尺寸；
+  /// compare 需优先取 video_player 显示域（见 compare_page._export 的
+  /// resolveSourceSize），probe 值只作控制器未就绪时的回退。
   int get displayWidth => rotationDegrees % 180 == 0 ? width : height;
   int get displayHeight => rotationDegrees % 180 == 0 ? height : width;
 }

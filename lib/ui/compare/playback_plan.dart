@@ -1,5 +1,25 @@
+import 'dart:ui' show Size;
+
 /// 判定「已播到结尾」的阈值，与 compare_page 的 _atEnd 同口径。
 const _endThreshold = Duration(milliseconds: 80);
+
+/// 导出取样域：优先 video_player 的显示尺寸（rotation 已应用），
+/// 控制器未就绪时回退 probe 的编码域尺寸（ffprobe_kit 不返回 rotation）。
+/// P1-8：对比导出两侧必须同域，否则旋转过的老师视频 crop 落在错误像素域。
+Size resolveSourceSize({
+  Size? rendered,
+  int? probeW,
+  int? probeH,
+  Size fallback = const Size(1080, 1920),
+}) {
+  if (rendered != null && rendered.width > 0 && rendered.height > 0) {
+    return rendered;
+  }
+  if (probeW != null && probeH != null && probeW > 0 && probeH > 0) {
+    return Size(probeW.toDouble(), probeH.toDouble());
+  }
+  return fallback;
+}
 
 /// 同屏对比播放起点计算（纯函数，单测覆盖）。
 ///

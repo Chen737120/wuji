@@ -229,8 +229,14 @@ class _ComparePageState extends State<ComparePage> {
         myDur: myDur,
         left: _left,
         right: _right,
-        leftSrc: Size((teacherInfo?.width ?? 1080).toDouble(),
-            (teacherInfo?.height ?? 1920).toDouble()),
+        leftSrc: resolveSourceSize(
+          // 显示域优先（与预览、mine 侧同域）；probe 只在控制器未就绪时兜底
+          rendered: (_teacherCtl?.value.isInitialized ?? false)
+              ? _teacherCtl!.value.size
+              : null,
+          probeW: teacherInfo?.width,
+          probeH: teacherInfo?.height,
+        ),
         rightSrc:
             Size(_mineCtl!.value.size.width, _mineCtl!.value.size.height),
         audio: _audioChoice!,

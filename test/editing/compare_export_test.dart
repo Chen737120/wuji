@@ -154,4 +154,37 @@ void main() {
     expect(cmd, contains('tpad=stop_duration=10.000'), reason: cmd);
     expect(cmd, contains('-t 60.000'), reason: cmd);
   });
+
+  test('leftSrc 传显示域时 crop 按显示域计算（P1-8：页面传什么就用什么）', () {
+    // 竖拍老师：编码 1920×1080 + rotation=90 → 显示域 1080×1920
+    const display = Size(1080, 1920);
+    final cmd = buildCompareCommand(
+      teacherPath: '/t.mp4',
+      minePath: '/m.mp4',
+      offset: Duration.zero,
+      teacherDur: const Duration(seconds: 60),
+      myDur: const Duration(seconds: 60),
+      left: left,
+      right: right,
+      leftSrc: display,
+      rightSrc: const Size(1080, 1920),
+      audio: 'teacher',
+      fpsCap: 30,
+      containerAspect: ca,
+    );
+    final lr = left.toSourceRect(display, ca);
+    expect(
+        cmd,
+        contains(
+            'crop=${lr.width.round()}:${lr.height.round()}:${lr.left.round()}:${lr.top.round()}'));
+    // 与误用编码域（1920×1080）的结果必须不同，证明域真的参与了计算
+    final enc = left.toSourceRect(const Size(1920, 1080), ca);
+    if (lr.width.round() != enc.width.round() ||
+        lr.height.round() != enc.height.round()) {
+      expect(
+          cmd,
+          isNot(contains(
+              'crop=${enc.width.round()}:${enc.height.round()}')));
+    }
+  });
 }
