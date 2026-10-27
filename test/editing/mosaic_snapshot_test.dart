@@ -91,4 +91,10 @@ void main() {
     // 空列表：graph 直通（buildMosaicGraph 返回原输入标签），map 用输入标签
     expect(cmd, contains('-map "[0:v]"'));
   });
+
+  test('snapshotStillValid：删到 0 个区域即失效（P2-2）', () {
+    expect(snapshotStillValid(regionCount: 0), isFalse);
+    expect(snapshotStillValid(regionCount: 1), isTrue);
+    expect(snapshotStillValid(regionCount: 5), isTrue);
+  });
 }

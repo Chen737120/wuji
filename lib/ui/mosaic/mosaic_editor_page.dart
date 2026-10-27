@@ -149,7 +149,14 @@ class _MosaicEditorPageState extends State<MosaicEditorPage> {
   /// 快照重生成（spec §6）：调整结束/seek 停止后 300ms 静默抽帧跑真实打码链。
   /// 播放中不刷新（视频帧即真实画面）；失败降级为 null＋可选轻提示。
   Future<void> _refreshSnapshot({bool announceFailure = true}) async {
-    if (_playing || _state.regions.isEmpty) return;
+    if (!snapshotStillValid(regionCount: _state.regions.length)) {
+      // 删到 0 个区域：旧快照带马赛克，必须立刻失效（P2-2）
+      if (_snapshotPath != null && mounted) {
+        setState(() => _snapshotPath = null);
+      }
+      return;
+    }
+    if (_playing) return;
     _lastSnapshotRequest = DateTime.now();
     _snapshotAnnounce = announceFailure;
     if (_snapshotBusy) return;
@@ -177,7 +184,14 @@ class _MosaicEditorPageState extends State<MosaicEditorPage> {
       // 跳过本次写入与提示，交给 tail 补拍最新状态。
       stale = _lastSnapshotRequest.isAfter(capturedAt);
       if (mounted && !stale && !_playing) {
+        final old = _snapshotPath;
         setState(() => _snapshotPath = path);
+        // 写新删旧（P2-3）：快照每次唯一命名，只增不删会持续吃磁盘
+        if (old != null && old != path) {
+          try {
+            File(old).deleteSync();
+          } catch (_) {}
+        }
         if (path == null && _snapshotAnnounce) {
           ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
               content: Text('快照生成失败，可重试')));
@@ -255,7 +269,10 @@ class _MosaicEditorPageState extends State<MosaicEditorPage> {
                           else
                             const ColoredBox(color: Colors.black12),
                           if (!_playing && _snapshotPath != null)
-                            Image.file(File(_snapshotPath!), fit: BoxFit.fill),
+                            Image.file(File(_snapshotPath!),
+                                fit: BoxFit.fill,
+                                // 解码上限：编辑区宽度量级足够（P2-3）
+                                cacheWidth: 1080),
                         ]),
                       ),
                     ),

@@ -7,6 +7,10 @@ import 'ffmpeg_serial.dart';
 import 'mosaic_graph.dart';
 import 'mosaic_region.dart';
 
+/// 快照是否仍可展示（P2-2）：删到 0 个区域时必须立刻失效，
+/// 否则带马赛克的旧帧会永久盖在画面上。
+bool snapshotStillValid({required int regionCount}) => regionCount > 0;
+
 /// 快照抽帧命令（spec §6）：静置帧跑真实打码链，所见即所得。
 /// 双 -ss：输入侧关键帧快进到 t-1s（fast seek），输出侧精确补 1s（accurate）。
 /// 路径双引号包裹（FFmpegKit 参数解析同 shell 级引用，见
