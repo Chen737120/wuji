@@ -6,6 +6,7 @@ import 'package:wuji/data/taxonomy_repo.dart';
 import 'package:wuji/services/archive_fs.dart';
 import 'package:wuji/services/archive_store.dart';
 import 'package:wuji/services/manifest.dart';
+import 'package:wuji/models/models.dart';
 
 void main() {
   late Directory tmp;
@@ -181,5 +182,34 @@ void main() {
     expect(media3.single.fileName, oldMedia.fileName);
     expect(await store.fs.exists(oldMedia.fileName), isTrue);
     await db3.close();
+  });
+
+  test('停用老师后编辑含该名称的历史课仍能保存（P1-1）', () async {
+    final record = ClassRecord(
+      id: 'r7',
+      date: '2026-10-02',
+      styleName: '爵士',
+      teacherName: '张三',
+      sessionCount: 1,
+      minutesEach: 90,
+      createdAt: DateTime.now(),
+      updatedAt: DateTime.now(),
+    );
+    final draft =
+        ClassDraft(record: record, newMedia: const [], removeMediaIds: const []);
+    await repo.saveDraft(draft);
+
+    final teacher = (await taxonomy.byKind(TaxonomyKind.teacher))
+        .singleWhere((e) => e.name == '张三');
+    await taxonomy.deactivate(teacher.id);
+
+    // 编辑同一课再保存（旧实现此处撞 UNIQUE(kind,name)，UI 显示「保存失败」）
+    await repo.saveDraft(draft);
+
+    final teachers =
+        await taxonomy.byKind(TaxonomyKind.teacher, includeInactive: true);
+    expect(teachers, hasLength(1));
+    expect(teachers.single.isActive, isTrue, reason: '同名停用项应复活');
+    expect((await repo.allRecords()).single.teacherName, '张三');
   });
 }

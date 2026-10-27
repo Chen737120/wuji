@@ -59,4 +59,38 @@ void main() {
     expect(list.single.name, '光影舞室2');
     expect(list.single.id, s.id);
   });
+
+  test('停用后同名 touchByName 复活原行：不抛、同 id、isActive=true、刷新 lastUsedAt',
+      () async {
+    final base = DateTime(2026, 10, 1, 9);
+    var tick = 0;
+    final clockRepo =
+        TaxonomyRepo(db, clock: () => base.add(Duration(minutes: tick++)));
+    final teacher = await clockRepo.touchByName(TaxonomyKind.teacher, '张三');
+    await clockRepo.deactivate(teacher.id);
+    final deactivatedAt = (await clockRepo.byKind(TaxonomyKind.teacher,
+            includeInactive: true))
+        .single
+        .lastUsedAt;
+
+    final revived = await clockRepo.touchByName(TaxonomyKind.teacher, '张三');
+    expect(revived.id, teacher.id);
+    expect(revived.isActive, isTrue);
+    expect(revived.lastUsedAt!.isAfter(deactivatedAt!), isTrue);
+
+    final rows = await clockRepo.byKind(TaxonomyKind.teacher,
+        includeInactive: true);
+    expect(rows, hasLength(1)); // 不新建行（UNIQUE(kind,name)）
+    expect(rows.single.isActive, isTrue);
+  });
+
+  test('ensureBuiltins 不复活已停用的内置舞种（保持现状）', () async {
+    await repo.ensureBuiltins();
+    final jazz =
+        (await repo.byKind(TaxonomyKind.style)).firstWhere((e) => e.name == '爵士');
+    await repo.deactivate(jazz.id);
+    await repo.ensureBuiltins();
+    final all = await repo.byKind(TaxonomyKind.style, includeInactive: true);
+    expect(all.where((e) => e.name == '爵士').single.isActive, isFalse);
+  });
 }

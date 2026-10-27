@@ -61,17 +61,18 @@ class TaxonomyRepo {
   /// 查/建并刷新 lastUsedAt；返回条目（新建的 isActive=true）。
   Future<TaxonomyItem> touchByName(TaxonomyKind kind, String name) async {
     final trimmed = name.trim();
-    final existing = await (_db.select(_db.taxonomy)
-          ..where((t) =>
-              t.kind.equals(kind.dbValue) &
-              t.name.equals(trimmed) &
-              t.isActive.equals(true)))
-        .getSingleOrNull();
     final now = _clock();
-    if (existing != null) {
-      await (_db.update(_db.taxonomy)..where((t) => t.id.equals(existing.id)))
-          .write(TaxonomyCompanion(lastUsedAt: Value(now)));
-      return existing.copyWith(lastUsedAt: Value(now));
+    // UNIQUE(kind,name) 覆盖停用行：先查任意状态的同名行，命中即复活
+    //（P1-1：只查 active 会在停用过的名称上撞唯一约束，历史课保存必失败）
+    final anyRow = await (_db.select(_db.taxonomy)
+          ..where((t) =>
+              t.kind.equals(kind.dbValue) & t.name.equals(trimmed)))
+        .getSingleOrNull();
+    if (anyRow != null) {
+      await (_db.update(_db.taxonomy)..where((t) => t.id.equals(anyRow.id)))
+          .write(TaxonomyCompanion(
+              lastUsedAt: Value(now), isActive: const Value(true)));
+      return anyRow.copyWith(lastUsedAt: Value(now), isActive: true);
     }
     final id = uuid();
     final maxSort = kind == TaxonomyKind.style
