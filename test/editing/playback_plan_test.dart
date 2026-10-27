@@ -175,4 +175,24 @@ void main() {
       );
     });
   });
+
+  group('isAtEnd（P1-9：续播不拉起已播完的视频）', () {
+    test('未初始化（duration=0）不算结尾', () {
+      expect(isAtEnd(Duration.zero, Duration.zero), isFalse);
+      expect(isAtEnd(const Duration(seconds: 3), Duration.zero), isFalse);
+    });
+
+    test('距结尾 50ms 内算结尾（阈值 80ms）', () {
+      expect(isAtEnd(const Duration(milliseconds: 9950), _dur10), isTrue);
+      expect(isAtEnd(_atEnd10, _dur10), isTrue);
+    });
+
+    test('距结尾 100ms 不算结尾', () {
+      expect(isAtEnd(const Duration(milliseconds: 9900), _dur10), isFalse);
+    });
+
+    test('position 超过 duration 仍算结尾', () {
+      expect(isAtEnd(const Duration(seconds: 11), _dur10), isTrue);
+    });
+  });
 }

@@ -121,8 +121,7 @@ class _ComparePageState extends State<ComparePage> {
 
   /// 是否已播到结尾（video_player 无播放结束回调，用 80ms 阈值判定）。
   static bool _atEnd(VideoPlayerValue v) =>
-      v.duration > Duration.zero &&
-      v.position >= v.duration - const Duration(milliseconds: 80);
+      isAtEnd(v.position, v.duration);
 
   /// 老师播放器作为时钟主。播放期间**完全不做 seek**——
   /// 高频 seek 会把我的视频卡成一帧一帧跳（真机复现）。
@@ -193,7 +192,11 @@ class _ComparePageState extends State<ComparePage> {
       await m?.seekTo(plan.mine);
     }
     await t.play();
-    await m?.play();
+    // 已播完的「我的」不再 play()（P1-9）：ExoPlayer 对 ENDED 态 play()
+    // 可能回零重播，而老师从当前位置续播 → 此后 tick 两分支都不命中，永久失步
+    if (m != null && !isAtEnd(m.value.position, m.value.duration)) {
+      await m.play();
+    }
   }
 
   void _onOffsetChanged(Duration v) {

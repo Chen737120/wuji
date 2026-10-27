@@ -3,6 +3,11 @@ import 'dart:ui' show Size;
 /// 判定「已播到结尾」的阈值，与 compare_page 的 _atEnd 同口径。
 const _endThreshold = Duration(milliseconds: 80);
 
+/// 播放是否已到结尾（P1-9：续播分支必须用它拦住已 ENDED 的「我的」，
+/// 否则 ExoPlayer 可能回零重播造成永久失步）。duration=0 视为未就绪。
+bool isAtEnd(Duration position, Duration duration) =>
+    duration > Duration.zero && position >= duration - _endThreshold;
+
 /// 导出取样域：优先 video_player 的显示尺寸（rotation 已应用），
 /// 控制器未就绪时回退 probe 的编码域尺寸（ffprobe_kit 不返回 rotation）。
 /// P1-8：对比导出两侧必须同域，否则旋转过的老师视频 crop 落在错误像素域。
