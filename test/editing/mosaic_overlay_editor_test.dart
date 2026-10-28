@@ -97,6 +97,8 @@ void main() {
     await tester.pump();
     expect(find.text('请先添加打码区域'), findsOneWidget);
     expect(state.regions, isEmpty); // 无区域：不产生任何状态变化
+    // T3：提示已改顶部 Overlay 轻提示，pump 掉 2s 自动消失 Timer（防 pending timer）
+    await tester.pump(const Duration(seconds: 2));
   });
 
   testWidgets('关键帧圆点点击 seek（评审 Important 修复回归）', (tester) async {

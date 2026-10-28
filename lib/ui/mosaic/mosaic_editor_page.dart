@@ -10,6 +10,7 @@ import '../../editing/mosaic_snapshot.dart';
 import '../../editing/mosaic_view.dart';
 import '../../editing/trim_timeline.dart';
 import '../../theme.dart';
+import '../widgets/top_tip.dart';
 
 /// 打码编辑器（spec §3.3）：视频最大化＋区域框叠加＋底部工具条。
 /// embedded=true（直拍内嵌）→ 底部主按钮「完成」pop 回区域列表；
@@ -141,6 +142,7 @@ class _MosaicEditorPageState extends State<MosaicEditorPage> {
 
   @override
   void dispose() {
+    dismissTopTip(); // 顶部轻提示随页面移除（防跨页残留）
     deleteMosaicSnapshotDir(); // 快照临时目录整删（fire-and-forget，内部吞异常）
     _player.dispose();
     super.dispose();
@@ -193,8 +195,7 @@ class _MosaicEditorPageState extends State<MosaicEditorPage> {
           } catch (_) {}
         }
         if (path == null && _snapshotAnnounce) {
-          ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
-              content: Text('快照生成失败，可重试')));
+          showTopTip(context, '快照生成失败，可重试');
         }
       }
     } finally {
@@ -211,8 +212,7 @@ class _MosaicEditorPageState extends State<MosaicEditorPage> {
   /// 超限会静默返回末位区域，UI 侧前置拦截）。
   void _addRegion() {
     if (_state.regions.length >= MosaicRegion.maxRegions) {
-      ScaffoldMessenger.of(context)
-          .showSnackBar(const SnackBar(content: Text('最多 5 个区域')));
+      showTopTip(context, '最多 5 个区域');
       return;
     }
     setState(_state.addRegion);
@@ -227,8 +227,7 @@ class _MosaicEditorPageState extends State<MosaicEditorPage> {
     final track = sel.track;
     final replaceSame = track.frames.any((f) => f.t == _state.position);
     if (track.frames.length >= KeyframeTrack.maxFrames && !replaceSame) {
-      ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('关键帧已达 10 个上限')));
+      showTopTip(context, '关键帧已达 10 个上限');
       return;
     }
     setState(_state.addKeyframeAtPosition);
@@ -554,10 +553,7 @@ class MosaicToolbar extends StatelessWidget {
               behavior: HitTestBehavior.opaque,
               onTap: hasSelection
                   ? null
-                  : () {
-                      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
-                          content: Text('请先添加打码区域')));
-                    },
+                  : () => showTopTip(context, '请先添加打码区域'),
               child: IgnorePointer(
                 ignoring: !hasSelection,
                 child: SegmentedButton<MosaicEffect>(
