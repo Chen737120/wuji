@@ -92,6 +92,72 @@ void main() {
     expect(cmd, contains('-map "[0:v]"'));
   });
 
+  test('片尾钳制（反馈 #6）：sourceDuration=10s、at=10s → 源定位钳到 9.85s', () {
+    final cmd = buildSnapshotCommand(
+      srcPath: '/tmp/a.mp4',
+      regions: [_region()],
+      at: const Duration(seconds: 10),
+      srcW: 1280,
+      srcH: 720,
+      outPath: '/cache/snap.jpg',
+      sourceDuration: const Duration(seconds: 10),
+    );
+    // sourceAt 10s > cap 9.85s → 钳到 9.85s：输入侧 8.850 + 输出侧 1.000
+    expect(cmd, contains('-ss 8.850 -i "/tmp/a.mp4" -ss 1.000'));
+  });
+
+  test('片尾钳制：极短源 cap=150ms → sourceAt=0.150', () {
+    final cmd = buildSnapshotCommand(
+      srcPath: '/tmp/a.mp4',
+      regions: [_region()],
+      at: const Duration(milliseconds: 300),
+      srcW: 1280,
+      srcH: 720,
+      outPath: '/cache/snap.jpg',
+      sourceDuration: const Duration(milliseconds: 300),
+    );
+    // cap = 300-150 = 150ms ≥0 → sourceAt=0.150（<1s：输入侧 0，输出侧补 0.150）
+    expect(cmd, contains('-ss 0.000 -i "/tmp/a.mp4" -ss 0.150'));
+  });
+
+  test('片尾钳制防负值：cap 为负 → sourceAt=0 抽首帧', () {
+    final cmd = buildSnapshotCommand(
+      srcPath: '/tmp/a.mp4',
+      regions: [_region()],
+      at: const Duration(milliseconds: 100),
+      srcW: 1280,
+      srcH: 720,
+      outPath: '/cache/snap.jpg',
+      sourceDuration: const Duration(milliseconds: 100),
+    );
+    // cap = 100-150 = -50ms < 0 → sourceAt=0
+    expect(cmd, contains('-ss 0.000 -i "/tmp/a.mp4" -ss 0.000'));
+  });
+
+  test('片尾钳制只动抽帧定位点：滤镜图坐标仍是 track 口径', () {
+    // 轨迹同上（0s cx=0.2 / 10s cx=0.8）；at=10s 取末帧 cx=0.8。
+    // 若实现误把钳制后的时间传给滤镜图（at≈9.85s），x 会偏离末帧值 896。
+    final track = KeyframeTrack(duration: const Duration(seconds: 10))
+      ..upsert(Duration.zero,
+          const CropBox(cx: 0.2, cy: 0.5, w: 0.2, h: 0.2))
+      ..upsert(const Duration(seconds: 10),
+          const CropBox(cx: 0.8, cy: 0.5, w: 0.2, h: 0.2));
+    final cmd = buildSnapshotCommand(
+      srcPath: '/tmp/a.mp4',
+      regions: [MosaicRegion(id: 'r1', track: track)],
+      at: const Duration(seconds: 10),
+      sourceOffset: const Duration(seconds: 20),
+      srcW: 1280,
+      srcH: 720,
+      outPath: '/cache/snap.jpg',
+      sourceDuration: const Duration(seconds: 30),
+    );
+    // 源定位：sourceAt=30s > cap 29.85s → 钳到 29.85s（输入侧 28.850 + 输出侧 1.000）
+    expect(cmd, contains('-ss 28.850 -i "/tmp/a.mp4" -ss 1.000'));
+    // 滤镜图：track 时间 10s 的末帧坐标 cx=0.8 → x=896（不受钳制影响）
+    expect(cmd, contains('overlay=896:'));
+  });
+
   test('snapshotStillValid：删到 0 个区域即失效（P2-2）', () {
     expect(snapshotStillValid(regionCount: 0), isFalse);
     expect(snapshotStillValid(regionCount: 1), isTrue);

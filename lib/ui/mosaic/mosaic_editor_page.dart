@@ -64,6 +64,11 @@ class _MosaicEditorPageState extends State<MosaicEditorPage> {
   /// 最近一次请求失败时是否提示（seek 高频失败降噪，裁决 5）。
   bool _snapshotAnnounce = true;
 
+  /// 源视频总时长（快照片尾钳制上限，2026-10-28 反馈 #6）：兜底用元数据
+  /// 口径，播放器初始化后取 ExoPlayer 真实时长。**必须 late**——State 字段
+  /// 初始化器执行时 widget 尚未赋值，惰性求值到首次使用才安全。
+  late Duration _srcDuration = widget.trimStart + _state.duration;
+
   @override
   void initState() {
     super.initState();
@@ -76,6 +81,8 @@ class _MosaicEditorPageState extends State<MosaicEditorPage> {
     _player = VideoPlayerController.file(File(widget.srcPath));
     _player.initialize().then((_) async {
       if (!mounted) return;
+      final d = _player.value.duration; // ExoPlayer 真实时长，比元数据口径可靠
+      if (d > Duration.zero) _srcDuration = d;
       // 直拍内嵌：首帧定位到修剪起点（track 0 = 源 trimStart，F1）
       if (widget.trimStart > Duration.zero) {
         await _player.seekTo(widget.trimStart);
@@ -180,6 +187,7 @@ class _MosaicEditorPageState extends State<MosaicEditorPage> {
         srcW: widget.srcW,
         srcH: widget.srcH,
         sourceOffset: widget.trimStart,
+        sourceDuration: _srcDuration, // 片尾钳制＋失败重试（反馈 #6）
       );
       // stale 判断前移到写入前（评审 Important #1）：capture 期间又来了
       // 新请求（典型：seek 已清空 _snapshotPath），旧时刻帧不得回填——
