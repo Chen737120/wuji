@@ -5,6 +5,8 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:video_player/video_player.dart';
 
+import '../services/abs_path_cache.dart';
+import '../services/archive_fs.dart' show MediaPathResolver;
 import 'widgets/save_to_gallery_button.dart';
 
 const _speeds = [0.5, 0.75, 1.0, 1.25, 1.5, 2.0];
@@ -31,9 +33,25 @@ Offset clampViewOffset(
 /// 视频播放页（规格 §3.5）：默认竖屏播放，点画面显示/隐藏底部控制条；
 /// 控制条：播放暂停＋进度＋倍速＋全屏切换（全屏横屏沉浸）。支持捏合缩放。
 class PlayerPage extends StatefulWidget {
-  const PlayerPage({super.key, required this.fileName});
+  /// 直通模式：传已解析的绝对路径（SAF 模式已复制到缓存）。
+  const PlayerPage({super.key, required this.fileName})
+      : pendingRel = null,
+        pendingResolver = null;
 
-  final String fileName; // 绝对路径（SAF 模式已复制到缓存）
+  /// 页内加载模式（2026-10-28 反馈 #1）：点击立即进页，initState 先把
+  /// [rel] 经 [resolver]（SAF 内容 URI 分块拷贝到缓存）解析成绝对路径，
+  /// 再初始化播放器；解析失败页内提示且绝不初始化播放器（P1-13 语义）。
+  const PlayerPage.pendingMedia({
+    super.key,
+    required String rel,
+    required MediaPathResolver? resolver,
+  })  : pendingRel = rel,
+        pendingResolver = resolver,
+        fileName = '';
+
+  final String fileName; // 直通模式的绝对路径
+  final String? pendingRel; // 页内加载模式的存档相对路径
+  final MediaPathResolver? pendingResolver;
 
   @override
   State<PlayerPage> createState() => _PlayerPageState();
@@ -45,6 +63,10 @@ class _PlayerPageState extends State<PlayerPage> {
   bool _fullscreen = false;
   bool _controls = true;
   String? _error;
+
+  /// 页内加载模式解析出的绝对路径（直通模式为 null，走 [widget.fileName]）。
+  String? _resolvedPath;
+  String get _path => _resolvedPath ?? widget.fileName;
 
   // 捏合缩放（规格 §3.2）：只做捏合（1×~5×）＋放大后单指拖动看局部。
   // _scaleBase 是手势起点基准——onScaleUpdate 里 setState 会更新
@@ -63,7 +85,20 @@ class _PlayerPageState extends State<PlayerPage> {
   Future<void> _init() async {
     VideoPlayerController? created;
     try {
-      final c = VideoPlayerController.file(File(widget.fileName));
+      // 页内加载模式：先解析（SAF 分块拷贝让出 UI 线程），失败绝不建控制器
+      final rel = widget.pendingRel;
+      if (rel != null) {
+        final resolved = await AbsPathCache.resolve(
+            widget.pendingResolver, rel,
+            paced: true);
+        if (!mounted) return;
+        if (resolved == null) {
+          setState(() => _error = '视频文件已丢失，可从备份导入恢复');
+          return; // P1-13：相对路径/解析失败不交给播放器
+        }
+        _resolvedPath = resolved;
+      }
+      final c = VideoPlayerController.file(File(_path));
       created = c;
       await c.initialize();
       await c.setPlaybackSpeed(_speed);
@@ -203,7 +238,7 @@ class _PlayerPageState extends State<PlayerPage> {
                     Positioned(
                       top: topInset + 10,
                       right: 10,
-                      child: SaveToGalleryButton(path: widget.fileName),
+                      child: SaveToGalleryButton(path: _path),
                     ),
                     Positioned(
                       left: 0,

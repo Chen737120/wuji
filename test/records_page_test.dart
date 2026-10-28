@@ -130,7 +130,8 @@ void main() {
     expect(find.text('标题二'), findsOneWidget);
   });
 
-  testWidgets('视频解析失败：提示丢失且不 push 播放页（P1-13）', (tester) async {
+  testWidgets('视频解析失败：立即进播放页、页内提示丢失且无播放器（P1-13 + 反馈 #1）',
+      (tester) async {
     SharedPreferences.setMockInitialValues({});
     tester.view.physicalSize = const Size(400, 2000);
     tester.view.devicePixelRatio = 1.0;
@@ -159,7 +160,9 @@ void main() {
     await tester.tap(find.byIcon(Icons.play_arrow));
     await tester.pumpAndSettle();
 
+    // 反馈 #1：点击立即进页（解析挪到页内）；P1-13：解析失败只在页内提示，
+    // 绝不把相对路径交给播放器（不创建 VideoPlayerController → 无加载/错误外框）
+    expect(find.byType(PlayerPage), findsOneWidget);
     expect(find.text('视频文件已丢失，可从备份导入恢复'), findsOneWidget);
-    expect(find.byType(PlayerPage), findsNothing);
   });
 }

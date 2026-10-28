@@ -827,26 +827,25 @@ class RecordCard extends StatefulWidget {
 class _RecordCardState extends State<RecordCard> {
   ClassRecord get r => widget.record;
 
-  Future<void> _openMedia(MediaAsset m) async {
-    // 图片不跳转（2026-10-07：旧详情查看页已从记录卡移除）；视频直接播放
+  /// 防连点叠层（2026-10-28 反馈 #1）：一次点击只入栈一页。
+  bool _opening = false;
+
+  void _openMedia(MediaAsset m) {
+    // 图片不跳转（2026-10-07：旧详情查看页已从记录卡移除）；视频立即进
+    // 播放页，SAF 解析与播放器初始化在页内做（反馈 #1：原实现在 push 前
+    // await 缓存拷贝，debug 下数秒零反馈、连点会叠多层页面）
     if (m.type != 'video') return;
-    final messenger = ScaffoldMessenger.of(context);
-    try {
-      final path = await AbsPathCache.resolve(
-          context.read<MediaPathResolver?>(), m.fileName,
-          paced: true); // 播放前的 SAF 拷贝：分块让出避免 ANR（P2-7）
-      if (!mounted) return;
-      if (path == null) {
-        // 解析失败绝不把相对路径交给播放器（P1-13：必然 Source error）
-        messenger.showSnackBar(
-            const SnackBar(content: Text('视频文件已丢失，可从备份导入恢复')));
-        return;
-      }
-      Navigator.push(
-          context, AppRoute(builder: (_) => PlayerPage(fileName: path)));
-    } catch (e) {
-      messenger.showSnackBar(SnackBar(content: Text('视频打开失败：$e')));
-    }
+    if (_opening) return;
+    _opening = true;
+    Navigator.push(
+      context,
+      AppRoute(
+        builder: (_) => PlayerPage.pendingMedia(
+          rel: m.fileName,
+          resolver: context.read<MediaPathResolver?>(), // push 前取好
+        ),
+      ),
+    ).whenComplete(() => _opening = false);
   }
 
   void _showActions() {
