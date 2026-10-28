@@ -290,23 +290,34 @@ class _MosaicEditorPageState extends State<MosaicEditorPage> {
                         _viewScale = scale;
                         _viewOffset = offset;
                       }),
-                      onSeek: (t) {
-                        setState(() {
-                          _state.seekTo(t);
-                          // 轨道时间是 track 口径，播放器要源时间（F1）
-                          _player.seekTo(
-                              sourcePosition(t, widget.trimStart));
-                          _snapshotPath = null; // 位置变了，快照失效待重生成
-                        });
-                        // seek 触发的刷新失败不提示（高频降噪，裁决 5）
-                        _refreshSnapshot(announceFailure: false);
-                      },
                       onPause: () => _player.pause(),
                     ),
                   ]),
                 ),
               ),
             ),
+            // T2（反馈 #4）：轨道条从画面内移到视频下方、工具条上方；
+            // 原画布内 bottomCenter 挂载（OverlayEditor）已删除
+            if (!_immersive && _state.regions.isNotEmpty)
+              MosaicTrackBar(
+                duration: _state.duration,
+                position: _state.position,
+                frames: _state.selected?.track.frames ?? const [],
+                onSeek: (t) {
+                  setState(() {
+                    _state.seekTo(t);
+                    // 轨道时间是 track 口径，播放器要源时间（F1）
+                    _player.seekTo(sourcePosition(t, widget.trimStart));
+                    _snapshotPath = null; // 位置变了，快照失效待重生成
+                  });
+                  // seek 触发的刷新失败不提示（高频降噪，裁决 5）
+                  _refreshSnapshot(announceFailure: false);
+                },
+                onDeleteKeyframe: (t) {
+                  setState(() => _state.removeKeyframeAt(t));
+                  _refreshSnapshot(); // 关键帧删除后重拍快照
+                },
+              ),
             if (!_immersive)
               MosaicToolbar(
                 state: _state,
@@ -360,7 +371,6 @@ class OverlayEditor extends StatefulWidget {
     this.viewScale = 1,
     this.viewOffset = Offset.zero,
     this.onViewTransformed,
-    this.onSeek,
     this.onPause,
   });
 
@@ -374,7 +384,6 @@ class OverlayEditor extends StatefulWidget {
   final double viewScale;
   final Offset viewOffset;
   final void Function(double scale, Offset offset)? onViewTransformed;
-  final void Function(Duration t)? onSeek;
   final void Function()? onPause;
 
   @override
@@ -486,24 +495,11 @@ class _OverlayEditorState extends State<OverlayEditor> {
             widget.onToggleImmersive();
           }
         },
+        // T2（2026-10-28 反馈 #4）：轨道条移出画面——挂载点迁到页面
+        // Column（视频区与工具条之间），本层只保留区域框叠加
         child: Stack(
           children: [
             for (var i = 0; i < state.regions.length; i++) boxLayer(i),
-            if (!widget.immersive && state.regions.isNotEmpty)
-              Align(
-                alignment: Alignment.bottomCenter,
-                child: _TrackBar(
-                  duration: state.duration,
-                  position: state.position,
-                  frames: state.selected?.track.frames ?? const [],
-                  onSeek: widget.onSeek ?? (_) {},
-                  onDeleteKeyframe: (t) {
-                    state.removeKeyframeAt(t);
-                    widget.onChanged();
-                    widget.onAdjustEnd?.call(); // 关键帧删除后重拍快照
-                  },
-                ),
-              ),
           ],
         ),
       );
@@ -625,8 +621,9 @@ class MosaicToolbar extends StatelessWidget {
 }
 
 /// 简化轨道：进度条＋关键帧圆点（点击 seek、长按删除）。选中区域无轨道时隐藏圆点。
-class _TrackBar extends StatelessWidget {
-  const _TrackBar({
+/// T2（2026-10-28 反馈 #4）起为公共组件：页面在视频下方挂载，widget 测试直接构造。
+class MosaicTrackBar extends StatelessWidget {
+  const MosaicTrackBar({super.key,
     required this.duration,
     required this.position,
     required this.frames,

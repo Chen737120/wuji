@@ -108,12 +108,12 @@ void main() {
     final seeks = <Duration>[];
     await tester.pumpWidget(MaterialApp(
       home: Scaffold(
-        body: OverlayEditor(
-          state: state,
-          immersive: false,
-          onChanged: () {},
-          onToggleImmersive: () {},
+        body: MosaicTrackBar(
+          duration: state.duration,
+          position: state.position,
+          frames: state.selected?.track.frames ?? const [],
           onSeek: seeks.add,
+          onDeleteKeyframe: (_) {},
         ),
       ),
     ));
@@ -121,9 +121,8 @@ void main() {
     final dots = find.byIcon(Icons.circle);
     expect(dots, findsNWidgets(2));
     // 点击 5s 圆点 → onSeek 收到该帧时刻
+    // （T2 后 MosaicTrackBar 独立挂载、无外层双击竞技场，tap 立即生效）
     await tester.tap(dots.last);
-    // 外层 onDoubleTap 扣住竞技场，单击 ~300ms 后生效（同上，推进假时钟）
-    await tester.pump(const Duration(milliseconds: 400));
     expect(seeks, [const Duration(seconds: 5)]);
   });
 
@@ -192,14 +191,49 @@ void main() {
     await tester.tap(find.text('马赛克'));
     expect(state.selected!.effect, MosaicEffect.mosaic);
     expect(adjustEnds, 2);
-    // 关键帧圆点长按删除 → onAdjustEnd（OverlayEditor onDeleteKeyframe 内）。
-    // 注：强度图标 strength-1 也是 Icons.circle，须限定 OverlayEditor 子树，
-    // 否则 finder 命中工具条按钮。
-    final dots = find.descendant(
-        of: find.byType(OverlayEditor), matching: find.byIcon(Icons.circle));
+    // （T2：关键帧圆点长按删除随轨道条移出画面，验证迁至独立用例）
+  });
+
+  testWidgets('关键帧圆点长按删除（T2：轨道条移出画面后回调语义不变）',
+      (tester) async {
+    final state = MosaicEditorState(
+        duration: const Duration(seconds: 10), srcW: 1280, srcH: 720)
+      ..addRegion()
+      ..seekTo(const Duration(seconds: 5))
+      ..addKeyframeAtPosition(); // 帧 = [0s, 5s]，长按删除才有 ≥2 帧前提
+    final deletions = <Duration>[];
+    await tester.pumpWidget(MaterialApp(
+      home: Scaffold(
+        body: MosaicTrackBar(
+          duration: state.duration,
+          position: state.position,
+          frames: state.selected?.track.frames ?? const [],
+          onSeek: (_) {},
+          onDeleteKeyframe: deletions.add,
+        ),
+      ),
+    ));
+    final dots = find.byIcon(Icons.circle);
     await tester.longPress(dots.last);
-    expect(state.selected!.track.frames.length, 1);
-    expect(adjustEnds, 3);
+    expect(deletions, [const Duration(seconds: 5)]);
+  });
+
+  testWidgets('T2：进度条移出画面——OverlayEditor 不再渲染轨道条', (tester) async {
+    final state = MosaicEditorState(
+        duration: const Duration(seconds: 10), srcW: 1280, srcH: 720)
+      ..addRegion();
+    await tester.pumpWidget(MaterialApp(
+      home: Scaffold(
+        body: OverlayEditor(
+          state: state,
+          immersive: false,
+          onChanged: () {},
+          onToggleImmersive: () {},
+        ),
+      ),
+    ));
+    expect(find.byType(MosaicTrackBar), findsNothing);
+    expect(find.byIcon(Icons.circle), findsNothing); // 圆点也不在画面层
   });
 
   testWidgets('角柄 onPanStart 触发 onPause（P1-10：播放中拖角柄先暂停）',
