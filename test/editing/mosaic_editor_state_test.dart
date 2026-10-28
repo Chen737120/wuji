@@ -59,6 +59,13 @@ void main() {
     expect(s.removeRegion('nonexistent'), isFalse);
   });
 
+  test('打码默认效果=模糊（2026-10-28 反馈 #5）；马赛克仍可切回', () {
+    final s = state()..addRegion();
+    expect(s.selected!.effect, MosaicEffect.blur); // 新区域默认模糊
+    s.setEffect(MosaicEffect.mosaic);
+    expect(s.selected!.effect, MosaicEffect.mosaic); // 切换功能不受默认化影响
+  });
+
   test('删首个关键帧：只移除该帧，后续帧不被移到 0s（F6）', () {
     final s = state()..addRegion();
     s.seekTo(const Duration(seconds: 5));

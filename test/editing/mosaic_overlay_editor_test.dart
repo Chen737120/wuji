@@ -63,8 +63,8 @@ void main() {
         ]),
       ),
     ));
-    await tester.tap(find.text('模糊'));
-    expect(state.selected!.effect, MosaicEffect.blur);
+    await tester.tap(find.text('马赛克')); // 默认已高亮「模糊」，点另一段才是真实切换
+    expect(state.selected!.effect, MosaicEffect.mosaic);
     await tester.tap(find.byKey(const ValueKey('strength-2')));
     expect(state.selected!.strength, 2);
   });
@@ -188,9 +188,9 @@ void main() {
     await tester.tap(find.byKey(const ValueKey('strength-2')));
     expect(state.selected!.strength, 2);
     expect(adjustEnds, 1);
-    // 效果切换 → onAdjustEnd
-    await tester.tap(find.text('模糊'));
-    expect(state.selected!.effect, MosaicEffect.blur);
+    // 效果切换 → onAdjustEnd（默认已高亮「模糊」，点另一段才是真实切换）
+    await tester.tap(find.text('马赛克'));
+    expect(state.selected!.effect, MosaicEffect.mosaic);
     expect(adjustEnds, 2);
     // 关键帧圆点长按删除 → onAdjustEnd（OverlayEditor onDeleteKeyframe 内）。
     // 注：强度图标 strength-1 也是 Icons.circle，须限定 OverlayEditor 子树，

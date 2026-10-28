@@ -551,23 +551,31 @@ class MosaicToolbar extends StatelessWidget {
       child: Column(mainAxisSize: MainAxisSize.min, children: [
         Row(children: [
           Expanded(
-            child: SegmentedButton<MosaicEffect>(
-              segments: const [
-                ButtonSegment(value: MosaicEffect.mosaic, label: Text('马赛克')),
-                ButtonSegment(value: MosaicEffect.blur, label: Text('模糊')),
-              ],
-              selected: {sel?.effect ?? MosaicEffect.mosaic},
-              // 无区域时不再静默（冒烟缺陷 5：点「模糊」零反馈像坏了）——
-              // 轻提示引导先加区域；有区域维持原切换逻辑
-              onSelectionChanged: (s) {
-                if (!hasSelection) {
-                  ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
-                      content: Text('请先添加打码区域')));
-                  return;
-                }
-                state.setEffect(s.first);
-                onAdjustEnd?.call();
-              },
+            // 无区域时点击任一段（含已选中的）都提示引导——默认 blur 后
+            // 点已选中的「模糊」SegmentedButton 不回调，零反馈像坏了
+            // （冒烟缺陷 5 的 blur 侧镜像，T1 配套修复）；有区域正常切换
+            child: GestureDetector(
+              behavior: HitTestBehavior.opaque,
+              onTap: hasSelection
+                  ? null
+                  : () {
+                      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
+                          content: Text('请先添加打码区域')));
+                    },
+              child: IgnorePointer(
+                ignoring: !hasSelection,
+                child: SegmentedButton<MosaicEffect>(
+                  segments: const [
+                    ButtonSegment(value: MosaicEffect.mosaic, label: Text('马赛克')),
+                    ButtonSegment(value: MosaicEffect.blur, label: Text('模糊')),
+                  ],
+                  selected: {sel?.effect ?? MosaicEffect.blur},
+                  onSelectionChanged: (s) {
+                    state.setEffect(s.first);
+                    onAdjustEnd?.call();
+                  },
+                ),
+              ),
             ),
           ),
           // 强度三档：细/中/粗

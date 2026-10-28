@@ -5,9 +5,9 @@ import 'package:wuji/editing/mosaic_region.dart';
 
 void main() {
   group('MosaicRegion 模型', () {
-    test('默认效果马赛克、强度中档', () {
+    test('默认效果模糊（2026-10-28 反馈 #5）、强度中档', () {
       final r = MosaicRegion(id: 'r1', track: KeyframeTrack(duration: const Duration(seconds: 10))..reset(const CropBox(cx: 0.5, cy: 0.5, w: 0.2, h: 0.2)));
-      expect(r.effect, MosaicEffect.mosaic);
+      expect(r.effect, MosaicEffect.blur);
       expect(r.strength, 1);
     });
 

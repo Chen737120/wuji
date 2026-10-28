@@ -8,7 +8,7 @@ class MosaicRegion {
   MosaicRegion({
     required this.id,
     required this.track,
-    this.effect = MosaicEffect.mosaic,
+    this.effect = MosaicEffect.blur,
     this.strength = 1,
   }) : assert(strength >= 0 && strength <= 2, 'strength 须为 0..2');
 
