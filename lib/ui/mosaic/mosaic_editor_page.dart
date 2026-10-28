@@ -437,31 +437,72 @@ class _OverlayEditorState extends State<OverlayEditor> {
                   width: selected ? 2 : 1,
                 ),
               ),
-              // 角柄：右下（选中时），拖动缩放（fancam 角柄模式）
+              // 手柄（选中时）：右下角柄=等比缩放（fancam 角柄模式，保留）；
+              // T4（2026-10-28 反馈 #3）：右缘/下缘边柄=单轴调宽/高（自由比例）
               child: selected
-                  ? Align(
-                      alignment: Alignment.bottomRight,
-                      child: GestureDetector(
-                        behavior: HitTestBehavior.opaque,
-                        // 角柄内层 pan 会赢下手势竞技场，父框 onPanStart 不会触发，
-                        // 必须自己暂停（P1-10：否则播放中拖角柄按帧写关键帧）
-                        onPanStart: (_) => widget.onPause?.call(),
-                        onPanUpdate: (d) {
-                          final f = 1 +
-                              (d.delta.dx + d.delta.dy) /
-                                  ((w + h) * widget.viewScale) *
-                                  2;
-                          state.scaleSelectedBy(f);
-                          widget.onChanged();
-                        },
-                        onPanEnd: (_) => widget.onAdjustEnd?.call(),
-                        child: const Padding(
-                          padding: EdgeInsets.all(4),
-                          child: Icon(Icons.control_camera,
-                              size: 20, color: Colors.white),
+                  ? Stack(children: [
+                      Align(
+                        alignment: Alignment.bottomRight,
+                        child: GestureDetector(
+                          behavior: HitTestBehavior.opaque,
+                          // 角柄内层 pan 会赢下手势竞技场，父框 onPanStart 不会触发，
+                          // 必须自己暂停（P1-10：否则播放中拖角柄按帧写关键帧）
+                          onPanStart: (_) => widget.onPause?.call(),
+                          onPanUpdate: (d) {
+                            final f = 1 +
+                                (d.delta.dx + d.delta.dy) /
+                                    ((w + h) * widget.viewScale) *
+                                    2;
+                            state.scaleSelectedBy(f);
+                            widget.onChanged();
+                          },
+                          onPanEnd: (_) => widget.onAdjustEnd?.call(),
+                          child: const Padding(
+                            padding: EdgeInsets.all(4),
+                            child: Icon(Icons.control_camera,
+                                size: 20, color: Colors.white),
+                          ),
                         ),
                       ),
-                    )
+                      Align(
+                        alignment: Alignment.centerRight,
+                        child: GestureDetector(
+                          behavior: HitTestBehavior.opaque,
+                          key: const ValueKey('mosaic-handle-right'),
+                          onPanStart: (_) => widget.onPause?.call(),
+                          onPanUpdate: (d) {
+                            state.resizeSelectedByAxis(
+                                Offset(d.delta.dx / (w * widget.viewScale), 0));
+                            widget.onChanged();
+                          },
+                          onPanEnd: (_) => widget.onAdjustEnd?.call(),
+                          child: const Padding(
+                            padding: EdgeInsets.all(4),
+                            child: Icon(Icons.swap_horiz,
+                                size: 20, color: Colors.white),
+                          ),
+                        ),
+                      ),
+                      Align(
+                        alignment: Alignment.bottomCenter,
+                        child: GestureDetector(
+                          behavior: HitTestBehavior.opaque,
+                          key: const ValueKey('mosaic-handle-bottom'),
+                          onPanStart: (_) => widget.onPause?.call(),
+                          onPanUpdate: (d) {
+                            state.resizeSelectedByAxis(
+                                Offset(0, d.delta.dy / (h * widget.viewScale)));
+                            widget.onChanged();
+                          },
+                          onPanEnd: (_) => widget.onAdjustEnd?.call(),
+                          child: const Padding(
+                            padding: EdgeInsets.all(4),
+                            child: Icon(Icons.swap_vert,
+                                size: 20, color: Colors.white),
+                          ),
+                        ),
+                      ),
+                    ])
                   : null,
             ),
           ),

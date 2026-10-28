@@ -99,6 +99,20 @@ class MosaicEditorState {
       (b) => b.scaledBy(factor,
           minArea: _minArea, minFactor: 0.1, maxFactor: 4.0));
 
+  /// 边柄单轴缩放（2026-10-28 反馈 #3）：[deltaNorm] 是归一化增量，只作用于
+  /// w/h 一轴；保持左/上边不动（右/下缘柄拖动语义）。单边下限 [minSide]；
+  /// 出画面由 clamped 贴边。角柄等比缩放仍走 [scaleSelectedBy]。
+  void resizeSelectedByAxis(Offset deltaNorm) => _applyToSelected((b) {
+        final nw = (b.w + deltaNorm.dx).clamp(minSide, 1.0).toDouble();
+        final nh = (b.h + deltaNorm.dy).clamp(minSide, 1.0).toDouble();
+        return CropBox(
+          cx: (b.cx - b.w / 2) + nw / 2, // 左缘不动
+          cy: (b.cy - b.h / 2) + nh / 2, // 上缘不动
+          w: nw,
+          h: nh,
+        ).clamped(minArea: _minArea);
+      });
+
   /// 「＋添加关键帧」：把当前插值框固化为关键帧（与直拍语义一致）。
   void addKeyframeAtPosition() {
     if (!editable) return;

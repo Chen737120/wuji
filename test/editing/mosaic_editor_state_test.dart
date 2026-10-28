@@ -94,6 +94,57 @@ void main() {
     expect(s.selected!.track.frames, hasLength(9));
   });
 
+  group('边柄单轴缩放 resizeSelectedByAxis（2026-10-28 反馈 #3）', () {
+    test('右缘拖：w 增、h 不变、左缘不动', () {
+      final s = state()..addRegion();
+      final before = s.selected!.track.boxAt(Duration.zero);
+      s.resizeSelectedByAxis(const Offset(0.1, 0));
+      final b = s.selected!.track.boxAt(Duration.zero);
+      expect(b.w, closeTo(before.w + 0.1, 0.001));
+      expect(b.h, before.h);
+      expect(b.cx - b.w / 2, closeTo(before.cx - before.w / 2, 0.001));
+    });
+
+    test('下缘拖：h 增、w 不变、上缘不动', () {
+      final s = state()..addRegion();
+      final before = s.selected!.track.boxAt(Duration.zero);
+      s.resizeSelectedByAxis(const Offset(0, 0.1));
+      final b = s.selected!.track.boxAt(Duration.zero);
+      expect(b.h, closeTo(before.h + 0.1, 0.001));
+      expect(b.w, before.w);
+      expect(b.cy - b.h / 2, closeTo(before.cy - before.h / 2, 0.001));
+    });
+
+    test('单边下限：缩到 minSide 不再变小', () {
+      final s = state()..addRegion();
+      s.resizeSelectedByAxis(const Offset(-0.5, 0)); // 0.169-0.5 → clamp 0.04
+      final b = s.selected!.track.boxAt(Duration.zero);
+      expect(b.w, closeTo(MosaicEditorState.minSide, 0.0001));
+      expect(b.h, closeTo(0.30, 0.001)); // h 不受右缘柄影响
+    });
+
+    test('右缘拖出画面：右缘贴 1（clamped 贴边语义）', () {
+      final s = state()..addRegion();
+      s.moveSelectedBy(const Offset(0.6, 0)); // 移到最右
+      final atRight = s.selected!.track.boxAt(Duration.zero);
+      expect(atRight.cx + atRight.w / 2, closeTo(1.0, 0.001));
+      s.resizeSelectedByAxis(const Offset(0.1, 0)); // 试图拖出画面
+      final b = s.selected!.track.boxAt(Duration.zero);
+      expect(b.cx + b.w / 2, lessThanOrEqualTo(1.0));
+      expect(b.cx + b.w / 2, closeTo(1.0, 0.001));
+    });
+
+    test('editable=false 时 no-op（P1-10 同守卫）', () {
+      final s = state()..addRegion();
+      final before = s.selected!.track.boxAt(Duration.zero);
+      s.editable = false;
+      s.resizeSelectedByAxis(const Offset(0.1, 0.1));
+      final b = s.selected!.track.boxAt(Duration.zero);
+      expect(b.w, before.w);
+      expect(b.h, before.h);
+    });
+  });
+
   group('editable 不变量（P1-10：播放中禁止落帧）', () {
     test('默认可编辑', () {
       expect(state().editable, isTrue);

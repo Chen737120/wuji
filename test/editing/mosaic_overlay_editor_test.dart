@@ -238,6 +238,25 @@ void main() {
     expect(find.byIcon(Icons.circle), findsNothing); // 圆点也不在画面层
   });
 
+  testWidgets('T4：边柄渲染——右缘/下缘单轴柄＋右下角柄保留', (tester) async {
+    final state = MosaicEditorState(
+        duration: const Duration(seconds: 10), srcW: 1280, srcH: 720)
+      ..addRegion(); // addRegion 自动选中
+    await tester.pumpWidget(MaterialApp(
+      home: Scaffold(
+        body: OverlayEditor(
+          state: state,
+          immersive: false,
+          onChanged: () {},
+          onToggleImmersive: () {},
+        ),
+      ),
+    ));
+    expect(find.byKey(const ValueKey('mosaic-handle-right')), findsOneWidget);
+    expect(find.byKey(const ValueKey('mosaic-handle-bottom')), findsOneWidget);
+    expect(find.byIcon(Icons.control_camera), findsOneWidget); // 角柄保留
+  });
+
   testWidgets('角柄 onPanStart 触发 onPause（P1-10：播放中拖角柄先暂停）',
       (tester) async {
     final state = MosaicEditorState(
