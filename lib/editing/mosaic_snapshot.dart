@@ -11,6 +11,14 @@ import 'mosaic_region.dart';
 /// 否则带马赛克的旧帧会永久盖在画面上。
 bool snapshotStillValid({required int regionCount}) => regionCount > 0;
 
+/// 快照是否对应当前时刻（2026-10-29 预览 T1）：位置一变旧快照立即失效，
+/// 避免暂停瞬间露出上一位置的打码效果（用户实测"总是初始画面"）。
+bool snapshotMatchesPosition({
+  required String? path,
+  required Duration? snapshotAt,
+  required Duration position,
+}) => path != null && snapshotAt == position;
+
 /// 快照抽帧命令（spec §6）：静置帧跑真实打码链，所见即所得。
 /// 双 -ss：输入侧先定位到 t-1s（现代 ffmpeg 的输入 seek 会解码到精确位置），
 /// 输出侧再补 1s——两级配合兜住不同容器/关键帧间隔的 seek 精度差异，

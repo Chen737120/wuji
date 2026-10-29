@@ -54,6 +54,10 @@ class _MosaicEditorPageState extends State<MosaicEditorPage> {
   Offset _viewOffset = Offset.zero;
   bool _immersive = false;
   String? _snapshotPath; // 当前 position 的帧快照（Task 5 生成）
+
+  /// [_snapshotPath] 对应的 track 时刻（2026-10-29 预览 T1）：供时刻匹配
+  /// 判定；与 path 同生命周期（path 置 null 处不必同步清，判定已为 false）。
+  Duration? _snapshotAt;
   bool _playing = false;
   // 快照重生成 debounce（spec §6）：300ms 静默后抽帧；busy 期间新请求
   // 只更新时间戳与提示策略，由进行中的循环等待后拿最新状态补拍。
@@ -68,6 +72,12 @@ class _MosaicEditorPageState extends State<MosaicEditorPage> {
   /// 口径，播放器初始化后取 ExoPlayer 真实时长。**必须 late**——State 字段
   /// 初始化器执行时 widget 尚未赋值，惰性求值到首次使用才安全。
   late Duration _srcDuration = widget.trimStart + _state.duration;
+
+  /// 当前是否有一张"对应当前时刻"的快照（T1 时刻匹配，T2 遮罩共用）。
+  bool get _hasFreshSnapshot => snapshotMatchesPosition(
+      path: _snapshotPath,
+      snapshotAt: _snapshotAt,
+      position: _state.position);
 
   @override
   void initState() {
@@ -180,10 +190,11 @@ class _MosaicEditorPageState extends State<MosaicEditorPage> {
       // dispose 恰逢等待中：不起 capture（否则会重建 dispose 刚删掉的快照目录）
       if (!mounted) return;
       final capturedAt = DateTime.now();
+      final atPosition = _state.position; // 本次快照对应的 track 时刻
       final path = await captureMosaicSnapshot(
         srcPath: widget.srcPath,
         regions: _state.regions,
-        at: _state.position,
+        at: atPosition,
         srcW: widget.srcW,
         srcH: widget.srcH,
         sourceOffset: widget.trimStart,
@@ -195,7 +206,10 @@ class _MosaicEditorPageState extends State<MosaicEditorPage> {
       stale = _lastSnapshotRequest.isAfter(capturedAt);
       if (mounted && !stale && !_playing) {
         final old = _snapshotPath;
-        setState(() => _snapshotPath = path);
+        setState(() {
+          _snapshotPath = path;
+          _snapshotAt = atPosition; // 与 path 同步写入，供时刻匹配判定
+        });
         // 写新删旧（P2-3）：快照每次唯一命名，只增不删会持续吃磁盘
         if (old != null && old != path) {
           try {
@@ -275,7 +289,7 @@ class _MosaicEditorPageState extends State<MosaicEditorPage> {
                             VideoPlayer(_player)
                           else
                             const ColoredBox(color: Colors.black12),
-                          if (!_playing && _snapshotPath != null)
+                          if (!_playing && _hasFreshSnapshot)
                             Image.file(File(_snapshotPath!),
                                 fit: BoxFit.fill,
                                 // 解码上限：编辑区宽度量级足够（P2-3）

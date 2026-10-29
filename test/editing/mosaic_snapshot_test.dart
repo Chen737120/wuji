@@ -158,6 +158,40 @@ void main() {
     expect(cmd, contains('overlay=896:'));
   });
 
+  test('snapshotMatchesPosition：时刻匹配的快照才可显示（2026-10-29 预览 T1）',
+      () {
+    // path 非空且 snapshotAt == position → true
+    expect(
+      snapshotMatchesPosition(
+          path: '/cache/snap.jpg',
+          snapshotAt: const Duration(seconds: 5),
+          position: const Duration(seconds: 5)),
+      isTrue,
+    );
+  });
+
+  test('snapshotMatchesPosition：位置一变即失效（核心回归：暂停不露旧快照）',
+      () {
+    // at=0s 的旧快照，position 已到 5s → false（否则暂停瞬间露出 0s 打码）
+    expect(
+      snapshotMatchesPosition(
+          path: '/cache/snap.jpg',
+          snapshotAt: Duration.zero,
+          position: const Duration(seconds: 5)),
+      isFalse,
+    );
+  });
+
+  test('snapshotMatchesPosition：无快照恒 false', () {
+    expect(
+      snapshotMatchesPosition(
+          path: null,
+          snapshotAt: const Duration(seconds: 5),
+          position: const Duration(seconds: 5)),
+      isFalse,
+    );
+  });
+
   test('snapshotStillValid：删到 0 个区域即失效（P2-2）', () {
     expect(snapshotStillValid(regionCount: 0), isFalse);
     expect(snapshotStillValid(regionCount: 1), isTrue);
