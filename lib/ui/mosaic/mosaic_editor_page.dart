@@ -113,6 +113,7 @@ class _MosaicEditorPageState extends State<MosaicEditorPage> {
   /// 播放中随帧同步 state.position（否则叠加框/轨道不动）并刷新。
   /// 拖动/关键帧落点同样读 state.position，两处口径一致。
   void _onPlayerTick() {
+    if (!mounted) return; // dispose 期间控制器仍可能推最后一轮事件
     final v = _player.value;
     final playing = v.isPlaying;
     if (playing != _playing) {
