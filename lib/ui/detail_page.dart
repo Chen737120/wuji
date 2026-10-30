@@ -165,8 +165,9 @@ class _DetailPageState extends State<DetailPage> {
   }
 
   Future<String?> _absolutePath(String rel) async {
-    // SAF 模式下先复制到临时文件再存相册（T12 注入转换器；当前 LocalFs 直接映射）
-    return context.read<MediaPathResolver?>()?.toAbsolutePath(rel) ?? rel;
+    // SAF 模式下先复制到临时文件再存相册（T12 注入转换器；当前 LocalFs 直接映射）。
+    // 分块让出与播放入口同口径（P2-7）：批量存相册逐个拷大视频不吃满 UI 线程
+    return context.read<MediaPathResolver?>()?.toAbsolutePath(rel, paced: true) ?? rel;
   }
 
   @override
