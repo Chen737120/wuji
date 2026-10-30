@@ -305,6 +305,9 @@ class _MosaicEditorPageState extends State<MosaicEditorPage> {
                       onAdjustEnd: () => _refreshSnapshot(),
                       onToggleImmersive: () =>
                           setState(() => _immersive = !_immersive),
+                      // 预览遮罩（预览 T2）：播放中/快照未就绪时遮罩表达
+                      // 打码范围；暂停且快照匹配（_hasFreshSnapshot）露出真实效果
+                      showRegionMask: _playing || !_hasFreshSnapshot,
                       viewScale: _viewScale,
                       viewOffset: _viewOffset,
                       onViewTransformed: (scale, offset) => setState(() {
@@ -389,6 +392,7 @@ class OverlayEditor extends StatefulWidget {
     required this.onChanged,
     required this.onToggleImmersive,
     this.onAdjustEnd,
+    this.showRegionMask = false,
     this.viewScale = 1,
     this.viewOffset = Offset.zero,
     this.onViewTransformed,
@@ -399,6 +403,13 @@ class OverlayEditor extends StatefulWidget {
   final bool immersive;
   final VoidCallback onChanged;
   final VoidCallback onToggleImmersive;
+
+  /// 播放中/快照未就绪时用框内遮罩表达打码范围（2026-10-29 预览 T2）；
+  /// 暂停且快照匹配时关掉，露出真实效果。默认 false → 现有测试构造零影响。
+  final bool showRegionMask;
+
+  /// 框内遮罩透明度（实现与测试断言共用同一真源）。
+  static const double maskAlpha = 0.22;
 
   /// 区域调整结束（拖框/角柄缩放 onPanEnd、关键帧删除）——宿主用于重拍快照。
   final VoidCallback? onAdjustEnd;
@@ -452,6 +463,11 @@ class _OverlayEditorState extends State<OverlayEditor> {
             onPanEnd: (_) => widget.onAdjustEnd?.call(),
             child: Container(
               decoration: BoxDecoration(
+                // 预览遮罩（2026-10-29 预览 T2）：仅在"看不到真实效果"时
+                // 表达打码范围（选中/未选中框一致，不影响任何手势）
+                color: widget.showRegionMask
+                    ? Colors.white.withValues(alpha: OverlayEditor.maskAlpha)
+                    : null,
                 border: Border.all(
                   color: selected
                       ? Theme.of(context).colorScheme.primary

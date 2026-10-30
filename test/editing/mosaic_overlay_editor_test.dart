@@ -257,6 +257,64 @@ void main() {
     expect(find.byIcon(Icons.control_camera), findsOneWidget); // 角柄保留
   });
 
+  testWidgets('T2：showRegionMask=true 时两个区域框都有遮罩（含未选中）',
+      (tester) async {
+    final state = MosaicEditorState(
+        duration: const Duration(seconds: 10), srcW: 1280, srcH: 720)
+      ..addRegion()
+      ..addRegion();
+    // 两个默认框完全重叠（同中心同尺寸），先挪开选中的第二个
+    state.moveSelectedBy(const Offset(0.35, 0));
+    await tester.pumpWidget(MaterialApp(
+      home: Scaffold(
+        body: OverlayEditor(
+          state: state,
+          immersive: false,
+          onChanged: () {},
+          onToggleImmersive: () {},
+          showRegionMask: true,
+        ),
+      ),
+    ));
+    // 框体 Container 是 Positioned(key) → GestureDetector → Container 的
+    // 唯一 Container（角柄/边柄是 Padding+Icon，不产生 Container）
+    for (final key in const ['mosaic-box-0', 'mosaic-box-1']) {
+      final box = tester.widget<Container>(find
+          .descendant(
+              of: find.byKey(ValueKey(key)),
+              matching: find.byType(Container))
+          .first);
+      final deco = box.decoration as BoxDecoration;
+      expect(deco.color, isNotNull, reason: key);
+      expect(deco.color!.a, closeTo(OverlayEditor.maskAlpha, 0.001),
+          reason: key);
+    }
+  });
+
+  testWidgets('T2：默认不传 showRegionMask → 框体无遮罩（默认行为零影响）',
+      (tester) async {
+    final state = MosaicEditorState(
+        duration: const Duration(seconds: 10), srcW: 1280, srcH: 720)
+      ..addRegion();
+    await tester.pumpWidget(MaterialApp(
+      home: Scaffold(
+        body: OverlayEditor(
+          state: state,
+          immersive: false,
+          onChanged: () {},
+          onToggleImmersive: () {},
+        ),
+      ),
+    ));
+    final box = tester.widget<Container>(find
+        .descendant(
+            of: find.byKey(const ValueKey('mosaic-box-0')),
+            matching: find.byType(Container))
+        .first);
+    final deco = box.decoration as BoxDecoration;
+    expect(deco.color, isNull);
+  });
+
   testWidgets('角柄 onPanStart 触发 onPause（P1-10：播放中拖角柄先暂停）',
       (tester) async {
     final state = MosaicEditorState(
