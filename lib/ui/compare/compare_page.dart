@@ -215,13 +215,17 @@ class _ComparePageState extends State<ComparePage> {
     }
   }
 
-  void _onOffsetChanged(Duration v) {
+  Future<void> _onOffsetChanged(Duration v) async {
     setState(() => _offset = v);
     final t = _teacherCtl;
     if (t != null && !t.value.isPlaying) {
-      // 暂停态即时预览偏移：offset>0 时老师至少走到 offset（模拟导出起点）
+      // 暂停态即时预览偏移：offset>0 时老师至少走到 offset（模拟导出起点）。
+      // 必须等 seek 落位再同步「我的」——video_player 的 seekTo 在平台调用
+      // 返回后才更新 value.position，不 await 会拿旧值算 want（v1.5.9 起
+      // 潜伏：want<0 直接 return，播放后两路永久失步）
       if (v > Duration.zero && t.value.position < v) {
-        t.seekTo(v);
+        await t.seekTo(v);
+        if (!mounted) return;
       }
       _syncMineToTeacher(force: true);
     }
