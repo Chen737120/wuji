@@ -148,10 +148,17 @@ Future<ImportReport> executeImport(
       }
       if (sourceRel == null) continue; // 源缺失：跳过，重跑可补
 
-      final bytes = await _readAll(sourceFs, sourceRel);
+      // 边读边写（P1-3 姊妹路径）：大视频整读进 List<int> 约 8B/元素，
+      // 394MB 源 ≈ 3GB 堆必 OOM；直连流只留块级缓冲（两条 fs 实现的
+      // write 均逐块落盘）。sizeBytes 改由读侧累计，与 DB 登记值同源。
+      var copiedBytes = 0;
+      final content = sourceFs.read(sourceRel).map((chunk) {
+        copiedBytes += chunk.length;
+        return chunk;
+      });
       final targetRel =
           archive.mediaRel(DateTime.parse(e.date), archive.newId(), _extOf(baseNameOf(m.fileName)));
-      await archive.fs.write(targetRel, Stream<List<int>>.value(bytes));
+      await archive.fs.write(targetRel, content);
       copiedRels.add(targetRel);
 
       // 封面：清单带 thumbName 且源里存在 → 复制进存档（导入后封面不丢）
@@ -185,7 +192,7 @@ Future<ImportReport> executeImport(
         sourceName: Value(baseNameOf(m.fileName)),
         thumbName: thumbRel == null ? const Value(null) : Value(thumbRel),
         durationSec: Value(m.durationSec),
-        sizeBytes: Value(bytes.length),
+        sizeBytes: Value(copiedBytes),
         createdAt: DateTime.now(),
       ));
       mediaCopied++;
