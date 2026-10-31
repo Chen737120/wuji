@@ -907,8 +907,10 @@ class _RecordCardState extends State<RecordCard> {
         builder: (_) => PlayerPage.pendingMedia(
           rel: m.fileName,
           resolver: context.read<MediaPathResolver?>(), // push 前取好
-          // 顶栏标题（T10b）：日期 · 舞种，与原型 pv-title 同构
+          // 顶栏标题（T10b）：日期，与原型 pv-title 同构
           title: _playerTitle(),
+          // 记录流进入的播放循环（用户 2026-10-31 需求）
+          loop: true,
         ),
       ),
     ).whenComplete(() => _opening = false);

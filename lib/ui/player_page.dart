@@ -39,7 +39,7 @@ Offset clampViewOffset(
 /// 控制条：播放暂停＋进度＋倍速＋全屏切换（全屏横屏沉浸）。支持捏合缩放。
 class PlayerPage extends StatefulWidget {
   /// 直通模式：传已解析的绝对路径（SAF 模式已复制到缓存）。
-  const PlayerPage({super.key, required this.fileName, this.title})
+  const PlayerPage({super.key, required this.fileName, this.title, this.loop = false})
       : pendingRel = null,
         pendingResolver = null;
 
@@ -51,6 +51,7 @@ class PlayerPage extends StatefulWidget {
     required String rel,
     required MediaPathResolver? resolver,
     this.title,
+    this.loop = false,
   })  : pendingRel = rel,
         pendingResolver = resolver,
         fileName = '';
@@ -58,7 +59,11 @@ class PlayerPage extends StatefulWidget {
   final String fileName; // 直通模式的绝对路径
   final String? pendingRel; // 页内加载模式的存档相对路径
   final MediaPathResolver? pendingResolver;
-  final String? title; // 顶栏标题（如「10月31日 · 爵士舞」），可空
+  final String? title; // 顶栏标题（如「10月31日」），可空
+
+  /// 播完循环（用户 2026-10-31 需求：首页记录流进入的播放循环；
+  /// 其他入口默认播完暂停）
+  final bool loop;
 
   @override
   State<PlayerPage> createState() => _PlayerPageState();
@@ -108,6 +113,9 @@ class _PlayerPageState extends State<PlayerPage> {
       final c = VideoPlayerController.file(File(_path));
       created = c;
       await c.initialize();
+      // 首页记录流入口循环播放（用户 2026-10-31 需求）；其他入口保持
+      // ExoPlayer 默认的播完停在末帧
+      if (widget.loop) await c.setLooping(true);
       await c.setPlaybackSpeed(_speed);
       await c.play();
       if (!mounted) {
