@@ -33,7 +33,7 @@ class _DurationSheetState extends State<_DurationSheet> {
     final accent = Theme.of(context).colorScheme.primary;
     return SafeArea(
       child: Padding(
-        padding: const EdgeInsets.fromLTRB(16, 14, 16, 16),
+        padding: const EdgeInsets.fromLTRB(16, 0, 16, 16),
         child: SingleChildScrollView(
           child: Column(
             mainAxisSize: MainAxisSize.min,
@@ -44,10 +44,8 @@ class _DurationSheetState extends State<_DurationSheet> {
                 const Text('课程时长',
                     style:
                         TextStyle(fontSize: 16, fontWeight: FontWeight.w700)),
-                IconButton(
-                  icon: const Icon(Icons.close, color: AppColors.faint),
-                  onPressed: () => Navigator.pop(context),
-                ),
+                // 用户 2026-10-31 反馈：标题行收紧，顶部留白≈底部
+                SheetCloseButton(onPressed: () => Navigator.pop(context)),
               ],
             ),
             const SizedBox(height: 8),

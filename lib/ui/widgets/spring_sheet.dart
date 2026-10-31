@@ -23,8 +23,29 @@ Future<T?> showSpringSheet<T>(
       .push(SpringSheetRoute<T>(title: title, builder: builder));
 }
 
-class SpringSheetRoute<T> extends PopupRoute<T> {
-  SpringSheetRoute({this.title, required this.builder});
+/// 弹层标题行的关闭钮（用户 2026-10-31 反馈：标题紧贴顶边）。
+/// 36×36 自绘而非 IconButton——M3 IconButton 的 48 触控盒会把标题行撑高，
+/// 顶部留白随之变大；此处三处弹层共用。
+class SheetCloseButton extends StatelessWidget {
+  const SheetCloseButton({super.key, required this.onPressed});
+
+  final VoidCallback onPressed;
+
+  @override
+  Widget build(BuildContext context) {
+    return InkResponse(
+      onTap: onPressed,
+      radius: 20,
+      child: const SizedBox(
+        width: 36,
+        height: 36,
+        child: Icon(Icons.close, color: AppColors.faint),
+      ),
+    );
+  }
+}
+
+class SpringSheetRoute<T> extends PopupRoute<T> {  SpringSheetRoute({this.title, required this.builder});
 
   final String? title;
   final WidgetBuilder builder;
@@ -153,14 +174,14 @@ class _SheetScaffoldState<T> extends State<_SheetScaffold<T>>
                   onVerticalDragUpdate: _onDragUpdate,
                   onVerticalDragEnd: _onDragEnd,
                   child: Container(
-                    padding: const EdgeInsets.fromLTRB(20, 6, 20, 0),
+                    padding: const EdgeInsets.fromLTRB(20, 4, 20, 0),
                     width: double.infinity,
                     child: Column(
                       children: [
                         Container(
                           width: 36,
                           height: 5,
-                          margin: const EdgeInsets.only(bottom: 2),
+                          margin: const EdgeInsets.only(bottom: 3),
                           decoration: BoxDecoration(
                             color: const Color(0x383C3C43),
                             borderRadius: BorderRadius.circular(3),

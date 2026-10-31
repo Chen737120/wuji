@@ -914,13 +914,11 @@ class _RecordCardState extends State<RecordCard> {
     ).whenComplete(() => _opening = false);
   }
 
-  /// 播放器顶栏标题：「10月31日 · 爵士舞」（无舞种时只留日期）
+  /// 播放器顶栏标题：只显示日期「10月31日」（用户 2026-10-31 反馈：
+  /// 不需要「日期 · 舞种」）
   String _playerTitle() {
     final d = r.dateAsDateTime;
-    final style = (r.styleName == null || r.styleName!.isEmpty)
-        ? null
-        : r.styleName;
-    return style == null ? '${d.month}月${d.day}日' : '${d.month}月${d.day}日 · $style';
+    return '${d.month}月${d.day}日';
   }
 
   void _showActions() {

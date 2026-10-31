@@ -57,7 +57,7 @@ class _TextSheetState extends State<_TextSheet> {
     // 此处不再叠加 viewInsets（双重 padding 会把弹层顶到近全屏）
     return SafeArea(
       child: Padding(
-        padding: const EdgeInsets.fromLTRB(16, 14, 16, 16),
+        padding: const EdgeInsets.fromLTRB(16, 0, 16, 16),
         child: Column(
           mainAxisSize: MainAxisSize.min,
           crossAxisAlignment: CrossAxisAlignment.start,
@@ -68,10 +68,8 @@ class _TextSheetState extends State<_TextSheet> {
                   Text(widget.title,
                       style: const TextStyle(
                           fontSize: 16, fontWeight: FontWeight.w700)),
-                  IconButton(
-                    icon: const Icon(Icons.close, color: AppColors.faint),
-                    onPressed: () => Navigator.pop(context),
-                  ),
+                  // 用户 2026-10-31 反馈：标题行收紧，顶部留白≈底部
+                  SheetCloseButton(onPressed: () => Navigator.pop(context)),
                 ],
               ),
               Row(
