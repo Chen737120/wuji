@@ -71,6 +71,8 @@ dev_dependencies:
   # package. See that file for information about deactivating specific lint
   # rules and activating additional ones.
   flutter_lints: ^6.0.0
+  # 播放器回归测试用假平台（与 video_player 的传递依赖同版本）
+  video_player_platform_interface: ^6.9.0
   drift_dev: ^2.35.1
   build_runner: ^2.16.1
   sqlite3: ^3.7.0

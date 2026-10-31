@@ -336,11 +336,16 @@ class _PlayerPageState extends State<PlayerPage> {
                                       bottom:
                                           MediaQuery.paddingOf(context).bottom +
                                               4),
-                            child: Row(
+                            // 时间文本/播放图标必须跟随 controller 值刷新
+                            // （用户 2026-10-31 反馈：进度条右侧时间一直是
+                            // 00:00/00:18，只有点暂停触发 setState 才更新）
+                            child: ValueListenableBuilder<VideoPlayerValue>(
+                              valueListenable: c,
+                              builder: (context, v, _) => Row(
                               children: [
                                 IconButton(
                                   icon: Icon(
-                                      c.value.isPlaying
+                                      v.isPlaying
                                           ? Icons.pause
                                           : Icons.play_arrow,
                                       color: Colors.white),
@@ -356,7 +361,7 @@ class _PlayerPageState extends State<PlayerPage> {
                                 ),
                                 const SizedBox(width: 6),
                                 Text(
-                                  '${_fmt(c.value.position)} / ${_fmt(c.value.duration)}',
+                                  '${_fmt(v.position)} / ${_fmt(v.duration)}',
                                   style: const TextStyle(
                                       color: Colors.white70, fontSize: 10),
                                 ),
@@ -387,6 +392,7 @@ class _PlayerPageState extends State<PlayerPage> {
                                       _setFullscreen(!_fullscreen),
                                 ),
                               ],
+                            ),
                             ),
                           ),
                               ),
