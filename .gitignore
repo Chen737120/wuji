@@ -60,3 +60,6 @@ dist/
 .iconwork/
 githubresouce/
 nul
+
+# ZCode 会话本地目录（工作流/会话配置，不入库）
+.zcode/
