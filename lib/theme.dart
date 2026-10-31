@@ -1,3 +1,5 @@
+import 'dart:math' as math;
+
 import 'package:flutter/material.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
@@ -53,6 +55,90 @@ class AppColors {
   static const hairline = Color(0xFFECECE8);
   static const faint = Color(0xFFB8B8B4);
 }
+
+/// 字阶常量（spec §5 / 任务书 T1）。仅供首页 v1 重写与后续新代码引用，
+/// 不批量替换现有页面文字（App 视觉零变化）。颜色由调用处指定，此处不耦合。
+class AppText {
+  AppText._();
+
+  /// 首页 Large Title「记录」：28 / w800 / 字距 −2%（原型 .t-large）
+  static const TextStyle homeTitle = TextStyle(
+    fontSize: 28,
+    fontWeight: FontWeight.w800,
+    letterSpacing: -0.56,
+    height: 1.12,
+  );
+
+  /// 页头标题（其余 tab）：16 / w700 / 字距 3px（原型 .t-page）
+  static const TextStyle pageTitle = TextStyle(
+    fontSize: 16,
+    fontWeight: FontWeight.w700,
+    letterSpacing: 3.0,
+  );
+
+  /// AppBar 居中标题：15 / w600 / 字距 2px（原型 .push-title）
+  static const TextStyle appBarTitle = TextStyle(
+    fontSize: 15,
+    fontWeight: FontWeight.w600,
+    letterSpacing: 2.0,
+  );
+
+  /// 记录卡正文（感受）：13.5 / 行高 1.62
+  static const TextStyle cardBody = TextStyle(fontSize: 13.5, height: 1.62);
+
+  /// 入口卡标题：18 / w800
+  static const TextStyle entryTitle = TextStyle(
+    fontSize: 18,
+    fontWeight: FontWeight.w800,
+  );
+
+  /// 正文：13 / 行高 1.65
+  static const TextStyle body = TextStyle(fontSize: 13, height: 1.65);
+
+  /// 元数据行：11
+  static const TextStyle meta = TextStyle(fontSize: 11);
+
+  /// 辅助 / 页脚：10
+  static const TextStyle caption = TextStyle(fontSize: 10);
+
+  /// 字段盒标签：9
+  static const TextStyle fieldLabel = TextStyle(fontSize: 9);
+
+  /// 统计数字：18 / w700 / 等宽数字（原型 .sq-num）
+  static const TextStyle statNumber = TextStyle(
+    fontSize: 18,
+    fontWeight: FontWeight.w700,
+    fontFeatures: [FontFeature.tabularFigures()],
+  );
+}
+
+/// 弹簧参数（任务书 §0 / spec §2.1）：response→stiffness=(2π/response)²、
+/// damping=2·ratio·√stiffness（SpringDescription.withDampingRatio 内部即此式）。
+double _springStiffness(double responseSec) {
+  final w = 2 * math.pi / responseSec;
+  return w * w;
+}
+
+/// 默认弹簧：damping ratio 1.0 / response 0.35s
+final SpringDescription kSpringDefault = SpringDescription.withDampingRatio(
+  mass: 1,
+  stiffness: _springStiffness(0.35),
+  ratio: 1.0,
+);
+
+/// 手势动量弹簧：damping ratio 0.8 / response 0.3s（带释放初速度）
+final SpringDescription kSpringGesture = SpringDescription.withDampingRatio(
+  mass: 1,
+  stiffness: _springStiffness(0.3),
+  ratio: 0.8,
+);
+
+/// push/pop 转场弹簧：damping ratio 1.0 / response 0.4s
+final SpringDescription kSpringTransition = SpringDescription.withDampingRatio(
+  mass: 1,
+  stiffness: _springStiffness(0.4),
+  ratio: 1.0,
+);
 
 class ThemeController extends ChangeNotifier {
   static const _key = 'accentPreset';

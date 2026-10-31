@@ -47,4 +47,41 @@ void main() {
     expect(kRainbowPalette.first, const Color(0xFFEC6FA5)); // 粉（第 1 色）
     expect(kRainbowPalette[9], const Color(0xFFA8D04A)); // 黄绿（第 10 色）
   });
+
+  test('AppText type scale per task book T1 (spec §5)', () {
+    expect(AppText.homeTitle.fontSize, 28);
+    expect(AppText.homeTitle.fontWeight, FontWeight.w800);
+    expect(AppText.homeTitle.letterSpacing, -0.56); // −2% of 28
+    expect(AppText.pageTitle.fontSize, 16);
+    expect(AppText.pageTitle.fontWeight, FontWeight.w700);
+    expect(AppText.pageTitle.letterSpacing, 3.0);
+    expect(AppText.appBarTitle.fontSize, 15);
+    expect(AppText.appBarTitle.letterSpacing, 2.0);
+    expect(AppText.cardBody.fontSize, 13.5);
+    expect(AppText.cardBody.height, 1.62);
+    expect(AppText.entryTitle.fontSize, 18);
+    expect(AppText.entryTitle.fontWeight, FontWeight.w800);
+    expect(AppText.body.fontSize, 13);
+    expect(AppText.body.height, 1.65);
+    expect(AppText.meta.fontSize, 11);
+    expect(AppText.caption.fontSize, 10);
+    expect(AppText.fieldLabel.fontSize, 9);
+    expect(AppText.statNumber.fontSize, 18);
+    expect(AppText.statNumber.fontWeight, FontWeight.w700);
+    expect(AppText.statNumber.fontFeatures,
+        contains(const FontFeature.tabularFigures()));
+  });
+
+  test('spring constants: stiffness=(2π/response)², damping=2·ratio·√stiffness',
+      () {
+    // kSpringDefault: ratio 1.0 / response 0.35s
+    expect(kSpringDefault.stiffness, closeTo(322.27, 0.01));
+    expect(kSpringDefault.damping, closeTo(35.90, 0.01));
+    // kSpringGesture: ratio 0.8 / response 0.3s
+    expect(kSpringGesture.stiffness, closeTo(438.65, 0.01));
+    expect(kSpringGesture.damping, closeTo(33.51, 0.01));
+    // kSpringTransition: ratio 1.0 / response 0.4s
+    expect(kSpringTransition.stiffness, closeTo(246.74, 0.01));
+    expect(kSpringTransition.damping, closeTo(31.42, 0.01));
+  });
 }
