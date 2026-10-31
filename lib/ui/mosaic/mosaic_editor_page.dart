@@ -725,6 +725,9 @@ class MosaicTrackBar extends StatelessWidget {
     final durMs = duration.inMilliseconds;
     double ratioOf(Duration t) => durMs == 0 ? 0.0 : t.inMilliseconds / durMs;
     final ratio = ratioOf(position).clamp(0.0, 1.0);
+    // F4 进度可视：主题色进度＋白 24% 底——原版进度/底都落主题绿色系且无
+    // 位置指示，全绿状态看不出进度到哪
+    final progressColor = Theme.of(context).colorScheme.primary;
     return Padding(
       padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
       child: LayoutBuilder(builder: (context, c) {
@@ -735,11 +738,37 @@ class MosaicTrackBar extends StatelessWidget {
             GestureDetector(
               behavior: HitTestBehavior.opaque,
               onTapUp: (d) => onSeek(duration * (d.localPosition.dx / w)),
+              // F4 拖动 seek（跟手实现）：Update 连续回调 onSeek——链路里
+              // _refreshSnapshot 有 300ms 静默 debounce，拖动中每次回调只
+              // 推迟抽帧时刻，不会反复抽帧；无需 Start/End 拖动态清理
+              onHorizontalDragUpdate: (d) => onSeek(
+                  duration * ((d.localPosition.dx / w).clamp(0.0, 1.0))),
               child: SizedBox(
                 height: 28,
                 width: w,
                 child: Center(
-                  child: LinearProgressIndicator(value: ratio, minHeight: 3),
+                  child: LinearProgressIndicator(
+                    value: ratio,
+                    minHeight: 3,
+                    color: progressColor,
+                    backgroundColor: Colors.white24,
+                  ),
+                ),
+              ),
+            ),
+            // F4 位置指示：12px 主色实心圆点描白边（与 10px 白 70% 关键帧
+            // 圆点区分）；ratio∈[0,1] → 左右端与关键帧圆点同款半出界裁剪
+            Positioned(
+              left: ratio * w - 6,
+              top: 8,
+              child: Container(
+                key: const ValueKey('mosaic-track-thumb'),
+                width: 12,
+                height: 12,
+                decoration: BoxDecoration(
+                  shape: BoxShape.circle,
+                  color: progressColor,
+                  border: Border.all(color: Colors.white, width: 1.5),
                 ),
               ),
             ),

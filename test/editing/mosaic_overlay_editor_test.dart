@@ -345,6 +345,80 @@ void main() {
     expect(tester.takeException(), isNull, reason: '竖屏 400 逻辑宽第二行不得溢出');
   });
 
+  testWidgets('F4：按住轨道拖动 → onSeek 连续收到递增时刻，终点≈60%',
+      (tester) async {
+    final state = MosaicEditorState(
+        duration: const Duration(seconds: 10), srcW: 1280, srcH: 720)
+      ..addRegion();
+    final seeks = <Duration>[];
+    await tester.pumpWidget(MaterialApp(
+      home: Scaffold(
+        body: MosaicTrackBar(
+          duration: state.duration,
+          position: state.position,
+          frames: state.selected?.track.frames ?? const [],
+          onSeek: seeks.add,
+          onDeleteKeyframe: (_) {},
+        ),
+      ),
+    ));
+    // 轨道几何：左右 padding 8、SizedBox 高 28 紧贴顶部 → y=顶+4+14；
+    // 内宽 w = 800−16（测试面 800 逻辑宽）。拖动 10%→60%，每步 5%。
+    const pad = 8.0;
+    final w = 800.0 - 2 * pad;
+    final y = tester.getTopLeft(find.byType(MosaicTrackBar)).dy + 4 + 14;
+    final g = await tester.startGesture(Offset(pad + 0.1 * w, y));
+    await tester.pump();
+    for (var i = 0; i < 10; i++) {
+      await g.moveBy(Offset(0.05 * w, 0));
+      await tester.pump();
+    }
+    await g.up();
+    await tester.pump();
+    expect(seeks, isNotEmpty);
+    for (var i = 1; i < seeks.length; i++) {
+      expect(seeks[i], greaterThan(seeks[i - 1]), reason: '拖动应连续 seek');
+    }
+    expect(seeks.last.inMilliseconds, closeTo(6000, 100), reason: '终点≈60%');
+  });
+
+  testWidgets('F4：进度可视——进度=主题色、底=白24%、位置圆点跟随 ratio',
+      (tester) async {
+    final state = MosaicEditorState(
+        duration: const Duration(seconds: 10), srcW: 1280, srcH: 720)
+      ..addRegion()
+      ..seekTo(const Duration(seconds: 4)); // ratio = 0.4
+    await tester.pumpWidget(MaterialApp(
+      home: Scaffold(
+        body: MosaicTrackBar(
+          duration: state.duration,
+          position: state.position,
+          frames: state.selected?.track.frames ?? const [],
+          onSeek: (_) {},
+          onDeleteKeyframe: (_) {},
+        ),
+      ),
+    ));
+    final context = tester.element(find.byType(LinearProgressIndicator));
+    final primary = Theme.of(context).colorScheme.primary;
+    final bar =
+        tester.widget<LinearProgressIndicator>(find.byType(LinearProgressIndicator));
+    expect(bar.value, closeTo(0.4, 0.001));
+    expect(bar.color, primary, reason: '进度色=主题色');
+    expect(bar.backgroundColor, Colors.white24, reason: '底色=白24%（黑画面可辨）');
+    // 位置圆点：12px 主色实心描白边；中心 x = padding 8 + ratio×内宽 784
+    final thumb = tester.widget<Container>(find.byKey(
+        const ValueKey('mosaic-track-thumb')));
+    final deco = thumb.decoration! as BoxDecoration;
+    expect(deco.shape, BoxShape.circle);
+    expect(deco.color, primary);
+    expect((deco.border! as Border).top.color, Colors.white);
+    final center =
+        tester.getCenter(find.byKey(const ValueKey('mosaic-track-thumb')));
+    expect(center.dx, closeTo(8 + 0.4 * (800.0 - 16), 1.0));
+    expect(center.dy, closeTo(4 + 8 + 6, 1.0), reason: '垂直居中于 28px 轨道');
+  });
+
   testWidgets('角柄 onPanStart 触发 onPause（P1-10：播放中拖角柄先暂停）',
       (tester) async {
     final state = MosaicEditorState(
