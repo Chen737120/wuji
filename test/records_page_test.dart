@@ -81,7 +81,7 @@ void main() {
     final d2 = DateTime(now.year, now.month, 1);
     final lastMonth = DateTime(now.year, now.month, 0); // 上月最后一天
     final saver = FakeSaver(records: [
-      rec('r1', iso(d1), style: '爵士', teacher: '小鹿',
+      rec('r1', iso(d1), style: '爵士', teacher: '小鹿', studio: '舞动空间',
           note: '发现一个宝藏老师 ✨\n正文'),
       rec('r2', iso(d2), style: '韩舞', teacher: '阿哲'),
       rec('r3', iso(lastMonth), style: '爵士'),
@@ -106,6 +106,12 @@ void main() {
     // 胶囊标签已移除（2026-10-07 #4）
     expect(find.text('#爵士'), findsNothing);
     expect(find.byIcon(Icons.more_horiz), findsWidgets); // 右下角"…"按钮
+    // 元数据行四项齐全：舞种/时长/老师/舞室（spec §1；用户 2026-10-31 指出缺舞室）
+    expect(find.text('爵士'), findsWidgets);
+    expect(find.text('1节×90分'), findsWidgets);
+    expect(find.text('小鹿'), findsOneWidget);
+    expect(find.text('舞动空间'), findsOneWidget);
+    expect(find.byIcon(Icons.place_outlined), findsOneWidget);
     // T5 子项 4：日期头拆为 14/700 日期＋11/faint「· 星期」
     expect(
         find.text('${d1.month}月${d1.day}日'), findsOneWidget);

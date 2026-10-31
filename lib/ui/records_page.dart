@@ -1035,6 +1035,10 @@ class _RecordCardState extends State<RecordCard> {
                   (Icons.schedule, '${r.sessionCount}节×${r.minutesEach}分'),
                   if (r.teacherName?.isNotEmpty ?? false)
                     (Icons.person, r.teacherName!),
+                  // 舞室（spec §1：元数据行＝舞种/分钟/老师/舞室＋「…」；
+                  // 用户 2026-10-31 走查指出此前缺失）
+                  if (r.studioName?.isNotEmpty ?? false)
+                    (Icons.place_outlined, r.studioName!),
                 ])
                   Row(
                     mainAxisSize: MainAxisSize.min,
