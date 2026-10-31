@@ -688,7 +688,12 @@ class MosaicToolbar extends StatelessWidget {
               icon: const Icon(Icons.delete_outline),
               label: const Text('删除')),
           const Spacer(),
+          // F3：竖屏 400 逻辑宽本行内容 384.9 超 376 溢出 8.9px——收窄主按钮
+          // 水平 padding 24→16（任务书方案②；方案① compact 在 M3 下对按钮
+          // 宽度零效果已实测排除）。测试约束 400×890 先复现 8.9 再转绿。
           FilledButton(
+            style: FilledButton.styleFrom(
+                padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14)),
             onPressed: onPrimary,
             child: Text(primaryLabel ?? '完成'),
           ),

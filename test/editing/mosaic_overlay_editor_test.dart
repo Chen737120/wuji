@@ -315,6 +315,36 @@ void main() {
     expect(deco.color, isNull);
   });
 
+  testWidgets('F3：竖屏逻辑 400×890（真机 1200×2670÷dpr3.0）工具条第二行不溢出',
+      (tester) async {
+    // 约束与真机一致（F3 现场 OVERFLOWED BY 8.9 PIXELS）：
+    // physicalSize 为物理像素，1200×2670 ÷ dpr 3.0 = 逻辑 400×890。
+    tester.view.physicalSize = const Size(1200, 2670);
+    tester.view.devicePixelRatio = 3.0;
+    addTearDown(tester.view.reset);
+    final state = MosaicEditorState(
+        duration: const Duration(seconds: 10), srcW: 1280, srcH: 720)
+      ..addRegion();
+    await tester.pumpWidget(MaterialApp(
+      home: Scaffold(
+        body: Column(children: [
+          // Column 拉满宽度（与页面 SafeArea>Column 同约束），第二行才有
+          // 固定 376 逻辑宽可用（400−左右 padding 12×2）——溢出才可复现
+          const Spacer(),
+          MosaicToolbar(
+            state: state,
+            hasSelection: true,
+            onAddRegion: state.addRegion,
+            onAddKeyframe: state.addKeyframeAtPosition,
+            onDeleteRegion: () => state.removeRegion(state.selectedId!),
+          ),
+        ]),
+      ),
+    ));
+    // flutter_test 把 RenderFlex overflow 记为 exception
+    expect(tester.takeException(), isNull, reason: '竖屏 400 逻辑宽第二行不得溢出');
+  });
+
   testWidgets('角柄 onPanStart 触发 onPause（P1-10：播放中拖角柄先暂停）',
       (tester) async {
     final state = MosaicEditorState(
