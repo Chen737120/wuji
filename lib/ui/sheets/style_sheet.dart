@@ -28,6 +28,10 @@ class _StyleSheet extends StatefulWidget {
 class _StyleSheetState extends State<_StyleSheet> {
   late Future<List<TaxonomyItem>> _styles;
 
+  /// 连点守卫（F1，同 record_media_picker_page）：touchByName await 窗口内
+  /// 二次点击忽略；取消/失败路径复位，成功 pop 不复位（sheet 随即销毁）。
+  bool _picking = false;
+
   @override
   void initState() {
     super.initState();
@@ -110,8 +114,13 @@ class _StyleSheetState extends State<_StyleSheet> {
     final accent = Theme.of(context).colorScheme.primary;
     return GestureDetector(
       onTap: () async {
+        if (_picking) return;
+        _picking = true;
         final name = await _askCustomName(context);
-        if (name == null || name.trim().isEmpty) return;
+        if (name == null || name.trim().isEmpty) {
+          _picking = false; // 取消复位：允许重开输入（F1）
+          return;
+        }
         final item = await widget.repo.touchByName(TaxonomyKind.style, name);
         if (mounted) Navigator.pop(context, item);
       },

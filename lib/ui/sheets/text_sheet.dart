@@ -43,6 +43,10 @@ class _TextSheetState extends State<_TextSheet> {
   final _controller = TextEditingController();
   late Future<List<TaxonomyItem>> _recent;
 
+  /// 连点守卫（F1，同 record_media_picker_page）：touchByName await 窗口内
+  /// 二次点击忽略；成功 pop 不复位（sheet 随即销毁）。
+  bool _picking = false;
+
   @override
   void initState() {
     super.initState();
@@ -111,7 +115,8 @@ class _TextSheetState extends State<_TextSheet> {
                     ),
                     onPressed: () async {
                       final name = _controller.text.trim();
-                      if (name.isEmpty) return;
+                      if (name.isEmpty || _picking) return;
+                      _picking = true;
                       final item =
                           await widget.repo.touchByName(widget.kind, name);
                       if (context.mounted) Navigator.pop(context, item);

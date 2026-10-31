@@ -22,6 +22,11 @@ class _RecordMediaPickerPageState extends State<RecordMediaPickerPage> {
   List<ClassVideoGroup> _groups = [];
   bool _loaded = false;
 
+  /// 连点守卫（F1）：resolve（SAF 拷贝）await 窗口内第二次点击直接忽略——
+  /// 否则两次 pop，第一次转场未结束时第二次 pop 弹掉无可弹项抛
+  /// Bad state: No element，随后上层 push 修剪页撞 _debugLocked。
+  bool _picking = false;
+
   @override
   void initState() {
     super.initState();
@@ -44,6 +49,8 @@ class _RecordMediaPickerPageState extends State<RecordMediaPickerPage> {
   }
 
   Future<void> _pick(ClassVideoGroup group, MediaAsset video) async {
+    if (_picking) return;
+    _picking = true;
     final messenger = ScaffoldMessenger.of(context);
     final resolver = context.read<MediaPathResolver?>();
     final path =
@@ -51,6 +58,7 @@ class _RecordMediaPickerPageState extends State<RecordMediaPickerPage> {
     if (!mounted) return;
     if (path == null) {
       // 解析失败不 pop：把相对路径带走会让上层播放必然 Source error（P1-13）
+      _picking = false; // 失败复位：允许用户改点别的视频（F1）
       messenger.showSnackBar(
           const SnackBar(content: Text('视频文件已丢失，可从备份导入恢复')));
       return;
