@@ -410,7 +410,9 @@ class OverlayEditor extends StatefulWidget {
   final bool showRegionMask;
 
   /// 框内遮罩透明度（实现与测试断言共用同一真源）。
-  static const double maskAlpha = 0.22;
+  /// 真机观感校准（2026-10-31）：0.22 在浅色场景偏淡，按任务书授权
+  /// 范围（0.18~0.30）调至 0.28。
+  static const double maskAlpha = 0.28;
 
   /// 区域调整结束（拖框/角柄缩放 onPanEnd、关键帧删除）——宿主用于重拍快照。
   final VoidCallback? onAdjustEnd;
