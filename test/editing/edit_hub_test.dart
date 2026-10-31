@@ -31,7 +31,7 @@ void main() {
     expect(mosaic, isTrue);
   });
 
-  testWidgets('HomeShell 三 tab：首页｜剪辑｜统计，悬浮球可见', (tester) async {
+  testWidgets('HomeShell 四 tab：记录｜剪辑｜统计｜我的，悬浮球可见', (tester) async {
     tester.view.physicalSize = const Size(400, 1000);
     tester.view.devicePixelRatio = 1.0;
     addTearDown(tester.view.reset);
@@ -43,13 +43,15 @@ void main() {
               SizedBox(),
               EditHubPage(),
               SizedBox(),
+              SizedBox(),
             ],
             onFabPressed: () => fabTapped = true)));
     await tester.pumpAndSettle();
 
-    expect(find.text('首页'), findsOneWidget);
+    expect(find.text('记录'), findsOneWidget);
     expect(find.text('剪辑'), findsOneWidget);
     expect(find.text('统计'), findsOneWidget);
+    expect(find.text('我的'), findsOneWidget);
     expect(find.byIcon(Icons.content_cut), findsOneWidget);
 
     // 切到剪辑 tab
@@ -57,8 +59,8 @@ void main() {
     await tester.pumpAndSettle();
     expect(find.text('舞蹈直拍'), findsOneWidget);
     expect(find.text('同屏对比'), findsOneWidget);
-    // 切回首页，无空态图表干扰
-    await tester.tap(find.text('首页'));
+    // 切回记录 tab，无空态图表干扰
+    await tester.tap(find.text('记录'));
     await tester.pumpAndSettle();
 
     // 悬浮球点击 = 新增课
@@ -83,6 +85,7 @@ void main() {
                 MaterialPageRoute(builder: (_) => Scaffold(appBar: AppBar()))),
             onCompare: null,
           ),
+          SizedBox(),
           SizedBox(),
         ],
         onFabPressed: null,

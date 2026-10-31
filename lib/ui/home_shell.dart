@@ -3,7 +3,7 @@ import '../editing/fab_logic.dart';
 import '../theme.dart';
 import 'widgets/draggable_fab.dart';
 
-/// 根路由深度广播：悬浮球只在三个根 tab 可见，进二级页隐藏（规格 §3）。
+/// 根路由深度广播：悬浮球只在四个根 tab 可见，进二级页隐藏（规格 §3）。
 class RootRouteTracker extends ChangeNotifier {
   RootRouteTracker._();
   static final RootRouteTracker instance = RootRouteTracker._();
@@ -42,8 +42,8 @@ class RootRouteObserver extends NavigatorObserver {
   }
 }
 
-/// 底部导航骨架（规格 §3；2026-10-07 用户调整）：首页（记录）｜剪辑｜统计
-/// 三枚"图标＋文字" tab，默认落在首页（记录页）；无凹槽；
+/// 底部导航骨架（规格 §3；2026-10-31 UI 精修 T2）：记录｜剪辑｜统计｜我的
+/// 四枚"图标＋文字" tab，默认落在记录页；无凹槽；
 /// 全局可拖动悬浮球替代原中央＋号。
 class HomeShell extends StatefulWidget {
   const HomeShell({
@@ -52,21 +52,47 @@ class HomeShell extends StatefulWidget {
     required this.onFabPressed,
   });
 
-  final List<Widget> pages; // [记录页(首页), 剪辑页, 统计页]
+  final List<Widget> pages; // [记录页, 剪辑页, 统计页, 我的页]
   final VoidCallback? onFabPressed; // 悬浮球点击＝新增课
 
   @override
   State<HomeShell> createState() => _HomeShellState();
 }
 
-class _HomeShellState extends State<HomeShell> {
-  int _tab = 0; // 默认：首页（记录）
+class _HomeShellState extends State<HomeShell>
+    with SingleTickerProviderStateMixin {
+  int _tab = 0; // 默认：记录页
 
   static const _tabs = [
-    (Icons.calendar_month_outlined, '首页'),
+    (Icons.calendar_month_outlined, '记录'),
     (Icons.content_cut, '剪辑'),
     (Icons.pie_chart_outline, '统计'),
+    (Icons.person_outlined, '我的'),
   ];
+
+  // 选中图标 bump：1→1.14(40%)→1，340ms，轻过冲（原型 @keyframes bump）
+  late final AnimationController _bump = AnimationController(
+    vsync: this,
+    duration: const Duration(milliseconds: 340),
+  );
+  static final Animatable<double> _bumpScale = TweenSequence<double>([
+    TweenSequenceItem(
+      tween: Tween(begin: 1.0, end: 1.14)
+          .chain(CurveTween(curve: Curves.easeOutBack)),
+      weight: 40,
+    ),
+    TweenSequenceItem(
+      tween: Tween(begin: 1.14, end: 1.0)
+          .chain(CurveTween(curve: Curves.easeOutBack)),
+      weight: 60,
+    ),
+  ]);
+
+  @override
+  void dispose() {
+    _bump.dispose();
+    super.dispose();
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -100,15 +126,25 @@ class _HomeShellState extends State<HomeShell> {
     final selected = _tab == idx;
     final accent = Theme.of(context).colorScheme.primary;
     final (icon, label) = _tabs[idx];
+    Widget iconWidget = Icon(icon,
+        size: 20, color: selected ? accent : AppColors.faint);
+    if (selected) {
+      iconWidget = ScaleTransition(
+        scale: _bumpScale.animate(_bump),
+        child: iconWidget,
+      );
+    }
     return TextButton(
-      onPressed: () => setState(() => _tab = idx),
+      onPressed: () {
+        if (_tab == idx) return;
+        setState(() => _tab = idx);
+        _bump.forward(from: 0);
+      },
       child: Column(
         mainAxisAlignment: MainAxisAlignment.center,
         mainAxisSize: MainAxisSize.min,
         children: [
-          Icon(icon,
-              size: 20,
-              color: selected ? accent : AppColors.faint),
+          iconWidget,
           const SizedBox(height: 2),
           Text(label,
               style: TextStyle(

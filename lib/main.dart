@@ -22,6 +22,7 @@ import 'services/thumb_service.dart';
 import 'theme.dart';
 import 'ui/edit_hub_page.dart';
 import 'ui/home_shell.dart';
+import 'ui/my_page.dart';
 import 'ui/fancam/fancam_page.dart';
 import 'ui/compare/compare_page.dart';
 import 'ui/compare/compare_pick_page.dart';
@@ -331,6 +332,7 @@ class _AppRootState extends State<AppRoot> {
                       onMosaic: () => _startMosaic(),
                     ),
                     const StatsPage(), // 统计
+                    const MyPage(), // 我的（2026-10-31 T3：提为第 4 tab）
                   ],
                   onFabPressed: () {
                     _navigatorKey.currentState?.push(
