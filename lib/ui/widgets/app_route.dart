@@ -1,12 +1,22 @@
 import 'package:flutter/cupertino.dart';
+import 'package:flutter/physics.dart';
+import '../../theme.dart';
 
-/// 全局自定义转场（2026-10-05 用户需求 #7）：
+/// 全局自定义转场（2026-10-05 用户需求 #7；2026-10-31 T4 弹簧化）：
 /// - Hero 元素（如记录卡片封面）由 Navigator 内置 HeroController 驱动，
-///   "卡片展开成详情页 / 返回收缩回卡片"——飞行时长跟随 [transitionDuration]；
+///   "卡片展开成详情页 / 返回收缩回卡片"——飞行跟随 [animation] 值；
 /// - 非 Hero 元素（背景、正文）用 FadeTransition 淡入淡出兜底；
-/// - 曲线 easeOutQuint、时长 450ms（返回 400ms），无第三方包；
-/// - 混入 CupertinoRouteTransitionMixin：iOS 边缘右滑返回可用，
-///   手势中断时 Hero 与页面动画自动回弹（框架行为）。
+/// - push/pop 转场由 [createSimulation] 提供弹簧驱动（damping 1.0 /
+///   response 0.4s，spec §2.1）：push 从 0 弹至 1，pop 从当前进度（正常
+///   pop=1，右滑手势中途=拖拽值）弹回 0，速度快慢随弹簧曲线、可中断；
+///   Flutter 3.47 TransitionRoute 原生 simulation 通路（animateWith /
+///   animateBackWith），transitionDuration 仅作兜底声明（simulation 模式下
+///   被框架忽略）；
+/// - 混入 CupertinoRouteTransitionMixin：iOS 边缘右滑返回可用，手势中途
+///   松手回弹走 Cupertino 自带 animateTo（fastEaseInToSlowEaseOut），与
+///   simulation 无冲突；视差与右滑返回由 CupertinoPageTransition 随
+///   animation 值自动跟随；
+/// - 无第三方包。
 ///
 /// Hero tag 命名规范：`<对象类型>-<业务字段>-<唯一id>`，例如
 /// `record-cover-<记录id>`、`record-title-<记录id>`——同一次导航
@@ -34,6 +44,15 @@ class AppRoute<T> extends PageRoute<T> with CupertinoRouteTransitionMixin<T> {
 
   @override
   bool get maintainState => true;
+
+  @override
+  Simulation? createSimulation({required bool forward}) {
+    if (forward) {
+      return SpringSimulation(kSpringTransition, 0, 1, 0);
+    }
+    // pop：起点=当前进度（正常 pop=1；手势拖拽中途 pop=拖拽值），速度 0
+    return SpringSimulation(kSpringTransition, controller!.value, 0, 0);
+  }
 
   // CupertinoRouteTransitionMixin 的页面构建入口（mixin 的 buildPage 调它）
   @override
