@@ -1,6 +1,9 @@
+import 'dart:io';
+import 'dart:math' as math;
+import 'dart:ui' show ImageFilter;
+
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
-import 'dart:io';
 import '../data/app_repository.dart' show ClassSaver;
 import '../data/db.dart' show ClassRecord, ClassRecordRowX, MediaAsset;
 import '../reload_bus.dart';
@@ -11,6 +14,7 @@ import '../theme.dart';
 import 'player_page.dart';
 import 'record_form_page.dart';
 import 'widgets/app_route.dart';
+import 'widgets/pressable_scale.dart';
 import 'sheets/date_sheet.dart';
 
 /// 卡片标题：感受第一行；未写则「M/D 舞种课」（无舞种「M/D 舞蹈课」）。
@@ -39,20 +43,54 @@ List<MapEntry<String, List<ClassRecord>>> groupByMonth(
   return map.entries.toList();
 }
 
-/// 按天分组（key：10月7日 周五，2026-10-07 需求 #10 时间轴组头），
-/// 日期倒序、组内按日期倒序。
-List<MapEntry<String, List<ClassRecord>>> groupByDay(
-    List<ClassRecord> records) {
+/// 按天分组（2026-10-31 T5 v1 形态：日期与星期拆开展示），日期倒序、
+/// 组内按日期倒序。
+class DayGroup {
+  DayGroup(this.dateLabel, this.weekday, this.records);
+
+  /// 「10月31日」
+  final String dateLabel;
+
+  /// 「周六」
+  final String weekday;
+  final List<ClassRecord> records;
+}
+
+List<DayGroup> groupByDay(List<ClassRecord> records) {
   const weekdays = ['周一', '周二', '周三', '周四', '周五', '周六', '周日'];
   final sorted = [...records]..sort((a, b) => b.date.compareTo(a.date));
-  final map = <String, List<ClassRecord>>{};
+  final map = <String, DayGroup>{};
   for (final r in sorted) {
     final d = r.dateAsDateTime;
-    final key =
-        '${d.month}月${d.day}日 ${weekdays[d.weekday - 1]}';
-    map.putIfAbsent(key, () => []).add(r);
+    final key = '${d.year}-${d.month}-${d.day}';
+    final group = map.putIfAbsent(
+        key,
+        () => DayGroup('${d.month}月${d.day}日',
+            weekdays[d.weekday - 1], <ClassRecord>[]));
+    group.records.add(r);
   }
-  return map.entries.toList();
+  return map.values.toList();
+}
+
+/// 卡片阴影（原型 --shadow-card：0 1px 2px 4% / 0 4px 14px 5%），
+/// 日历卡与记录卡共用（T5 子项 3/5）。
+const List<BoxShadow> kCardShadow = [
+  BoxShadow(
+      color: Color(0x0A1A1A1A), offset: Offset(0, 1), blurRadius: 2),
+  BoxShadow(
+      color: Color(0x0D1A1A1A), offset: Offset(0, 4), blurRadius: 14),
+];
+
+/// 临界阻尼弹簧高度曲线（damping 1.0）：x(t)=1−e^(−2πt)·(1+2πt)，
+/// duration 取 2×response 让终点精确收敛 1（t=0.5 即 response 处已达 98.6%）。
+class SpringHeightCurve extends Curve {
+  const SpringHeightCurve();
+
+  @override
+  double transform(double t) {
+    final x = 2 * math.pi * t;
+    return 1 - math.exp(-x) * (1 + x);
+  }
 }
 
 /// 记录页（规格 §3.3）：日历（默认展开、记住状态）＋按月分组时间流。
@@ -64,7 +102,7 @@ class RecordsPage extends StatefulWidget {
 }
 
 class _RecordsPageState extends State<RecordsPage>
-    with WidgetsBindingObserver {
+    with WidgetsBindingObserver, TickerProviderStateMixin {
   List<ClassRecord> _records = [];
   Map<String, List<MediaAsset>> _mediaByClass = {};
   bool _expanded = true;
@@ -76,6 +114,8 @@ class _RecordsPageState extends State<RecordsPage>
   bool _searching = false;
   String _query = '';
   final TextEditingController _searchCtl = TextEditingController();
+  // T5 子项 2：毛玻璃收缩顶栏（ScrollController 驱动 opacity，1:1 跟手）
+  final ScrollController _scroll = ScrollController();
 
   ClassSaver get _saver => context.read<ClassSaver>();
 
@@ -96,6 +136,7 @@ class _RecordsPageState extends State<RecordsPage>
     WidgetsBinding.instance.removeObserver(this);
     ReloadBus.instance.removeListener(_load);
     _searchCtl.dispose();
+    _scroll.dispose();
     super.dispose();
   }
 
@@ -135,93 +176,130 @@ class _RecordsPageState extends State<RecordsPage>
 
   @override
   Widget build(BuildContext context) {
-    final accent = Theme.of(context).colorScheme.primary;
     return Scaffold(
       backgroundColor: AppColors.bg,
-      body: SafeArea(
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
+      body: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          // 搜索态（需求 #11，T5 保留现状样式与逻辑；顶栏渐显不影响此固定行）
+          if (_searching)
             Padding(
-              padding: const EdgeInsets.fromLTRB(16, 12, 16, 4),
-              child: Row(
-                children: [
-                  const Text('首页',
-                      style: TextStyle(
-                          fontSize: 16,
-                          fontWeight: FontWeight.w700,
-                          letterSpacing: 3)),
-                  const Spacer(),
-                  // 搜索（需求 #11；#10 放大：圆底按钮更明显）
-                  GestureDetector(
-                    onTap: () => setState(() {
-                      _searching = !_searching;
-                      if (!_searching) _query = '';
-                    }),
-                    child: Container(
-                      width: 34,
-                      height: 34,
-                      decoration: BoxDecoration(
-                        color: _searching
-                            ? accent.withValues(alpha: .14)
-                            : Colors.white,
-                        shape: BoxShape.circle,
-                        border: Border.all(
-                            color: _searching
-                                ? accent
-                                : AppColors.hairline),
-                      ),
-                      child: Icon(
-                          _searching ? Icons.search_off : Icons.search,
-                          size: 20,
-                          color: _searching ? accent : AppColors.ink),
-                    ),
+              padding: EdgeInsets.fromLTRB(16, MediaQuery.paddingOf(context).top + 8, 16, 4),
+              child: TextField(
+                autofocus: true,
+                controller: _searchCtl,
+                decoration: InputDecoration(
+                  isDense: true,
+                  hintText: '搜索老师 / 舞种 / 舞室',
+                  hintStyle:
+                      const TextStyle(fontSize: 12, color: AppColors.faint),
+                  prefixIcon:
+                      const Icon(Icons.search, size: 18, color: AppColors.faint),
+                  contentPadding: const EdgeInsets.symmetric(vertical: 8),
+                  border: OutlineInputBorder(
+                    borderRadius: BorderRadius.circular(10),
+                    borderSide: const BorderSide(color: AppColors.hairline),
                   ),
-                  const SizedBox(width: 12),
-                  GestureDetector(
-                    onTap: _toggleExpanded,
-                    child: Text(_expanded ? '收起日历 ⌃' : '展开日历 ⌄',
-                        style: TextStyle(fontSize: 11, color: AppColors.faint)),
-                  ),
-                ],
+                ),
+                style: const TextStyle(fontSize: 13),
+                onChanged: (v) => setState(() => _query = v.trim()),
               ),
             ),
-            if (_searching)
-              Padding(
-                padding: const EdgeInsets.fromLTRB(16, 6, 16, 4),
-                child: TextField(
-                  autofocus: true,
-                  controller: _searchCtl,
-                  decoration: InputDecoration(
-                    isDense: true,
-                    hintText: '搜索老师 / 舞种 / 舞室',
-                    hintStyle:
-                        const TextStyle(fontSize: 12, color: AppColors.faint),
-                    prefixIcon:
-                        const Icon(Icons.search, size: 18, color: AppColors.faint),
-                    contentPadding: const EdgeInsets.symmetric(vertical: 8),
-                    border: OutlineInputBorder(
-                      borderRadius: BorderRadius.circular(10),
-                      borderSide: const BorderSide(color: AppColors.hairline),
+          Expanded(
+            // 2026-10-07 需求 #2：日历随列表一起滚动（不再固定顶部）。
+            // 滚动即上报：后台预热据此给交互让路（修 v1.5.20 预热
+            // 与滚动抢 UI 线程导致卡顿/ANR）
+            child: NotificationListener<ScrollUpdateNotification>(
+              onNotification: (_) {
+                StartupWarmup.noteUserScroll();
+                return false;
+              },
+              child: _stream(),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  /// Large Title 行（T5 子项 1）：大标题「记录」＋右侧搜索圆钮。
+  /// 搜索钮样式/逻辑原样保留（accent 底 + search_off 切换）。
+  Widget _largeTitleRow() {
+    final accent = Theme.of(context).colorScheme.primary;
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(0, 6, 0, 16),
+      child: Row(
+        children: [
+          Text('记录',
+              style: AppText.homeTitle.copyWith(color: AppColors.ink)),
+          const Spacer(),
+          GestureDetector(
+            onTap: () => setState(() {
+              _searching = !_searching;
+              if (!_searching) _query = '';
+            }),
+            child: Container(
+              width: 34,
+              height: 34,
+              decoration: BoxDecoration(
+                color: _searching
+                    ? accent.withValues(alpha: .14)
+                    : Colors.white,
+                shape: BoxShape.circle,
+                border: Border.all(
+                    color: _searching ? accent : AppColors.hairline),
+              ),
+              child: Icon(
+                  _searching ? Icons.search_off : Icons.search,
+                  size: 20,
+                  color: _searching ? accent : AppColors.ink),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  /// 毛玻璃收缩顶栏（T5 子项 2，原型 .navbar）：92px 含状态栏，
+  /// BackdropFilter(blur 20)＋bg 74%，滚动前 40px 内 opacity 0→1（1:1 跟手）。
+  /// IgnorePointer 不挡列表点击；offset=0 时不挂载 BackdropFilter（省开销）。
+  Widget _frostedTopBar(double topInset) {
+    return Positioned(
+      top: 0,
+      left: 0,
+      right: 0,
+      child: IgnorePointer(
+        child: ListenableBuilder(
+          listenable: _scroll,
+          builder: (context, _) {
+            final p =
+                _scroll.hasClients ? (_scroll.offset / 40).clamp(0.0, 1.0) : 0.0;
+            if (p == 0) return const SizedBox.shrink();
+            return Opacity(
+              opacity: p,
+              child: ClipRect(
+                child: BackdropFilter(
+                  filter: ImageFilter.blur(sigmaX: 20, sigmaY: 20),
+                  child: Container(
+                    height: topInset + 48,
+                    foregroundDecoration: const BoxDecoration(
+                      border: Border(
+                          bottom:
+                              BorderSide(color: AppColors.hairline, width: 0.5)),
                     ),
+                    color: AppColors.bg.withValues(alpha: 0.74),
+                    padding: EdgeInsets.only(top: topInset),
+                    alignment: Alignment.center,
+                    child: const Text('记录',
+                        style: TextStyle(
+                            fontSize: 17,
+                            fontWeight: FontWeight.w600,
+                            letterSpacing: -0.17)),
                   ),
-                  style: const TextStyle(fontSize: 13),
-                  onChanged: (v) => setState(() => _query = v.trim()),
                 ),
               ),
-            Expanded(
-              // 2026-10-07 需求 #2：日历随列表一起滚动（不再固定顶部）。
-              // 滚动即上报：后台预热据此给交互让路（修 v1.5.20 预热
-              // 与滚动抢 UI 线程导致卡顿/ANR）
-              child: NotificationListener<ScrollUpdateNotification>(
-                onNotification: (_) {
-                  StartupWarmup.noteUserScroll();
-                  return false;
-                },
-                child: _stream(),
-              ),
-            ),
-          ],
+            );
+          },
         ),
       ),
     );
@@ -287,6 +365,7 @@ class _RecordsPageState extends State<RecordsPage>
   }
 
   Widget _stream() {
+    final topInset = MediaQuery.paddingOf(context).top;
     if (!_loaded) {
       return const Center(
           child: SizedBox(
@@ -312,112 +391,119 @@ class _RecordsPageState extends State<RecordsPage>
           (r.note ?? '').toLowerCase().contains(q);
       filtered = filtered.where(hit).toList();
     }
-    if (filtered.isEmpty) {
-      // 空态也把日历放进滚动区（需求 #2：日历随页面滚动）
-      return ListView(
-        padding: const EdgeInsets.fromLTRB(16, 4, 16, 90),
-        children: [
-          _calendarWidget(),
-          Center(
-            child: Padding(
-              padding: const EdgeInsets.symmetric(vertical: 30),
-              child: Text(
-                  _query.isNotEmpty ? '没有匹配的记录' : '这一天还没有课堂记录',
-                  style: TextStyle(fontSize: 12, color: AppColors.faint)),
-            ),
-          ),
-        ],
-      );
-    }
-    // 时间轴（需求 #10）：日历在最上、随列表滚动；按天分组组头 + 左侧竖线圆点
+    // 时间流（T5 v1 形态）：大标题、日历壳随列表滚动，时间轴圆点竖线移除
     final children = <Widget>[
-      _calendarWidget(),
+      _largeTitleRow(),
+      _calendarShell(),
       if (_selectedDay != null) _filterBar(),
     ];
-    final groups = groupByDay(filtered);
-    for (final g in groups) {
-      children.add(Padding(
-        padding: const EdgeInsets.only(top: 14, bottom: 8),
-        child: Text(g.key,
-            style: const TextStyle(
-                fontSize: 16, fontWeight: FontWeight.w800)),
+    if (filtered.isEmpty) {
+      children.add(Center(
+        child: Padding(
+          padding: const EdgeInsets.symmetric(vertical: 30),
+          child: Text(_query.isNotEmpty ? '没有匹配的记录' : '这一天还没有课堂记录',
+              style: TextStyle(fontSize: 12, color: AppColors.faint)),
+        ),
       ));
-      for (var i = 0; i < g.value.length; i++) {
-        final r = g.value[i];
-        final isLast = i == g.value.length - 1;
-        children.add(Padding(
-          padding: const EdgeInsets.only(bottom: 2),
-          // IntrinsicHeight：让时间轴竖线随卡片实际高度拉伸
-          child: IntrinsicHeight(
-            child: Row(
-              crossAxisAlignment: CrossAxisAlignment.stretch,
-              children: [
-                // 时间轴列：圆点 + 竖线（最后一张线到卡底即止）
-                SizedBox(
-                  width: 20,
-                  child: Column(
-                    children: [
-                      Container(
-                        width: 8,
-                        height: 8,
-                        margin: const EdgeInsets.only(top: 24),
-                        decoration: BoxDecoration(
-                            color: AppColors.faint, shape: BoxShape.circle),
-                      ),
-                      if (!isLast)
-                        Expanded(
-                          child:
-                              Container(width: 1.5, color: AppColors.hairline),
-                        ),
-                    ],
-                  ),
-                ),
-                const SizedBox(width: 8),
-                Expanded(
-                  child: RecordCard(
-                    record: r,
-                    media: _mediaByClass[r.id] ?? const [],
-                  ),
-                ),
-              ],
-            ),
-          ),
+    }
+    for (final g in groupByDay(filtered)) {
+      // 日期头（T5 子项 4）：「10月31日 · 周六」＝14/700 ＋ 11/faint
+      children.add(Padding(
+        padding: const EdgeInsets.only(top: 22, bottom: 10, left: 2, right: 2),
+        child: Row(
+          crossAxisAlignment: CrossAxisAlignment.baseline,
+          textBaseline: TextBaseline.alphabetic,
+          children: [
+            Text(g.dateLabel,
+                style: const TextStyle(
+                    fontSize: 14, fontWeight: FontWeight.w700)),
+            const SizedBox(width: 8),
+            Text('· ${g.weekday}',
+                style: const TextStyle(fontSize: 11, color: AppColors.faint)),
+          ],
+        ),
+      ));
+      for (final r in g.records) {
+        children.add(RecordCard(
+          record: r,
+          media: _mediaByClass[r.id] ?? const [],
         ));
       }
     }
-    return ListView(
-      padding: const EdgeInsets.fromLTRB(16, 4, 16, 90),
-      children: children,
+    return Stack(
+      children: [
+        ListView(
+          controller: _scroll,
+          padding: EdgeInsets.fromLTRB(16, topInset + 6, 16, 90),
+          children: children,
+        ),
+        _frostedTopBar(topInset),
+      ],
     );
   }
 
-  /// 日历/周条（需求 #2：放进滚动流，随页面滚动）
-  Widget _calendarWidget() {
-    return _expanded
-        ? _Calendar(
-            initialMonth: _calendarMonth,
-            markedDaysFor: _markedDaysIn,
-            coversFor: _coversIn,
-            resolver: context.read<MediaPathResolver?>(),
-            selectedDay: _selectedDay,
-            onMonthChanged: (m) => setState(() {
-              _calendarMonth = m;
-              _selectedDay = null;
-              CalendarSelection.selectedDay = null;
-            }),
-            onDayTap: (d) => setState(() {
-              _selectedDay = _selectedDay == d ? null : d;
-              CalendarSelection.selectedDay = _selectedDay;
-            }),
-          )
-        : _WeekStrip(
-            selectedDay: _selectedDay,
-            onDayTap: (d) => setState(() {
-              _selectedDay = d;
-              CalendarSelection.selectedDay = d;
-            }),
-            onExpand: () => setState(() => _expanded = true),
-          );
+  /// 日历/周条（需求 #2：放进滚动流，随页面滚动；T5 子项 5：
+  /// AnimatedSize 弹簧高度＋进入者淡入，替换现状 setState 直切）
+  Widget _calendarShell() {
+    Widget fadeIn(Widget child) => TweenAnimationBuilder<double>(
+          tween: Tween(begin: 0, end: 1),
+          duration: const Duration(milliseconds: 200),
+          curve: Curves.easeOut,
+          builder: (_, v, c) => Opacity(opacity: v, child: c),
+          child: child,
+        );
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 12),
+      child: AnimatedSize(
+        alignment: Alignment.topCenter,
+        duration: const Duration(milliseconds: 700),
+        curve: const SpringHeightCurve(),
+        child: _expanded
+            ? KeyedSubtree(
+                key: const ValueKey('cal'),
+                child: fadeIn(_Calendar(
+                  initialMonth: _calendarMonth,
+                  markedDaysFor: _markedDaysIn,
+                  coversFor: _coversIn,
+                  resolver: context.read<MediaPathResolver?>(),
+                  selectedDay: _selectedDay,
+                  expanded: _expanded,
+                  onToggleExpanded: _toggleExpanded,
+                  onMonthChanged: (m) => setState(() {
+                    _calendarMonth = m;
+                    _selectedDay = null;
+                    CalendarSelection.selectedDay = null;
+                  }),
+                  onDayTap: (d) => setState(() {
+                    _selectedDay = _selectedDay == d ? null : d;
+                    CalendarSelection.selectedDay = _selectedDay;
+                  }),
+                )),
+              )
+            : KeyedSubtree(
+                key: const ValueKey('week'),
+                child: fadeIn(_WeekStrip(
+                  selectedDay: _selectedDay,
+                  hasClassDay: _hasClassDay,
+                  onDayTap: (d) => setState(() {
+                    _selectedDay = d;
+                    CalendarSelection.selectedDay = d;
+                  }),
+                  onExpand: () => setState(() => _expanded = true),
+                )),
+              ),
+      ),
+    );
+  }
+
+  bool _hasClassDay(DateTime day) {
+    for (final r in _records) {
+      final d = r.dateAsDateTime;
+      if (d.year == day.year && d.month == day.month && d.day == day.day) {
+        return true;
+      }
+    }
+    return false;
   }
 }
 
@@ -428,8 +514,9 @@ class CalendarSelection {
   static DateTime? selectedDay;
 }
 
-/// 记录页日历：左右滑动切月、点顶部年月跳转；有课的日期用第一个视频
-/// 封面做底图（缩小居中不重叠），背景衬当月份数字水印。
+/// 记录页日历（T5 子项 5：radius 16 白卡阴影；卡头右侧 chevron 圆钮
+/// 展开/收起，带旋转动画）：左右滑动切月、点顶部年月跳转；有课的日期
+/// 用第一个视频封面做底图（缩小居中不重叠），背景衬当月份数字水印。
 /// 显示中的月份由本组件自持（父层只给初始值），避免双向同步互跳。
 class _Calendar extends StatefulWidget {
   const _Calendar({
@@ -438,6 +525,8 @@ class _Calendar extends StatefulWidget {
     required this.coversFor,
     required this.resolver,
     required this.selectedDay,
+    required this.expanded,
+    required this.onToggleExpanded,
     required this.onMonthChanged,
     required this.onDayTap,
   });
@@ -447,6 +536,8 @@ class _Calendar extends StatefulWidget {
   final Map<int, String> Function(DateTime month) coversFor;
   final MediaPathResolver? resolver;
   final DateTime? selectedDay;
+  final bool expanded;
+  final VoidCallback onToggleExpanded;
   final ValueChanged<DateTime> onMonthChanged;
   final ValueChanged<DateTime> onDayTap;
 
@@ -510,42 +601,67 @@ class _CalendarState extends State<_Calendar> {
   @override
   Widget build(BuildContext context) {
     final accent = Theme.of(context).colorScheme.primary;
-    return Padding(
-      padding: const EdgeInsets.fromLTRB(16, 4, 16, 8),
+    return Container(
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(16),
+        border: Border.all(color: AppColors.hairline),
+        boxShadow: kCardShadow,
+      ),
+      padding: const EdgeInsets.fromLTRB(4, 4, 4, 10),
       child: Column(
         children: [
+          // 卡头：切月箭头｜年月 pill｜收起/展开 chevron 圆钮（T5 子项 1 归宿）
           Row(
-            mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
               IconButton(
                   icon: const Icon(Icons.chevron_left, size: 18),
                   onPressed: () => _go(-1)),
-              GestureDetector(
-                onTap: _pickMonthViaSheet,
-                child: Container(
-                  padding:
-                      const EdgeInsets.symmetric(horizontal: 10, vertical: 3),
-                  decoration: BoxDecoration(
-                    color: Colors.white,
-                    borderRadius: BorderRadius.circular(10),
-                    border: Border.all(color: AppColors.hairline),
-                  ),
-                  child: Row(
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      Text('${_shown.year}年${_shown.month}月',
-                          style: const TextStyle(
-                              fontSize: 13, fontWeight: FontWeight.w600)),
-                      const SizedBox(width: 4),
-                      Icon(Icons.expand_more,
-                          size: 15, color: AppColors.secondary),
-                    ],
+              Expanded(
+                child: Center(
+                  child: GestureDetector(
+                    onTap: _pickMonthViaSheet,
+                    child: Container(
+                      padding: const EdgeInsets.symmetric(
+                          horizontal: 10, vertical: 3),
+                      decoration: BoxDecoration(
+                        color: Colors.white,
+                        borderRadius: BorderRadius.circular(10),
+                        border: Border.all(color: AppColors.hairline),
+                      ),
+                      child: Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          Text('${_shown.year}年${_shown.month}月',
+                              style: const TextStyle(
+                                  fontSize: 13, fontWeight: FontWeight.w600)),
+                          const SizedBox(width: 4),
+                          Icon(Icons.expand_more,
+                              size: 15, color: AppColors.secondary),
+                        ],
+                      ),
+                    ),
                   ),
                 ),
               ),
               IconButton(
                   icon: const Icon(Icons.chevron_right, size: 18),
                   onPressed: () => _go(1)),
+              GestureDetector(
+                onTap: widget.onToggleExpanded,
+                child: SizedBox(
+                  width: 30,
+                  height: 30,
+                  child: AnimatedRotation(
+                    turns: widget.expanded ? 0 : 0.5,
+                    duration: const Duration(milliseconds: 250),
+                    curve: Curves.ease,
+                    child: const Icon(Icons.keyboard_arrow_down,
+                        size: 20, color: AppColors.secondary),
+                  ),
+                ),
+              ),
+              const SizedBox(width: 6),
             ],
           ),
           Row(
@@ -627,28 +743,7 @@ class _CalendarState extends State<_Calendar> {
                       ? Column(
                           mainAxisAlignment: MainAxisAlignment.center,
                           children: [
-                            Container(
-                              width: 26,
-                              height: 26,
-                              alignment: Alignment.center,
-                              decoration: BoxDecoration(
-                                shape: BoxShape.circle,
-                                color: isSelected
-                                    ? accent
-                                    : (isToday
-                                        ? accent.withValues(alpha: .15)
-                                        : null),
-                              ),
-                              child: Text('$day',
-                                  style: TextStyle(
-                                      fontSize: 11,
-                                      color: isSelected
-                                          ? Colors.white
-                                          : AppColors.ink,
-                                      fontWeight: isToday || isSelected
-                                          ? FontWeight.w700
-                                          : FontWeight.w400)),
-                            ),
+                            _dayCell(day, isSelected, isToday),
                             SizedBox(
                               height: 4,
                               child: hasClass
@@ -664,6 +759,25 @@ class _CalendarState extends State<_Calendar> {
           ],
         ),
       ],
+    );
+  }
+
+  /// 普通数字格（无封面）：选中/今天＝accent 实底圆角方白字（T5 子项 5）。
+  Widget _dayCell(int day, bool isSelected, bool isToday) {
+    final filled = isSelected || isToday;
+    return Container(
+      width: 26,
+      height: 26,
+      alignment: Alignment.center,
+      decoration: BoxDecoration(
+        borderRadius: BorderRadius.circular(9),
+        color: filled ? Theme.of(context).colorScheme.primary : null,
+      ),
+      child: Text('$day',
+          style: TextStyle(
+              fontSize: 11,
+              color: filled ? Colors.white : AppColors.ink,
+              fontWeight: filled ? FontWeight.w700 : FontWeight.w400)),
     );
   }
 
@@ -729,16 +843,19 @@ class _CalendarState extends State<_Calendar> {
   }
 }
 
-/// 收起状态的周条（参考舞动时光）：本周 7 天（周一起），今天高亮，
-/// 点某天即筛选；右侧日历图标展开整月日历。
+/// 收起状态的周条（T5 子项 5：radius 16 白卡阴影；样式按原型 .ws-cell＝
+/// 星期小字 9/faint＋日期 13/ink＋有课 dot；今天/选中 accent 实底圆角方）。
+/// 右侧日历图标展开整月日历（收起态的唯一展开入口，行为不回归）。
 class _WeekStrip extends StatelessWidget {
   const _WeekStrip({
     required this.selectedDay,
+    required this.hasClassDay,
     required this.onDayTap,
     required this.onExpand,
   });
 
   final DateTime? selectedDay;
+  final bool Function(DateTime day) hasClassDay;
   final ValueChanged<DateTime> onDayTap;
   final VoidCallback onExpand;
 
@@ -752,64 +869,82 @@ class _WeekStrip extends StatelessWidget {
     final days = [
       for (var i = 0; i < 7; i++) weekStart.add(Duration(days: i)),
     ];
-    return Padding(
-      padding: const EdgeInsets.fromLTRB(16, 4, 16, 8),
-      child: Container(
-        padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 4),
-        decoration: BoxDecoration(
-          color: Colors.white,
-          borderRadius: BorderRadius.circular(12),
-          border: Border.all(color: AppColors.hairline),
-        ),
-        child: Row(
-          children: [
-            for (final d in days)
-              Expanded(
-                child: GestureDetector(
-                  behavior: HitTestBehavior.opaque,
-                  onTap: () => onDayTap(d),
-                  child: Center(
-                    child: Container(
-                      width: 32,
-                      height: 32,
-                      alignment: Alignment.center,
-                      decoration: BoxDecoration(
-                        shape: BoxShape.circle,
-                        color: d == today0 ? accent : null,
-                        border: (selectedDay == d && d != today0)
-                            ? Border.all(color: accent, width: 1.5)
+    const weekdays = ['一', '二', '三', '四', '五', '六', '日'];
+    return Container(
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(16),
+        border: Border.all(color: AppColors.hairline),
+        boxShadow: kCardShadow,
+      ),
+      padding: const EdgeInsets.fromLTRB(10, 8, 6, 8),
+      child: Row(
+        children: [
+          for (var i = 0; i < 7; i++)
+            Expanded(child: () {
+              final d = days[i];
+              final isToday = d == today0;
+              final isSelected = selectedDay == d && !isToday;
+              final filled = isToday;
+              final hasClass = hasClassDay(d);
+              return GestureDetector(
+                behavior: HitTestBehavior.opaque,
+                onTap: () => onDayTap(d),
+                child: Container(
+                  padding: const EdgeInsets.symmetric(vertical: 7),
+                  decoration: BoxDecoration(
+                    borderRadius: BorderRadius.circular(10),
+                    color: filled ? accent : null,
+                    border: isSelected
+                        ? Border.all(color: accent, width: 1.5)
+                        : null,
+                  ),
+                  child: Column(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Text(weekdays[i],
+                          style: TextStyle(
+                              fontSize: 9,
+                              color: filled
+                                  ? Colors.white.withValues(alpha: .78)
+                                  : AppColors.faint)),
+                      const SizedBox(height: 2),
+                      Text('${d.day}',
+                          style: TextStyle(
+                              fontSize: 13,
+                              color: filled ? Colors.white : AppColors.ink,
+                              fontWeight:
+                                  filled ? FontWeight.w700 : FontWeight.w400)),
+                      SizedBox(
+                        height: 7,
+                        child: hasClass
+                            ? CircleAvatar(
+                                radius: 2,
+                                backgroundColor:
+                                    filled ? Colors.white : accent)
                             : null,
                       ),
-                      child: Text('${d.day}',
-                          style: TextStyle(
-                              fontSize: 12,
-                              color: d == today0
-                                  ? Colors.white
-                                  : AppColors.ink,
-                              fontWeight: d == today0
-                                  ? FontWeight.w700
-                                  : FontWeight.w400)),
-                    ),
+                    ],
                   ),
                 ),
-              ),
-            IconButton(
-              icon: Icon(Icons.calendar_month,
-                  size: 20, color: AppColors.secondary),
-              tooltip: '展开日历',
-              onPressed: onExpand,
-            ),
-          ],
-        ),
+              );
+            }()),
+          IconButton(
+            icon: Icon(Icons.calendar_month,
+                size: 20, color: AppColors.secondary),
+            tooltip: '展开日历',
+            onPressed: onExpand,
+          ),
+        ],
       ),
     );
   }
 }
 
-/// 记录卡片（2026-10-07 需求 #10 重做）：
-/// 标题（感受首行）→ 感受全文（折叠/展开）→ 胶囊标签（#舞种 #节数×分 #老师）
-/// → 媒体网格（1 个 16:9、2 个 1:1 并排、≥3 个三列胶卷感）→ 图标化元数据行。
-/// 长按弹快捷菜单（查看完整感受/编辑记录/删除记录）；点媒体直接全屏播放。
+/// 记录卡片（2026-10-07 需求 #10 重做；2026-10-31 T5 v1 形态）：
+/// 阴影白卡 radius 16（无边框）→ 感受 13.5/1.62 → 媒体网格
+/// （1 个 16:9、2 个 16:10、≥3 个 1:1；视频格叠播放角标＋时长胶囊）→
+/// 图标化元数据行。长按弹快捷菜单；点媒体直接全屏播放（PressableScale 按压）。
 class RecordCard extends StatefulWidget {
   const RecordCard({
     super.key,
@@ -934,16 +1069,16 @@ class _RecordCardState extends State<RecordCard> {
         padding: const EdgeInsets.all(14),
         decoration: BoxDecoration(
           color: Colors.white,
-          borderRadius: BorderRadius.circular(14),
-          border: Border.all(color: AppColors.hairline),
+          borderRadius: BorderRadius.circular(16),
+          boxShadow: kCardShadow,
         ),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            // 感受/标题：完整一遍、黑色正常字重、不折叠（需求 #6/#7）
+            // 感受/标题：完整一遍、不折叠（需求 #6/#7；T5 字阶 13.5/1.62）
             Text(noteText,
-                style: const TextStyle(
-                    fontSize: 15.5, height: 1.6, color: AppColors.ink)),
+                style:
+                    AppText.cardBody.copyWith(color: AppColors.ink)),
             if (widget.media.isNotEmpty) ...[
               const SizedBox(height: 10),
               _mediaGrid(),
@@ -989,7 +1124,8 @@ class _RecordCardState extends State<RecordCard> {
     );
   }
 
-  /// 媒体网格：1 个 16:9 大图；2 个 1:1 并排；≥3 个三列胶卷感（最多 6 格）。
+  /// 媒体网格（T5 子项 3）：1 个 16:9；2 个 16:10 并排；≥3 个每行 3 格 1:1。
+  /// 视频格叠播放角标＋右下时长胶囊（durationSec 为 null 不显示胶囊）。
   Widget _mediaGrid() {
     final list = widget.media.take(6).toList();
     // 软占位色（2026-10-08 需求 #5）：浅灰替代黑底；解码/文件错误也落到这里
@@ -998,9 +1134,31 @@ class _RecordCardState extends State<RecordCard> {
         alignment: Alignment.center,
         child: Icon(m.type == 'video' ? Icons.play_arrow : Icons.image_outlined,
             color: AppColors.faint, size: 22));
+
+    /// 时长胶囊（原型 .mdur）：黑 55% 底白字 10、tabular 数字
+    Widget durBadge(int sec) => Positioned(
+          right: 6,
+          bottom: 6,
+          child: Container(
+            padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 2),
+            decoration: BoxDecoration(
+              color: Colors.black.withValues(alpha: .55),
+              borderRadius: BorderRadius.circular(99),
+            ),
+            child: Text(
+              '${(sec ~/ 60).toString().padLeft(2, '0')}:${(sec % 60).toString().padLeft(2, '0')}',
+              style: const TextStyle(
+                  fontSize: 10,
+                  color: Colors.white,
+                  fontFeatures: [FontFeature.tabularFigures()]),
+            ),
+          ),
+        );
+
     Widget cell(MediaAsset m) {
       final rel = m.thumbName ?? (m.type == 'image' ? m.fileName : null);
       final first = m == widget.media.first;
+      final isVideo = m.type == 'video';
       // 不在 build 里做 existsSync（快速滚动时是 UI 线程同步盘 IO）；
       // 文件丢失/解码失败统一走 errorBuilder 的占位态
       final inner = rel == null
@@ -1010,20 +1168,45 @@ class _RecordCardState extends State<RecordCard> {
                   context.read<MediaPathResolver?>(), rel),
               builder: (context, snap) {
                 final path = snap.data;
-                if (path == null) return placeholder(m);
-                return Image.file(File(path),
-                    fit: BoxFit.cover,
-                    cacheWidth: 500, // 网格格子小图：限解码宽防卡顿
-                    errorBuilder: (_, _, _) => placeholder(m));
+                final hasImg = path != null;
+                return Stack(
+                  fit: StackFit.expand,
+                  children: [
+                    if (hasImg)
+                      Image.file(File(path),
+                          fit: BoxFit.cover,
+                          cacheWidth: 500, // 网格格子小图：限解码宽防卡顿
+                          errorBuilder: (_, _, _) => placeholder(m))
+                    else
+                      placeholder(m),
+                    // 播放角标只在有封面图时叠加（浅灰占位上白角标不可见）
+                    if (isVideo && hasImg)
+                      const Center(
+                        child: Icon(Icons.play_arrow,
+                            size: 30,
+                            color: Color(0xEBFFFFFF),
+                            shadows: [
+                              Shadow(
+                                  blurRadius: 4,
+                                  offset: Offset(0, 1),
+                                  color: Color(0x59000000))
+                            ]),
+                      ),
+                    if (isVideo && hasImg && m.durationSec != null)
+                      durBadge(m.durationSec!),
+                  ],
+                );
               },
             );
-      final core = GestureDetector(
+      Widget core = GestureDetector(
         behavior: HitTestBehavior.opaque,
         onTap: () => _openMedia(m),
         child: ClipRRect(
             borderRadius: BorderRadius.circular(8),
             child: SizedBox.expand(child: inner)),
       );
+      // T5 子项 6：媒体格按压反馈（Listener 不消费事件，onTap 照常）
+      core = PressableScale(child: core);
       // 首图与详情页首图共用 Hero tag（卡片"展开成详情页"）
       return first ? Hero(tag: 'record-cover-${r.id}', child: core) : core;
     }
@@ -1042,14 +1225,14 @@ class _RecordCardState extends State<RecordCard> {
           for (final m in list)
             Expanded(
                 child: AspectRatio(
-                    aspectRatio: 1,
+                    aspectRatio: 16 / 10,
                     child: Padding(
                         padding: const EdgeInsets.symmetric(horizontal: 2),
                         child: cell(m)))),
         ],
       );
     }
-    // ≥3：每行 3 格 16:9（胶卷感）
+    // ≥3：每行 3 格 1:1
     final rows = <Widget>[];
     for (var i = 0; i < count; i += 3) {
       final chunk = list.skip(i).take(3).toList();
@@ -1058,7 +1241,7 @@ class _RecordCardState extends State<RecordCard> {
           for (var j = 0; j < 3; j++)
             Expanded(
               child: AspectRatio(
-                aspectRatio: 16 / 9,
+                aspectRatio: 1,
                 child: Padding(
                     padding: const EdgeInsets.all(2),
                     child: j < chunk.length
