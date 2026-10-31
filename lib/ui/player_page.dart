@@ -1,5 +1,6 @@
 import 'dart:io';
 import 'dart:math' as math;
+import 'dart:ui' show ImageFilter;
 
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
@@ -10,6 +11,9 @@ import '../services/archive_fs.dart' show MediaPathResolver;
 import 'widgets/save_to_gallery_button.dart';
 
 const _speeds = [0.5, 0.75, 1.0, 1.25, 1.5, 2.0];
+
+/// T10 控制层深色毛玻璃材质（spec §3）：rgba(24,24,24,.55)＋blur 20。
+const Color _glassBarColor = Color(0x8C181818);
 
 /// 视频基准渲染尺寸：AspectRatio 在视口松约束下的实际布局尺寸。
 /// 钳位必须用它而非视口尺寸——视频未填满的轴用视口口径会把画面拖出
@@ -225,12 +229,19 @@ class _PlayerPageState extends State<PlayerPage> {
                         onScaleEnd: (_) => _scaleBase = null,
                       ),
                     ),
+                    // T10：顶部控制钮深色毛玻璃圆底（常驻不变——保存钮是
+                    // 记录列表直达播放页时的唯一保存入口，显隐状态机不动）
                     Positioned(
                       top: topInset + 10,
                       left: 10,
-                      child: IconButton(
-                        icon: const Icon(Icons.close, color: Colors.white),
-                        onPressed: () => Navigator.pop(context),
+                      child: _glassCircle(
+                        IconButton(
+                          padding: EdgeInsets.zero,
+                          constraints: const BoxConstraints.tightFor(
+                              width: 40, height: 40),
+                          icon: const Icon(Icons.close, color: Colors.white),
+                          onPressed: () => Navigator.pop(context),
+                        ),
                       ),
                     ),
                     // 保存到相册（规格 §3.1）：与左上关闭按钮对称、常驻显示，
@@ -238,7 +249,9 @@ class _PlayerPageState extends State<PlayerPage> {
                     Positioned(
                       top: topInset + 10,
                       right: 10,
-                      child: SaveToGalleryButton(path: _path),
+                      child: _glassCircle(SaveToGalleryButton(
+                        path: _path,
+                      )),
                     ),
                     Positioned(
                       left: 0,
@@ -246,17 +259,31 @@ class _PlayerPageState extends State<PlayerPage> {
                       bottom: 0,
                       child: AnimatedOpacity(
                         opacity: _controls ? 1 : 0,
-                        duration: const Duration(milliseconds: 150),
-                        child: IgnorePointer(
-                          ignoring: !_controls,
-                          child: Container(
-                            color: Colors.black54,
-                            padding: EdgeInsets.only(
-                                left: 4,
-                                right: 0,
-                                top: 4,
-                                bottom:
-                                    MediaQuery.paddingOf(context).bottom + 4),
+                        duration: const Duration(milliseconds: 250),
+                        child: AnimatedSlide(
+                          // T10：浮现/隐藏带 8px 纵向位移（原型 translateY(8px)，
+                          // 底部条约 66px 高 → fraction ≈ 0.12）
+                          offset: _controls
+                              ? Offset.zero
+                              : const Offset(0, 0.12),
+                          duration: const Duration(milliseconds: 250),
+                          curve: Curves.easeOut,
+                          child: IgnorePointer(
+                            ignoring: !_controls,
+                            child: ClipRect(
+                              // T10：底栏深色毛玻璃（黑 55%＋blur 20）
+                              child: BackdropFilter(
+                                filter:
+                                    ImageFilter.blur(sigmaX: 20, sigmaY: 20),
+                                child: Container(
+                                  color: _glassBarColor,
+                                  padding: EdgeInsets.only(
+                                      left: 4,
+                                      right: 0,
+                                      top: 4,
+                                      bottom:
+                                          MediaQuery.paddingOf(context).bottom +
+                                              4),
                             child: Row(
                               children: [
                                 IconButton(
@@ -310,11 +337,30 @@ class _PlayerPageState extends State<PlayerPage> {
                               ],
                             ),
                           ),
+                              ),
+                            ),
+                          ),
                         ),
                       ),
                     ),
                   ],
                 ),
+    );
+  }
+
+  /// 顶部控制钮的圆形毛玻璃底（T10：rgba(24,24,24,.55)＋blur 20）
+  Widget _glassCircle(Widget child) {
+    return ClipOval(
+      child: BackdropFilter(
+        filter: ImageFilter.blur(sigmaX: 20, sigmaY: 20),
+        child: Container(
+          width: 40,
+          height: 40,
+          color: _glassBarColor,
+          alignment: Alignment.center,
+          child: child,
+        ),
+      ),
     );
   }
 
