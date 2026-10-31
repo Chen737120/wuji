@@ -52,6 +52,13 @@ class HomeShell extends StatefulWidget {
     required this.onFabPressed,
   });
 
+  /// 当前 tab 广播（T9）：统计页监听它，每次切入 stats tab 边沿
+  /// 重放图表进场动画（与原型一致）
+  static final ValueNotifier<int> currentTab = ValueNotifier<int>(0);
+
+  /// 统计 tab 在 pages 中的索引（T9 进场触发判定用）
+  static const int statsTabIndex = 2;
+
   final List<Widget> pages; // [记录页, 剪辑页, 统计页, 我的页]
   final VoidCallback? onFabPressed; // 悬浮球点击＝新增课
 
@@ -138,6 +145,7 @@ class _HomeShellState extends State<HomeShell>
       onPressed: () {
         if (_tab == idx) return;
         setState(() => _tab = idx);
+        HomeShell.currentTab.value = idx;
         _bump.forward(from: 0);
       },
       child: Column(

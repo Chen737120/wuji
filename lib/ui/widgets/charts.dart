@@ -11,30 +11,61 @@ Color darkenChartColor(Color c, [double amount = .38]) =>
 /// 跳舞趋势柱状图：非峰值柱 #ECECE8，峰值柱点缀色；顶部「按天 · 按月」切换。
 /// 柱区可**左右滑动**查看按天（60 天）/按月（12 个月）的过往数据，
 /// 进入/切换时自动定位到最右（最新）。
+/// 进场（T9）：柱高弹簧生长，每柱错峰 12ms（原型 i*12ms、response .5）；
+/// entryGeneration 变化（切入统计 tab）或模式切换时重放。
 class TrendBars extends StatefulWidget {
   const TrendBars({
     super.key,
     required this.points,
     required this.mode,
     required this.onModeChanged,
+    this.entryGeneration = 0,
   });
 
   final List<BarPoint> points;
   final TrendMode mode;
   final ValueChanged<TrendMode> onModeChanged;
+  final int entryGeneration;
 
   @override
   State<TrendBars> createState() => _TrendBarsState();
 }
 
-class _TrendBarsState extends State<TrendBars> {
+class _TrendBarsState extends State<TrendBars>
+    with SingleTickerProviderStateMixin {
   final ScrollController _scroll = ScrollController();
   int? _selected; // 点击选中的柱（需求 #9：气泡显示时长）
+  late final AnimationController _entry = AnimationController(
+      vsync: this, duration: _entryDuration(widget.points.length));
+
+  /// 进场总时长：错峰窗口＋弹簧收敛窗口（2×response 0.5s）
+  static Duration _entryDuration(int n) =>
+      Duration(milliseconds: (n - 1).clamp(0, 1 << 30) * 12 + 1000);
+
+  /// 柱 i 的生长进度（0→1，临界阻尼弹簧按 12ms 错峰采样）
+  double _barProgress(int i) {
+    if (_entry.value >= 1.0) return 1;
+    final tSec = _entry.value * _entry.duration!.inMilliseconds / 1000.0;
+    final local = ((tSec - i * 0.012) / 1.0).clamp(0.0, 1.0);
+    return const SpringHeightCurve().transform(local);
+  }
+
+  void _replayEntry() {
+    if (MediaQuery.disableAnimationsOf(context)) {
+      _entry.value = 1.0;
+      return;
+    }
+    _entry.duration = _entryDuration(widget.points.length);
+    _entry.forward(from: 0);
+  }
 
   @override
   void initState() {
     super.initState();
     _jumpToEnd();
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (mounted) _replayEntry();
+    });
   }
 
   @override
@@ -44,6 +75,11 @@ class _TrendBarsState extends State<TrendBars> {
     // points 每次 build 都是新 List，引用比较恒真，会把用户左滑的历史位置弹回。
     if (old.mode != widget.mode) {
       _jumpToEnd();
+    }
+    // 切入统计 tab（代次变化）或模式切换时重放进场（原型 trendMode 同样重放）
+    if (old.entryGeneration != widget.entryGeneration ||
+        old.mode != widget.mode) {
+      _replayEntry();
     }
   }
 
@@ -57,6 +93,7 @@ class _TrendBarsState extends State<TrendBars> {
   @override
   void dispose() {
     _scroll.dispose();
+    _entry.dispose();
     super.dispose();
   }
 
@@ -168,7 +205,10 @@ class _TrendBarsState extends State<TrendBars> {
                             height: barH + labelH,
                             child: Stack(
                               children: [
-                                Row(
+                                // T9：柱高弹簧生长（错峰 12ms），只 rebuild 柱区
+                                AnimatedBuilder(
+                                  animation: _entry,
+                                  builder: (_, _) => Row(
                                   crossAxisAlignment:
                                       CrossAxisAlignment.start,
                                   children: [
@@ -192,15 +232,17 @@ class _TrendBarsState extends State<TrendBars> {
                                                           .end,
                                                   children: [
                                                     Container(
-                                                      height: points[i]
+                                                      // T9：柱高从 0 弹簧生长到目标（0 分钟柱的 2px 灰底线同乘进度）
+                                                      height: (points[i]
                                                                   .minutes ==
                                                               0
-                                                          ? 2
+                                                          ? 2.0
                                                           : (points[i].minutes /
                                                                   (peak == 0
                                                                       ? 1
                                                                       : peak)) *
-                                                              (barH - 4),
+                                                              (barH - 4)) *
+                                                          _barProgress(i),
                                                       margin: EdgeInsets
                                                           .symmetric(
                                                               horizontal: widget
@@ -247,6 +289,7 @@ class _TrendBarsState extends State<TrendBars> {
                                         ),
                                       ),
                                   ],
+                                ),
                                 ),
                                 // 时长气泡（点击柱子时显示；2026-10-08 需求 #4-2
                                 // 气泡尺寸与文字同步缩小一档）
@@ -337,17 +380,60 @@ class _TrendBarsState extends State<TrendBars> {
 /// 舞种分布环形图＋图例（2026-10-07 调整：**颜色联动外观点缀色**——
 /// 调色板中选与点缀色最接近的一色给占比最高的舞种，其余按调色板顺序
 /// 循环；"其他"中性灰。中心显示"X种/舞种分布"）。
-class StyleDonut extends StatelessWidget {
+/// 舞种环形图（T9 进场：各段弧 0→目标弹簧展开，单 controller 0.8s＝
+/// 2×response 0.4；entryGeneration 变化时重放）。
+class StyleDonut extends StatefulWidget {
   const StyleDonut({
     super.key,
     required this.slices,
     required this.totalSessions,
     required this.accent,
+    this.entryGeneration = 0,
   });
 
   final List<StyleSlice> slices;
   final int totalSessions;
   final Color accent; // 当前外观点缀色
+  final int entryGeneration;
+
+  @override
+  State<StyleDonut> createState() => _StyleDonutState();
+}
+
+class _StyleDonutState extends State<StyleDonut>
+    with SingleTickerProviderStateMixin {
+  late final AnimationController _entry =
+      AnimationController(vsync: this, duration: const Duration(milliseconds: 800));
+
+  void _replayEntry() {
+    if (MediaQuery.disableAnimationsOf(context)) {
+      _entry.value = 1.0;
+      return;
+    }
+    _entry.forward(from: 0);
+  }
+
+  @override
+  void initState() {
+    super.initState();
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (mounted) _replayEntry();
+    });
+  }
+
+  @override
+  void didUpdateWidget(covariant StyleDonut old) {
+    super.didUpdateWidget(old);
+    if (old.entryGeneration != widget.entryGeneration) {
+      _replayEntry();
+    }
+  }
+
+  @override
+  void dispose() {
+    _entry.dispose();
+    super.dispose();
+  }
 
   /// 各 slice 颜色：占比最高（slices[0]）取调色板中最接近点缀色的颜色，
   /// 后续按调色板顺序循环。
@@ -370,6 +456,9 @@ class StyleDonut extends StatelessWidget {
     return kRainbowPalette[(nearest + nonOtherIdx) % kRainbowPalette.length];
   }
 
+  Color get accent => widget.accent;
+  List<StyleSlice> get slices => widget.slices;
+
   @override
   Widget build(BuildContext context) {
     // 中心文字："X种 / 舞种分布"；盒子和画布同尺寸（116），孔径加大保证完整
@@ -384,7 +473,15 @@ class StyleDonut extends StatelessWidget {
             alignment: Alignment.center,
             children: [
               // Stack loose 约束下无 child 的 CustomPaint 尺寸会变 0——必须显式给 size
-              CustomPaint(size: const Size(116, 116), painter: _DonutPainter(slices, sliceColor)),
+              // T9：弧段 sweep × 弹簧进度（progress=1 时与原绘制完全一致）
+              AnimatedBuilder(
+                animation: _entry,
+                builder: (_, _) => CustomPaint(
+                    size: const Size(116, 116),
+                    painter: _DonutPainter(slices, sliceColor,
+                        progress:
+                            const SpringHeightCurve().transform(_entry.value))),
+              ),
               Column(
                 mainAxisSize: MainAxisSize.min,
                 children: [
@@ -436,14 +533,18 @@ class StyleDonut extends StatelessWidget {
     );
   }
 
-  String _pct(int sessions) =>
-      totalSessions == 0 ? '0' : (sessions * 100 / totalSessions).round().toString();
+  String _pct(int sessions) => widget.totalSessions == 0
+      ? '0'
+      : (sessions * 100 / widget.totalSessions).round().toString();
 }
 
 class _DonutPainter extends CustomPainter {
-  _DonutPainter(this.slices, this.colorOf);
+  _DonutPainter(this.slices, this.colorOf, {this.progress = 1.0});
   final List<StyleSlice> slices;
   final Color Function(StyleSlice) colorOf;
+
+  /// T9 进场：各段弧 sweep 的生长进度（1=终态，与原绘制一致）
+  final double progress;
 
   @override
   void paint(Canvas canvas, Size size) {
@@ -462,9 +563,9 @@ class _DonutPainter extends CustomPainter {
         center: Offset(size.width / 2, size.height / 2), radius: size.width / 2 - 8);
     var start = -math.pi / 2;
     for (var i = 0; i < slices.length; i++) {
-      final sweep = slices[i].sessions / total * 2 * math.pi;
+      final sweep = slices[i].sessions / total * 2 * math.pi * progress;
       canvas.drawArc(rect, start, sweep, true, Paint()..color = colorOf(slices[i]));
-      start += sweep;
+      start += slices[i].sessions / total * 2 * math.pi;
     }
     // 中孔加大（孔径 72px），保证"X种/舞种分布"完整显示不被环挡
     canvas.drawCircle(rect.center, rect.width / 2 - 14,
@@ -473,11 +574,14 @@ class _DonutPainter extends CustomPainter {
 
   @override
   bool shouldRepaint(covariant _DonutPainter old) =>
-      old.slices != slices || old.colorOf != colorOf;
+      old.slices != slices ||
+      old.colorOf != colorOf ||
+      old.progress != progress;
 }
 
 /// 老师/舞室水平条（2026-10-07 调整）：**超过 8 条只显示前 8 条**，
 /// 底部居中"加载更多 ∨"胶囊按钮展开/收起（替代原右上角小字，参考图一）。
+/// 进场（T9）：条宽弹簧生长，每条错峰 60ms（原型 60ms、response .5）。
 class NameBars extends StatefulWidget {
   const NameBars({
     super.key,
@@ -485,19 +589,66 @@ class NameBars extends StatefulWidget {
     required this.items,
     required this.totalSessions,
     this.collapsedTop = 8,
+    this.entryGeneration = 0,
   });
 
   final String title;
   final List<NameCount> items;
   final int totalSessions;
   final int collapsedTop;
+  final int entryGeneration;
 
   @override
   State<NameBars> createState() => _NameBarsState();
 }
 
-class _NameBarsState extends State<NameBars> {
+class _NameBarsState extends State<NameBars>
+    with SingleTickerProviderStateMixin {
   bool _expanded = false;
+  late final AnimationController _entry = AnimationController(
+      vsync: this, duration: _entryDuration(widget.items.length));
+
+  static Duration _entryDuration(int n) =>
+      Duration(milliseconds: (n - 1).clamp(0, 1 << 30) * 60 + 1000);
+
+  /// 条 i 的生长进度（0→1，临界阻尼弹簧按 60ms 错峰采样）
+  double _barProgress(int i) {
+    if (_entry.value >= 1.0) return 1;
+    final tSec = _entry.value * _entry.duration!.inMilliseconds / 1000.0;
+    final local = ((tSec - i * 0.060) / 1.0).clamp(0.0, 1.0);
+    return const SpringHeightCurve().transform(local);
+  }
+
+  void _replayEntry() {
+    if (MediaQuery.disableAnimationsOf(context)) {
+      _entry.value = 1.0;
+      return;
+    }
+    _entry.duration = _entryDuration(widget.items.length);
+    _entry.forward(from: 0);
+  }
+
+  @override
+  void initState() {
+    super.initState();
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (mounted) _replayEntry();
+    });
+  }
+
+  @override
+  void didUpdateWidget(covariant NameBars old) {
+    super.didUpdateWidget(old);
+    if (old.entryGeneration != widget.entryGeneration) {
+      _replayEntry();
+    }
+  }
+
+  @override
+  void dispose() {
+    _entry.dispose();
+    super.dispose();
+  }
 
   /// 「2节（50%）」；总节数为 0 时只显示节数。
   String _countLabel(int sessions, int total) {
@@ -513,7 +664,9 @@ class _NameBarsState extends State<NameBars> {
     final visible = _expanded ? items : items.take(widget.collapsedTop).toList();
     final overflow = items.length > widget.collapsedTop;
     final accent = Theme.of(context).colorScheme.primary;
-    return Column(
+    return AnimatedBuilder(
+      animation: _entry,
+      builder: (_, _) => Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         Text(widget.title,
@@ -543,9 +696,11 @@ class _NameBarsState extends State<NameBars> {
                     ),
                     child: FractionallySizedBox(
                       alignment: Alignment.centerLeft,
-                      widthFactor: totalSessions == 0
-                          ? 0
-                          : item.sessions / totalSessions,
+                      // T9：条宽弹簧生长（visible 序错峰）
+                      widthFactor: (totalSessions == 0
+                              ? 0.0
+                              : item.sessions / totalSessions) *
+                          _barProgress(visible.indexOf(item)),
                       child: Container(
                         decoration: BoxDecoration(
                           // 前十色循环 + 整体调亮一档（2026-10-07：轻松活泼）
@@ -597,6 +752,7 @@ class _NameBarsState extends State<NameBars> {
             ),
           ),
       ],
+      ),
     );
   }
 }

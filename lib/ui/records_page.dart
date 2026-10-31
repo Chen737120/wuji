@@ -1,5 +1,4 @@
 import 'dart:io';
-import 'dart:math' as math;
 import 'dart:ui' show ImageFilter;
 
 import 'package:flutter/material.dart';
@@ -80,18 +79,6 @@ const List<BoxShadow> kCardShadow = [
   BoxShadow(
       color: Color(0x0D1A1A1A), offset: Offset(0, 4), blurRadius: 14),
 ];
-
-/// 临界阻尼弹簧高度曲线（damping 1.0）：x(t)=1−e^(−2πt)·(1+2πt)，
-/// duration 取 2×response 让终点精确收敛 1（t=0.5 即 response 处已达 98.6%）。
-class SpringHeightCurve extends Curve {
-  const SpringHeightCurve();
-
-  @override
-  double transform(double t) {
-    final x = 2 * math.pi * t;
-    return 1 - math.exp(-x) * (1 + x);
-  }
-}
 
 /// 记录页（规格 §3.3）：日历（默认展开、记住状态）＋按月分组时间流。
 class RecordsPage extends StatefulWidget {

@@ -6,6 +6,7 @@ import '../reload_bus.dart';
 import '../services/stats.dart';
 import '../services/startup_warmup.dart';
 import '../theme.dart';
+import 'home_shell.dart';
 import 'sheets/date_range_sheet.dart';
 import 'widgets/charts.dart';
 
@@ -31,7 +32,17 @@ class _StatsPageState extends State<StatsPage>
   // 2026-10-07 需求 #5：每次重新打开软件，选择状态恢复默认
   bool _wasPaused = false;
 
+  // T9 图表进场：每次切入统计 tab 边沿 +1（图表据此重放进场动画）
+  int _entryGen = 0;
+  late final VoidCallback _onTabChanged = _handleTabChanged;
+
   ClassSaver get _saver => context.read<ClassSaver>();
+
+  void _handleTabChanged() {
+    if (HomeShell.currentTab.value == HomeShell.statsTabIndex && mounted) {
+      setState(() => _entryGen++);
+    }
+  }
 
   @override
   void initState() {
@@ -39,12 +50,14 @@ class _StatsPageState extends State<StatsPage>
     WidgetsBinding.instance.addObserver(this);
     _load();
     ReloadBus.instance.addListener(_load);
+    HomeShell.currentTab.addListener(_onTabChanged);
   }
 
   @override
   void dispose() {
     WidgetsBinding.instance.removeObserver(this);
     ReloadBus.instance.removeListener(_load);
+    HomeShell.currentTab.removeListener(_onTabChanged);
     super.dispose();
   }
 
@@ -139,6 +152,7 @@ class _StatsPageState extends State<StatsPage>
                 child: TrendBars(
                   points: _stats.trend,
                   mode: _trendMode,
+                  entryGeneration: _entryGen,
                   onModeChanged: (m) => setState(() => _trendMode = m),
                 ),
               ),
@@ -159,6 +173,7 @@ class _StatsPageState extends State<StatsPage>
                       slices: _stats.styleSlices,
                       totalSessions: _stats.sessionCount,
                       accent: Theme.of(context).colorScheme.primary,
+                      entryGeneration: _entryGen,
                     ),
                   ],
                 ),
@@ -171,6 +186,7 @@ class _StatsPageState extends State<StatsPage>
                   title: '老师统计',
                   items: _stats.teacherStats,
                   totalSessions: _stats.sessionCount,
+                  entryGeneration: _entryGen,
                 ),
               ),
               const SizedBox(height: 10),
@@ -181,6 +197,7 @@ class _StatsPageState extends State<StatsPage>
                   title: '舞室统计',
                   items: _stats.studioStats,
                   totalSessions: _stats.sessionCount,
+                  entryGeneration: _entryGen,
                 ),
               ),
               // 跳舞热力图（2026-10-08 需求 #8）：最近 26 周，
