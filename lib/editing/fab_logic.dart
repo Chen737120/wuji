@@ -36,6 +36,46 @@ class FabLogic {
   /// 位移阈值 <6dp 判定为点击（规格 §3）。
   static bool isTap(Offset delta) => delta.distance < 6;
 
+  /// 动量投影（T11，原型 project(v, decelRate .998) 闭式）：
+  /// 释放速度 px/s → 惯性滑行总位移 px。
+  static double projectMomentum(double vPerSec, [double rate = .998]) =>
+      (vPerSec / 1000) * rate / (1 - rate);
+
+  /// rubber-band 阻尼（T11，原型 rubberband(o, dim 60, c .55)）：
+  /// 出界量 → 弹性视觉偏移，越远阻力越大。
+  static double rubberband(double over, [double dim = 60, double c = .55]) =>
+      (over * dim * c) / (dim + c * over.abs());
+
+  /// 拖拽中的软 clamp（T11）：边界内原样，出界部分按 rubber-band 弹性偏移
+  /// （与 [clampIntoScreen] 的硬 clamp 相对）。
+  static Offset clampRubberBand(Offset o, Size screen, Size ball) {
+    final maxX = (screen.width - ball.width).clamp(0.0, double.infinity);
+    final maxY =
+        (screen.height - ball.height - bottomBarHeight).clamp(0.0, double.infinity);
+    double band(double v, double min, double max) {
+      if (v < min) return min - rubberband(min - v);
+      if (v > max) return max + rubberband(v - max);
+      return v;
+    }
+
+    return Offset(band(o.dx, 0, maxX), band(o.dy, 0, maxY));
+  }
+
+  /// 释放目标（T11，原型 fabRelease）：x＝当前位置＋动量投影后按投影位置
+  /// 贴较近的左/右边缘；y＝投影×0.35 阻尼后 clamp 入屏（不贴边）。
+  static Offset releaseTarget(
+      Offset o, Offset velocityPerSec, Size screen, Size ball) {
+    final maxX = (screen.width - ball.width).clamp(0.0, double.infinity);
+    final maxY =
+        (screen.height - ball.height - bottomBarHeight).clamp(0.0, double.infinity);
+    final px = o.dx + projectMomentum(velocityPerSec.dx);
+    final tx = px < maxX / 2 ? 0.0 : maxX;
+    final ty = (o.dy + projectMomentum(velocityPerSec.dy) * .35)
+        .clamp(0.0, maxY)
+        .toDouble();
+    return Offset(tx, ty);
+  }
+
   static double _clampAxis(double v, double min, double max) =>
       v.clamp(min, max);
 }
