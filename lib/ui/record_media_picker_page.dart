@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
 import 'package:provider/provider.dart';
@@ -53,9 +55,36 @@ class _RecordMediaPickerPageState extends State<RecordMediaPickerPage> {
     _picking = true;
     final messenger = ScaffoldMessenger.of(context);
     final resolver = context.read<MediaPathResolver?>();
+    // 大视频的 SAF 拷贝耗时数百 ms~秒级，期间无反馈会被当成卡死
+    // （2026-10-31 用户反馈）：与相册入口（media_source_picker
+    // _pickFromAlbum）同款「准备中」模态遮罩——返回键/点击都关不掉，
+    // 随 resolve 完成统一收口；模态同时从 UI 层挡连点（_picking 守卫在前）。
+    var dialogOpen = true;
+    unawaited(showDialog<void>(
+      context: context,
+      barrierDismissible: false,
+      builder: (dlgCtx) => PopScope(
+        canPop: false,
+        child: AlertDialog(
+          backgroundColor: Colors.white,
+          content: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: const [
+              CircularProgressIndicator(strokeWidth: 2),
+              SizedBox(height: 12),
+              Text('准备中…',
+                  style: TextStyle(fontSize: 12, color: AppColors.secondary)),
+            ],
+          ),
+        ),
+      ),
+    ).whenComplete(() => dialogOpen = false));
     final path =
         await AbsPathCache.resolve(resolver, video.fileName, paced: true);
     if (!mounted) return;
+    if (dialogOpen) {
+      Navigator.of(context, rootNavigator: true).pop(); // 关「准备中」遮罩
+    }
     if (path == null) {
       // 解析失败不 pop：把相对路径带走会让上层播放必然 Source error（P1-13）
       _picking = false; // 失败复位：允许用户改点别的视频（F1）

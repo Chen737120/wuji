@@ -78,9 +78,14 @@ class _FakeSaver implements ClassSaver {
 
 class _PopObserver extends NavigatorObserver {
   int didPopCount = 0;
+
+  /// 选片页自身的 pop 次数（「准备中」遮罩等非页面路由不计入——
+  /// 遮罩与页面都 pop 时总数会 >1，回归断言只关心页面只 pop 一次）
+  int pickerPopCount = 0;
   @override
   void didPop(Route<dynamic> route, Route<dynamic>? previousRoute) {
     didPopCount++;
+    if (route.settings.name == 'record-media-picker') pickerPopCount++;
   }
 }
 
@@ -134,6 +139,7 @@ void main() {
               onPicked(await Navigator.push<PickedSource>(
                   context,
                   MaterialPageRoute(
+                      settings: const RouteSettings(name: 'record-media-picker'),
                       builder: (_) => const RecordMediaPickerPage())));
             },
             child: const Text('open'),
@@ -158,13 +164,20 @@ void main() {
     expect(find.byType(ListTile), findsNWidgets(2));
 
     // 连点两个条目：两次 tap 之间不 pump——第一次 _pick 还挂在 200ms
-    // resolve 延迟上（模拟真机 SAF 拷贝窗口），第二次点击应被守卫拦下
+    // resolve 延迟上（模拟真机 SAF 拷贝窗口）。第二次 tap 实际落在
+    // 「准备中」模态遮罩上（UI 防线，tap 帮手内部帧推进后 barrier 已在
+    // 渲染树）；_picking 守卫为纵深防御（遮罩渲染前 ~1 帧的窗口兜底）。
+    // 断言的是用户可见契约：连点 → 页面只 pop 一次＋遮罩出现并关闭＋结果回传。
     await tester.tap(find.byType(ListTile).at(0));
-    await tester.tap(find.byType(ListTile).at(1));
-    await tester.pumpAndSettle(); // 推进假时钟：resolve 完成 → pop＋转场收尾
+    await tester.tap(find.byType(ListTile).at(1), warnIfMissed: false);
+    // 等待提示（2026-10-31 反馈）：resolve 窗口内必须有「准备中」遮罩
+    await tester.pump();
+    expect(find.text('准备中…'), findsOneWidget, reason: '大视频拷贝窗口须有等待提示');
+    await tester.pumpAndSettle(); // 推进假时钟：resolve 完成 → 关遮罩＋pop＋转场收尾
 
+    expect(find.text('准备中…'), findsNothing, reason: 'resolve 完成后遮罩必须关闭');
     expect(tester.takeException(), isNull, reason: '连点不得抛未捕获异常');
-    expect(observer.didPopCount, 1, reason: '连点任意多项只允许一次 pop');
+    expect(observer.pickerPopCount, 1, reason: '连点任意多项只允许页面 pop 一次');
     expect(picked, isNotNull, reason: '上层（直拍/mosaic 入口）正常拿到所选视频');
     expect(picked!.path, '${tmp.path}/v.mp4');
   });
@@ -183,15 +196,18 @@ void main() {
     ));
     await tester.tap(find.text('open'));
     await tester.pumpAndSettle();
-    // 第一次点击：解析失败 → SnackBar，不 pop、守卫复位
+    // 第一次点击：解析失败 → 遮罩关闭＋SnackBar，不 pop、守卫复位
     await tester.tap(find.byType(ListTile).at(0));
     await tester.pumpAndSettle();
     expect(find.text('视频文件已丢失，可从备份导入恢复'), findsOneWidget);
-    expect(observer.didPopCount, 0);
-    // 第二次点击：复位后守卫放行 → 成功 pop
+    expect(find.text('准备中…'), findsNothing, reason: '失败路径也必须关遮罩');
+    expect(observer.pickerPopCount, 0);
+    // 第二次点击：复位后守卫放行 → 遮罩再现并随成功关闭 → 成功 pop
     await tester.tap(find.byType(ListTile).at(1));
+    await tester.pump();
+    expect(find.text('准备中…'), findsOneWidget);
     await tester.pumpAndSettle();
-    expect(observer.didPopCount, 1);
+    expect(observer.pickerPopCount, 1);
     expect(picked, isNotNull);
     expect(tester.takeException(), isNull);
   });
