@@ -1,15 +1,13 @@
 import 'package:flutter/material.dart';
 import '../../theme.dart';
+import '../widgets/spring_sheet.dart';
 
 /// 课程时长弹层（规格 §3.4）：上课节数（1–10）× 每节时长（50–180，步进 5）。
 Future<(int, int)?> showDurationSheet(BuildContext context,
     {required int sessions, required int minutesEach}) {
-  return showModalBottomSheet<(int, int)>(
-    context: context,
-    backgroundColor: AppColors.bg,
-    shape: const RoundedRectangleBorder(
-      borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
-    ),
+  // T6：弹簧弹层容器（圆角/底色/把手动画由容器接管）
+  return showSpringSheet<(int, int)>(
+    context,
     builder: (_) => _DurationSheet(sessions: sessions, minutesEach: minutesEach),
   );
 }

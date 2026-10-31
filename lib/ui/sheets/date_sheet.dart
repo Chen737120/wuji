@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import '../../theme.dart';
+import '../widgets/spring_sheet.dart';
 
 /// 日期选择底部弹层：应用内中文月历（周一为首列），点缀色高亮，
 /// 点某天直接返回。替代系统英文 Material 日期弹窗。
@@ -9,11 +10,9 @@ Future<DateTime?> showDateSheet(
   DateTime? firstDate,
   DateTime? lastDate,
 }) {
-  return showModalBottomSheet<DateTime>(
-    context: context,
-    backgroundColor: Colors.white,
-    shape: const RoundedRectangleBorder(
-        borderRadius: BorderRadius.vertical(top: Radius.circular(16))),
+  // T6：弹簧弹层容器（圆角/底色/把手动画由容器接管）
+  return showSpringSheet<DateTime>(
+    context,
     builder: (ctx) => _DateSheet(
       initial: initial,
       firstDate: firstDate ?? DateTime(2000),

@@ -3,16 +3,13 @@ import '../../data/db.dart' show TaxonomyItem;
 import '../../data/taxonomy_repo.dart';
 import '../../models/models.dart';
 import '../../theme.dart';
+import '../widgets/spring_sheet.dart';
 
 /// 舞种选择底部弹层（规格 §3.4）：预设网格＋「自定义」虚线格。
 Future<TaxonomyItem?> showStyleSheet(BuildContext context, TaxonomyRepo repo) {
-  return showModalBottomSheet<TaxonomyItem>(
-    context: context,
-    backgroundColor: AppColors.bg,
-    isScrollControlled: true,
-    shape: const RoundedRectangleBorder(
-      borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
-    ),
+  // T6：弹簧弹层容器（圆角/底色/把手动画由容器接管）
+  return showSpringSheet<TaxonomyItem>(
+    context,
     builder: (_) => _StyleSheet(repo: repo),
   );
 }

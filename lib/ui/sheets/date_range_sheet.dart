@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import '../../theme.dart';
+import '../widgets/spring_sheet.dart';
 
 /// 起止日期选择底部弹层：同一张中文月历上点第一天=开始、再点一天=结束
 /// （晚于开始的点击自动与开始互换），区间内日期浅色高亮。
@@ -9,12 +10,9 @@ Future<(DateTime, DateTime)?> showDateRangeSheet(
   DateTime? initialStart,
   DateTime? initialEnd,
 }) {
-  return showModalBottomSheet<(DateTime, DateTime)>(
-    context: context,
-    backgroundColor: Colors.white,
-    isScrollControlled: true,
-    shape: const RoundedRectangleBorder(
-        borderRadius: BorderRadius.vertical(top: Radius.circular(16))),
+  // T6：弹簧弹层容器（圆角/底色/把手动画由容器接管）
+  return showSpringSheet<(DateTime, DateTime)>(
+    context,
     builder: (ctx) => _DateRangeSheet(
       initialStart: initialStart,
       initialEnd: initialEnd,

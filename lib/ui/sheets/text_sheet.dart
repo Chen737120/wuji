@@ -3,6 +3,7 @@ import '../../data/db.dart' show TaxonomyItem;
 import '../../data/taxonomy_repo.dart';
 import '../../models/models.dart';
 import '../../theme.dart';
+import '../widgets/spring_sheet.dart';
 
 /// 老师/舞室输入弹层（规格 §3.4）：输入框＋确定＋「最近输入」chips。
 Future<TaxonomyItem?> showTextSheet(
@@ -12,13 +13,9 @@ Future<TaxonomyItem?> showTextSheet(
   String title = '输入',
   String hint = '',
 }) {
-  return showModalBottomSheet<TaxonomyItem>(
-    context: context,
-    backgroundColor: AppColors.bg,
-    isScrollControlled: true,
-    shape: const RoundedRectangleBorder(
-      borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
-    ),
+  // T6：弹簧弹层容器（圆角/底色/把手动画由容器接管）
+  return showSpringSheet<TaxonomyItem>(
+    context,
     builder: (_) => _TextSheet(repo: repo, kind: kind, title: title, hint: hint),
   );
 }

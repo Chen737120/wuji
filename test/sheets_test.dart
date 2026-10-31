@@ -9,6 +9,7 @@ import 'package:wuji/ui/sheets/date_range_sheet.dart';
 import 'package:wuji/ui/sheets/date_sheet.dart';
 import 'package:wuji/ui/sheets/style_sheet.dart';
 import 'package:wuji/ui/sheets/text_sheet.dart';
+import 'package:wuji/ui/widgets/spring_sheet.dart';
 
 void main() {
   late AppDatabase db;
@@ -103,6 +104,42 @@ void main() {
     expect(picked, isNotNull);
     expect(picked!.$1, 2);
     expect(picked!.$2, 50);
+  });
+
+  testWidgets('SpringSheet 容器：慢拖回弹、快甩/拖过 45% 关闭（T6）',
+      (tester) async {
+    tester.view.physicalSize = const Size(400, 890);
+    tester.view.devicePixelRatio = 1.0;
+    addTearDown(tester.view.reset);
+    await tester.pumpWidget(MaterialApp(
+        home: Scaffold(
+            body: Center(
+      child: Builder(
+          builder: (context) => TextButton(
+                onPressed: () => showSpringSheet<void>(
+                  context,
+                  builder: (_) =>
+                      const SizedBox(height: 300, child: Text('sheet内容')),
+                ),
+                child: const Text('open'),
+              )),
+    ))));
+    await tester.tap(find.text('open'));
+    await tester.pumpAndSettle();
+    expect(find.text('sheet内容'), findsOneWidget);
+
+    // 慢拖 30px（<45% 高度、速度低）松手 → 弹簧回弹，sheet 仍在
+    await tester.drag(find.byKey(const ValueKey('spring-sheet-handle')),
+        const Offset(0, 30),
+        touchSlopY: 18);
+    await tester.pumpAndSettle();
+    expect(find.text('sheet内容'), findsOneWidget);
+
+    // 快甩向下（>700px/s）→ 关闭
+    await tester.fling(find.byKey(const ValueKey('spring-sheet-handle')),
+        const Offset(0, 100), 3000);
+    await tester.pumpAndSettle();
+    expect(find.text('sheet内容'), findsNothing);
   });
 
   testWidgets('text sheet shows recent chips and tap chip returns',
