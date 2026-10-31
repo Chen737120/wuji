@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import '../../theme.dart';
+import 'widgets/pressable_scale.dart';
 
 /// 剪辑落地页（规格 §3）：三张入口卡＋页脚说明。
 class EditHubPage extends StatelessWidget {
@@ -78,13 +79,16 @@ class _EntryCard extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final accent = Theme.of(context).colorScheme.primary;
-    return Material(
-      color: Colors.white,
-      borderRadius: BorderRadius.circular(16),
-      child: InkWell(
+    // T8：按压反馈用 PressableScale（spec §2.1 勿用 InkWell 水波纹替代；
+    // 原型 .pressable 即纯缩放），卡片样式零改动
+    return PressableScale(
+      enabled: onTap != null,
+      child: Material(
+        color: Colors.white,
         borderRadius: BorderRadius.circular(16),
-        onTap: onTap,
-        child: Container(
+        child: GestureDetector(
+          onTap: onTap,
+          child: Container(
           // 2026-10-07 用户需求 #9：卡片调大，减少页面下部空旷感
           padding: const EdgeInsets.all(22),
           decoration: BoxDecoration(
@@ -124,6 +128,7 @@ class _EntryCard extends StatelessWidget {
             ],
           ),
         ),
+      ),
       ),
     );
   }

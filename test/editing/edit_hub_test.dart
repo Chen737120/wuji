@@ -3,6 +3,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:wuji/ui/edit_hub_page.dart';
 import 'package:wuji/ui/home_shell.dart';
+import 'package:wuji/ui/widgets/pressable_scale.dart';
 
 void main() {
   setUp(() => SharedPreferences.setMockInitialValues({}));
@@ -22,6 +23,8 @@ void main() {
     expect(find.text('同屏对比'), findsOneWidget);
     expect(find.text('视频打码'), findsOneWidget);
     expect(find.text('生成的视频保存在相册，原始课堂记录不受影响'), findsOneWidget);
+    // T8：三卡包按压反馈（替代 InkWell 波纹）
+    expect(find.byType(PressableScale), findsNWidgets(3));
 
     await tester.tap(find.text('舞蹈直拍'));
     expect(fancam, isTrue);
