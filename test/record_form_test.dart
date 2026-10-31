@@ -83,8 +83,18 @@ void main() {
         sizeBytes: size,
       );
 
+  /// 方案 A 后媒体网格占两行，默认 800×600 测试面会把 ListView 后续子项
+  /// （感受输入/保存钮）挤出视口（ListView 惰性构建）——需要整页交互的
+  /// 用例改用真机逻辑视口 400×890（物理 1200×2670 ÷ dpr3，F3 同款换算）。
+  void useDeviceViewport(WidgetTester tester) {
+    tester.view.physicalSize = const Size(1200, 2670);
+    tester.view.devicePixelRatio = 3.0;
+    addTearDown(tester.view.reset);
+  }
+
   testWidgets('picked files are passed to the saver with form fields',
       (tester) async {
+    useDeviceViewport(tester);
     await tester.pumpWidget(host(RecordFormPage(
       importer: FakeImporter([pm('/x/a.mp4'), pm('/x/b.mp4')]),
     )));
@@ -136,7 +146,8 @@ void main() {
     expect(find.text('爵士'), findsOneWidget);
     expect(find.text('小鹿'), findsOneWidget);
     expect(find.text('2节×90分'), findsOneWidget);
-    expect(find.text('abc.mp4'), findsOneWidget);
+    // 方案 A（2026-10-31 拍板）后 uuid 文件名不再展示——改断言视频卡片占位角标
+    expect(find.byIcon(Icons.play_arrow), findsOneWidget);
     expect(find.text('编辑这节课'), findsOneWidget);
   });
 
@@ -175,9 +186,9 @@ void main() {
     ];
     await tester.pumpWidget(host(RecordFormPage(existing: existing)));
     await tester.pumpAndSettle();
-    // resolver 给出绝对路径（/abs/…）→ Image.file 构建（errorBuilder 兜底）
+    // resolver 给出绝对路径（/abs/…）→ Image.file 构建（errorBuilder 兜底）；
+    // 方案 A 后 uuid 文件名不再展示，条目在场以封面 Image 表达
     expect(find.byType(Image), findsOneWidget);
-    expect(find.text('def.mp4'), findsOneWidget);
   });
 
   testWidgets('save button disables and shows 保存中 until save completes',
@@ -312,6 +323,7 @@ void main() {
 
   testWidgets('removeMediaIds 传快照：保存中再删附件不影响本次保存（P2-27）',
       (tester) async {
+    useDeviceViewport(tester);
     final now = DateTime.now();
     final existing = ClassRecord(
       id: 'r3',
@@ -357,19 +369,17 @@ void main() {
     await tester.tap(find.text('open'));
     await tester.pumpAndSettle();
 
-    // 按标题定位附件行（AppBar ✕ 与附件 ✕ 的树序不稳定，不用下标）
-    Finder removeButtonFor(String name) => find.descendant(
-          of: find.ancestor(of: find.text(name), matching: find.byType(Row)).first,
-          matching: find.byIcon(Icons.close),
-        );
-    expect(removeButtonFor('a.mp4'), findsOneWidget);
-    await tester.tap(removeButtonFor('a.mp4')); // 删 m1
+    // 方案 A 后卡片无文件名文本可寻址，删除按钮以 key 定位（id 对应后端行）
+    Finder removeButtonFor(String id) =>
+        find.byKey(ValueKey('media-remove-$id'));
+    expect(removeButtonFor('m1'), findsOneWidget);
+    await tester.tap(removeButtonFor('m1')); // 删 m1
     await tester.pump();
 
     await tester.tap(find.text('保存'));
     await tester.pump();
     // 保存仍挂起：再删 m2（UI 可操作）
-    await tester.tap(removeButtonFor('b.mp4'));
+    await tester.tap(removeButtonFor('m2'));
     await tester.pump();
 
     await tester.runAsync(() async {

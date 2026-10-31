@@ -61,7 +61,7 @@ class _RecordFormPageState extends State<RecordFormPage> {
   /// 失败过的键不再自动重试；用户重选同一文件时清除（见 _pickMedia）。
   final _coverFailed = <String>{};
 
-  /// 为本次新选的视频生成临时封面（56×42 小图，maxWidth 200 够用）。
+  /// 为本次新选的视频生成临时封面（方案 A 卡片 ~166 逻辑宽，maxWidth 500）。
   Future<void> _generateVideoCover(String coverKey, String videoPath) async {
     _coverPending.add(coverKey);
     try {
@@ -69,7 +69,7 @@ class _RecordFormPageState extends State<RecordFormPage> {
           video: videoPath,
           imageFormat: ImageFormat.JPEG,
           quality: 60,
-          maxWidth: 200);
+          maxWidth: 500);
       if (bytes == null || bytes.isEmpty) {
         _coverFailed.add(coverKey); // 失败记忆：不每帧重试（P2-26）
         return;
@@ -157,6 +157,7 @@ class _RecordFormPageState extends State<RecordFormPage> {
               fileName: r.fileName,
               thumbName: r.thumbName,
               isVideo: r.type == 'video',
+              durationSec: r.durationSec, // 方案 A 时长角标（方案拍板③）
             )));
     });
   }
@@ -447,55 +448,57 @@ class _RecordFormPageState extends State<RecordFormPage> {
         ),
       );
     }
-    return Column(
+    // 方案 A（原型 record-media-cover 已拍板，2026-10-31）：双列大封面网格——
+    // 封面为主视觉、uuid 文件名不再展示（无辨识度）；媒体区保持表单首位
+    return GridView.count(
+      crossAxisCount: 2,
+      shrinkWrap: true, // 嵌在 ListView 内：自收缩＋禁自身滚动
+      physics: const NeverScrollableScrollPhysics(),
+      mainAxisSpacing: 10,
+      crossAxisSpacing: 10,
+      childAspectRatio: 16 / 10,
       children: [
         for (final em in _existingMedia)
-          _mediaTile(
-              coverKey: em.thumbName ?? 'old:${em.fileName}',
-              title: em.fileName
-                  .split(Platform.pathSeparator)
-                  .last
-                  .split('/')
-                  .last,
-              isVideo: em.isVideo,
-              rel: em.thumbName ?? (em.isVideo ? null : em.fileName),
-              onRemove: () {
-                setState(() {
-                  _existingMedia.remove(em);
-                  _removedIds.add(em.id);
-                });
-              },
-              onPreview: () => _previewExisting(em)),
-        for (final p in _picked)
-          _mediaTile(
-              coverKey: p.path,
-              title: p.path.split(Platform.pathSeparator).last.split('/').last,
-              isVideo: p.isVideo,
-              pickedPath: p.path,
-              onRemove: () {
-                setState(() => _picked.remove(p));
-              },
-              onPreview: () => _previewPicked(p)),
-        const SizedBox(height: 6),
-        Align(
-          alignment: Alignment.centerLeft,
-          child: TextButton.icon(
-            onPressed: _pickMedia,
-            icon: const Icon(Icons.add, size: 16),
-            label: const Text('继续添加', style: TextStyle(fontSize: 12)),
+          _mediaCard(
+            coverKey: em.thumbName ?? 'old:${em.fileName}',
+            isVideo: em.isVideo,
+            removeKey: ValueKey('media-remove-${em.id}'),
+            durationSec: em.durationSec,
+            rel: em.thumbName ?? (em.isVideo ? null : em.fileName),
+            onRemove: () {
+              setState(() {
+                _existingMedia.remove(em);
+                _removedIds.add(em.id);
+              });
+            },
+            onPreview: () => _previewExisting(em),
           ),
-        ),
+        for (final p in _picked)
+          _mediaCard(
+            coverKey: p.path,
+            isVideo: p.isVideo,
+            removeKey: ValueKey('media-remove-picked-${p.path}'),
+            pickedPath: p.path,
+            onRemove: () {
+              setState(() => _picked.remove(p));
+            },
+            onPreview: () => _previewPicked(p),
+          ),
+        _addTile(),
       ],
     );
   }
 
-  /// 表单条目：封面小图（有封面显示封面，视频叠播放角标）＋文件名＋移除。
+  /// 表单媒体卡片（方案 A）：大封面为主视觉——视频封面叠播放角标＋时长
+  /// 角标（时长仅数据带时有：旧附件 durationSec；新选相册视频选片链路
+  /// 未带，退化为纯播放角标），× 悬浮右上角；uuid 文件名不展示。
   /// [pickedPath] 本次新选的绝对路径（视频用它生成封面，图片直接显示）；
   /// [rel] 旧附件的封面相对路径（视频无 thumbName 时为 null，留图标占位）。
-  Widget _mediaTile({
+  Widget _mediaCard({
     required String coverKey,
-    required String title,
     required bool isVideo,
+    required ValueKey<String> removeKey,
+    int? durationSec,
     String? pickedPath,
     String? rel,
     required VoidCallback onRemove,
@@ -516,63 +519,106 @@ class _RecordFormPageState extends State<RecordFormPage> {
         }
       }
     }
-    return Padding(
-      padding: const EdgeInsets.only(bottom: 6),
-      child: GestureDetector(
-        behavior: HitTestBehavior.opaque,
-        onTap: onPreview,
-        child: Row(
-        children: [
-          Container(
-            width: 56,
-            height: 42,
-            decoration: BoxDecoration(
-              color: AppColors.hairline, // 软占位色：封面生成前不再黑块
-              borderRadius: BorderRadius.circular(6),
-            ),
-            clipBehavior: Clip.antiAlias,
-            alignment: Alignment.center,
-            child: cover == null
+    return GestureDetector(
+      behavior: HitTestBehavior.opaque,
+      onTap: onPreview,
+      child: Container(
+        decoration: BoxDecoration(
+          color: AppColors.hairline, // 软占位色：封面生成前不再黑块
+          borderRadius: BorderRadius.circular(12),
+        ),
+        clipBehavior: Clip.antiAlias,
+        child: Stack(
+          fit: StackFit.expand,
+          children: [
+            cover == null
                 ? Icon(isVideo ? Icons.play_arrow : Icons.image,
-                    color: AppColors.faint, size: 18)
-                : Stack(
-                    fit: StackFit.expand,
-                    children: [
-                      Image.file(File(cover),
-                          fit: BoxFit.cover,
-                          cacheWidth: 200, // 56×42 小图：限解码宽防卡顿
-                          errorBuilder: (_, _, _) => Icon(
-                              isVideo ? Icons.play_arrow : Icons.image,
-                              color: AppColors.faint,
-                              size: 18)),
-                      if (isVideo)
-                        Center(
-                          child: Container(
-                            width: 18,
-                            height: 18,
-                            decoration: const BoxDecoration(
-                                color: Colors.black38,
-                                shape: BoxShape.circle),
-                            alignment: Alignment.center,
-                            child: const Icon(Icons.play_arrow,
-                                color: Colors.white, size: 13),
-                          ),
-                        ),
-                    ],
+                    color: AppColors.faint, size: 26)
+                : Image.file(File(cover),
+                    fit: BoxFit.cover,
+                    cacheWidth: 500, // ~166 逻辑宽卡片：限解码宽防卡顿
+                    errorBuilder: (_, _, _) => Icon(
+                        isVideo ? Icons.play_arrow : Icons.image,
+                        color: AppColors.faint,
+                        size: 26)),
+            // 播放角标只叠在封面上（占位大图标本身已示意视频，同旧小图语义）
+            if (isVideo && cover != null)
+              Center(
+                child: Container(
+                  width: 26,
+                  height: 26,
+                  decoration: const BoxDecoration(
+                      color: Colors.black38, shape: BoxShape.circle),
+                  alignment: Alignment.center,
+                  child: const Icon(Icons.play_arrow,
+                      color: Colors.white, size: 18),
+                ),
+              ),
+            if (isVideo && durationSec != null)
+              Positioned(
+                left: 7,
+                bottom: 7,
+                child: Container(
+                  padding:
+                      const EdgeInsets.symmetric(horizontal: 7, vertical: 2),
+                  decoration: BoxDecoration(
+                    color: Colors.black45,
+                    borderRadius: BorderRadius.circular(99),
                   ),
-          ),
-          const SizedBox(width: 10),
-          Expanded(
-            child: Text(title,
-                maxLines: 1,
-                overflow: TextOverflow.ellipsis,
-                style: const TextStyle(fontSize: 12)),
-          ),
-          IconButton(
-            icon: const Icon(Icons.close, size: 18, color: AppColors.faint),
-            onPressed: onRemove,
-          ),
-        ],
+                  child: Text(
+                    '${durationSec ~/ 60}:${(durationSec % 60).toString().padLeft(2, '0')}',
+                    style: const TextStyle(fontSize: 10, color: Colors.white),
+                  ),
+                ),
+              ),
+            Positioned(
+              right: 6,
+              top: 6,
+              // key 供测试定位（方案 A 后卡片无文件名文本可寻址）
+              child: GestureDetector(
+                key: removeKey,
+                behavior: HitTestBehavior.opaque,
+                onTap: onRemove,
+                child: Container(
+                  width: 24,
+                  height: 24,
+                  decoration: const BoxDecoration(
+                      color: Colors.black38, shape: BoxShape.circle),
+                  alignment: Alignment.center,
+                  child:
+                      const Icon(Icons.close, size: 14, color: Colors.white),
+                ),
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  /// 「继续添加」虚线格（方案 A：并入网格末位，相册选择器惯例）。
+  Widget _addTile() {
+    final accent = Theme.of(context).colorScheme.primary;
+    return GestureDetector(
+      behavior: HitTestBehavior.opaque,
+      onTap: _pickMedia,
+      child: Container(
+        decoration: BoxDecoration(
+          borderRadius: BorderRadius.circular(12),
+          border: Border.all(color: accent.withValues(alpha: .4), width: 1.5),
+        ),
+        child: Column(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            Text('＋',
+                style: TextStyle(
+                    fontSize: 24,
+                    fontWeight: FontWeight.w300,
+                    color: accent)),
+            const SizedBox(height: 2),
+            const Text('继续添加',
+                style: TextStyle(fontSize: 11, color: AppColors.secondary)),
+          ],
         ),
       ),
     );
@@ -620,9 +666,13 @@ class ExistingMedia {
     required this.fileName,
     required this.thumbName,
     required this.isVideo,
+    this.durationSec,
   });
   final String id;
   final String fileName;
   final String? thumbName;
   final bool isVideo;
+
+  /// 视频时长（方案 A 时长角标；null=无数据显示纯角标）。
+  final int? durationSec;
 }
