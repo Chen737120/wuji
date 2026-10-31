@@ -20,6 +20,7 @@ import 'sheets/date_sheet.dart';
 import 'sheets/duration_sheet.dart';
 import 'sheets/style_sheet.dart';
 import 'sheets/text_sheet.dart';
+import 'widgets/pressable_scale.dart';
 
 /// 新增/编辑课（规格 §3.4）：仿「舞动时光」单页表单。
 class RecordFormPage extends StatefulWidget {
@@ -388,23 +389,28 @@ class _RecordFormPageState extends State<RecordFormPage> {
               ),
             ),
             const SizedBox(height: 14),
-            SizedBox(
-              width: double.infinity,
-              child: FilledButton(
-                style: FilledButton.styleFrom(
-                  backgroundColor: accent,
-                  shape: const StadiumBorder(),
-                  padding: const EdgeInsets.symmetric(vertical: 12),
+            // T7：保存钮按压反馈（保存中禁用缩放）
+            PressableScale(
+              enabled: !_saving,
+              child: SizedBox(
+                width: double.infinity,
+                child: FilledButton(
+                  style: FilledButton.styleFrom(
+                    backgroundColor: accent,
+                    shape: const StadiumBorder(),
+                    padding: const EdgeInsets.symmetric(vertical: 12),
+                  ),
+                  onPressed: _saving ? null : _save,
+                  child: Text(_saving ? '保存中…' : '保存',
+                      style: const TextStyle(
+                          fontSize: 14, fontWeight: FontWeight.w600)),
                 ),
-                onPressed: _saving ? null : _save,
-                child: Text(_saving ? '保存中…' : '保存',
-                    style: const TextStyle(fontSize: 14, fontWeight: FontWeight.w600)),
               ),
             ),
             const SizedBox(height: 8),
             Center(
               child: Text('只记感受不选视频也可以保存 · 选填项都可留空',
-                  style: TextStyle(fontSize: 9, color: AppColors.faint)),
+                  style: TextStyle(fontSize: 10, color: AppColors.faint)),
             ),
             const SizedBox(height: 16),
           ],
@@ -418,9 +424,10 @@ class _RecordFormPageState extends State<RecordFormPage> {
   Widget _mediaArea() {
     final hasMedia = _picked.isNotEmpty || _existingMedia.isNotEmpty;
     if (!hasMedia) {
-      return GestureDetector(
-        onTap: _pickMedia,
-        child: Container(
+      return PressableScale(
+        child: GestureDetector(
+          onTap: _pickMedia,
+          child: Container(
           height: 120,
           decoration: BoxDecoration(
             color: Colors.white,
@@ -446,6 +453,7 @@ class _RecordFormPageState extends State<RecordFormPage> {
             ],
           ),
         ),
+      ),
       );
     }
     // 方案 A（原型 record-media-cover 已拍板，2026-10-31）：双列大封面网格——
@@ -599,26 +607,28 @@ class _RecordFormPageState extends State<RecordFormPage> {
   /// 「继续添加」虚线格（方案 A：并入网格末位，相册选择器惯例）。
   Widget _addTile() {
     final accent = Theme.of(context).colorScheme.primary;
-    return GestureDetector(
-      behavior: HitTestBehavior.opaque,
-      onTap: _pickMedia,
-      child: Container(
-        decoration: BoxDecoration(
-          borderRadius: BorderRadius.circular(12),
-          border: Border.all(color: accent.withValues(alpha: .4), width: 1.5),
-        ),
-        child: Column(
-          mainAxisAlignment: MainAxisAlignment.center,
-          children: [
-            Text('＋',
-                style: TextStyle(
-                    fontSize: 24,
-                    fontWeight: FontWeight.w300,
-                    color: accent)),
-            const SizedBox(height: 2),
-            const Text('继续添加',
-                style: TextStyle(fontSize: 11, color: AppColors.secondary)),
-          ],
+    return PressableScale(
+      child: GestureDetector(
+        behavior: HitTestBehavior.opaque,
+        onTap: _pickMedia,
+        child: Container(
+          decoration: BoxDecoration(
+            borderRadius: BorderRadius.circular(12),
+            border: Border.all(color: accent.withValues(alpha: .4), width: 1.5),
+          ),
+          child: Column(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              Text('＋',
+                  style: TextStyle(
+                      fontSize: 24,
+                      fontWeight: FontWeight.w300,
+                      color: accent)),
+              const SizedBox(height: 2),
+              const Text('继续添加',
+                  style: TextStyle(fontSize: 11, color: AppColors.secondary)),
+            ],
+          ),
         ),
       ),
     );
@@ -630,9 +640,11 @@ class _RecordFormPageState extends State<RecordFormPage> {
     final display = value ?? '选填';
     final filled = selected && display != '选填';
     return Expanded(
-      child: GestureDetector(
-        onTap: onTap,
-        child: Container(
+      // T7：按压反馈（布局/emoji/圆角零改动；Listener 不消费事件）
+      child: PressableScale(
+        child: GestureDetector(
+          onTap: onTap,
+          child: Container(
           padding: const EdgeInsets.symmetric(vertical: 8),
           decoration: BoxDecoration(
             color: Colors.white,
@@ -655,6 +667,7 @@ class _RecordFormPageState extends State<RecordFormPage> {
             ],
           ),
         ),
+      ),
       ),
     );
   }
