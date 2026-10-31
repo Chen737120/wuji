@@ -46,19 +46,32 @@ class FancamModeSwitch extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    // F2 视觉区分：选中段主色底白字带图标，未选中段灰暗——原版所有状态
+    // 一视同仁（白字＋半透明黑底），只能靠文字内容分辨当前模式。
+    final accent = Theme.of(context).colorScheme.primary;
     return SegmentedButton<FancamEditMode>(
       segments: const [
-        ButtonSegment(value: FancamEditMode.manual, label: Text('手动')),
-        ButtonSegment(value: FancamEditMode.follow, label: Text('自动跟踪')),
+        ButtonSegment(
+            value: FancamEditMode.manual,
+            icon: Icon(Icons.touch_app, size: 16),
+            label: Text('手动')),
+        ButtonSegment(
+            value: FancamEditMode.follow,
+            icon: Icon(Icons.track_changes, size: 16),
+            label: Text('自动跟踪')),
       ],
       selected: {mode},
       onSelectionChanged: (s) => onChanged(s.first),
       showSelectedIcon: false,
-      style: const ButtonStyle(
+      style: ButtonStyle(
         visualDensity: VisualDensity.compact,
-        side: WidgetStatePropertyAll(BorderSide(color: Colors.white24)),
-        backgroundColor: WidgetStatePropertyAll(Colors.black45),
-        foregroundColor: WidgetStatePropertyAll(Colors.white),
+        side: const WidgetStatePropertyAll(BorderSide(color: Colors.white38)),
+        backgroundColor: WidgetStateProperty.resolveWith((states) =>
+            states.contains(WidgetState.selected) ? accent : Colors.black45),
+        foregroundColor: WidgetStateProperty.resolveWith((states) =>
+            states.contains(WidgetState.selected)
+                ? Colors.white
+                : Colors.white70),
       ),
     );
   }
