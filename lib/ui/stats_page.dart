@@ -6,7 +6,6 @@ import '../reload_bus.dart';
 import '../services/stats.dart';
 import '../services/startup_warmup.dart';
 import '../theme.dart';
-import 'my_page.dart';
 import 'sheets/date_range_sheet.dart';
 import 'widgets/charts.dart';
 
@@ -246,12 +245,7 @@ class _StatsPageState extends State<StatsPage>
             ),
           ],
         ),
-        IconButton(
-          icon: const Icon(Icons.settings_outlined,
-              size: 20, color: AppColors.faint),
-          onPressed: () => Navigator.push(
-              context, MaterialPageRoute(builder: (_) => const MyPage())),
-        ),
+        // 「我的」已提为第 4 个 tab（2026-10-31 T3），齿轮入口移除
       ],
     );
   }
