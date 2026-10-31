@@ -103,6 +103,10 @@ class _MyPageState extends State<MyPage> {
                       }),
                 ]),
                 _section('管理', [
+                  // 舞种管理入口（2026-10-31 用户拍板补接）：ManagePage 本就
+                  // 支持 style kind（自定义项可删、内置只可改名），此前漏挂
+                  // 入口致自定义舞种无法删除
+                  _navRow(context, '舞种管理', onTap: () => _openManage(context, TaxonomyKind.style, '舞种管理')),
                   _navRow(context, '老师管理', onTap: () => _openManage(context, TaxonomyKind.teacher, '老师管理')),
                   _navRow(context, '舞室管理', onTap: () => _openManage(context, TaxonomyKind.studio, '舞室管理')),
                 ]),
