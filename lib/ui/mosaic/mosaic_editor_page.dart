@@ -322,8 +322,10 @@ class _MosaicEditorPageState extends State<MosaicEditorPage> {
               ),
             ),
             // T2（反馈 #4）：轨道条从画面内移到视频下方、工具条上方；
-            // 原画布内 bottomCenter 挂载（OverlayEditor）已删除
-            if (!_immersive && _state.regions.isNotEmpty)
+            // 原画布内 bottomCenter 挂载（OverlayEditor）已删除。
+            // 常显（F6，2026-10-31 用户拍板）：不再「有区域才显示」——
+            // 无区域时也可拖轨道预览定位；沉浸模式仍隐藏
+            if (!_immersive)
               MosaicTrackBar(
                 duration: _state.duration,
                 position: _state.position,
