@@ -1,5 +1,4 @@
 import 'dart:io';
-import 'dart:ui' show ImageFilter;
 
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
@@ -101,8 +100,6 @@ class _RecordsPageState extends State<RecordsPage>
   bool _searching = false;
   String _query = '';
   final TextEditingController _searchCtl = TextEditingController();
-  // T5 子项 2：毛玻璃收缩顶栏（ScrollController 驱动 opacity，1:1 跟手）
-  final ScrollController _scroll = ScrollController();
 
   ClassSaver get _saver => context.read<ClassSaver>();
 
@@ -123,7 +120,6 @@ class _RecordsPageState extends State<RecordsPage>
     WidgetsBinding.instance.removeObserver(this);
     ReloadBus.instance.removeListener(_load);
     _searchCtl.dispose();
-    _scroll.dispose();
     super.dispose();
   }
 
@@ -163,130 +159,84 @@ class _RecordsPageState extends State<RecordsPage>
 
   @override
   Widget build(BuildContext context) {
+    final accent = Theme.of(context).colorScheme.primary;
     return Scaffold(
       backgroundColor: AppColors.bg,
-      body: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          // 搜索态（需求 #11，T5 保留现状样式与逻辑；顶栏渐显不影响此固定行）
-          if (_searching)
+      body: SafeArea(
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            // 页头（用户 2026-10-31 反馈 1/3：还原 16/w700/ls3，搜索钮同一行、
+            // 收紧顶部留白；大标题与毛玻璃收缩顶栏随之移除）
             Padding(
-              padding: EdgeInsets.fromLTRB(16, MediaQuery.paddingOf(context).top + 8, 16, 4),
-              child: TextField(
-                autofocus: true,
-                controller: _searchCtl,
-                decoration: InputDecoration(
-                  isDense: true,
-                  hintText: '搜索老师 / 舞种 / 舞室',
-                  hintStyle:
-                      const TextStyle(fontSize: 12, color: AppColors.faint),
-                  prefixIcon:
-                      const Icon(Icons.search, size: 18, color: AppColors.faint),
-                  contentPadding: const EdgeInsets.symmetric(vertical: 8),
-                  border: OutlineInputBorder(
-                    borderRadius: BorderRadius.circular(10),
-                    borderSide: const BorderSide(color: AppColors.hairline),
-                  ),
-                ),
-                style: const TextStyle(fontSize: 13),
-                onChanged: (v) => setState(() => _query = v.trim()),
-              ),
-            ),
-          Expanded(
-            // 2026-10-07 需求 #2：日历随列表一起滚动（不再固定顶部）。
-            // 滚动即上报：后台预热据此给交互让路（修 v1.5.20 预热
-            // 与滚动抢 UI 线程导致卡顿/ANR）
-            child: NotificationListener<ScrollUpdateNotification>(
-              onNotification: (_) {
-                StartupWarmup.noteUserScroll();
-                return false;
-              },
-              child: _stream(),
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-
-  /// Large Title 行（T5 子项 1）：大标题「记录」＋右侧搜索圆钮。
-  /// 搜索钮样式/逻辑原样保留（accent 底 + search_off 切换）。
-  Widget _largeTitleRow() {
-    final accent = Theme.of(context).colorScheme.primary;
-    return Padding(
-      padding: const EdgeInsets.fromLTRB(0, 6, 0, 16),
-      child: Row(
-        children: [
-          Text('记录',
-              style: AppText.homeTitle.copyWith(color: AppColors.ink)),
-          const Spacer(),
-          GestureDetector(
-            onTap: () => setState(() {
-              _searching = !_searching;
-              if (!_searching) _query = '';
-            }),
-            child: Container(
-              width: 34,
-              height: 34,
-              decoration: BoxDecoration(
-                color: _searching
-                    ? accent.withValues(alpha: .14)
-                    : Colors.white,
-                shape: BoxShape.circle,
-                border: Border.all(
-                    color: _searching ? accent : AppColors.hairline),
-              ),
-              child: Icon(
-                  _searching ? Icons.search_off : Icons.search,
-                  size: 20,
-                  color: _searching ? accent : AppColors.ink),
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-
-  /// 毛玻璃收缩顶栏（T5 子项 2，原型 .navbar）：92px 含状态栏，
-  /// BackdropFilter(blur 20)＋bg 74%，滚动前 40px 内 opacity 0→1（1:1 跟手）。
-  /// IgnorePointer 不挡列表点击；offset=0 时不挂载 BackdropFilter（省开销）。
-  Widget _frostedTopBar(double topInset) {
-    return Positioned(
-      top: 0,
-      left: 0,
-      right: 0,
-      child: IgnorePointer(
-        child: ListenableBuilder(
-          listenable: _scroll,
-          builder: (context, _) {
-            final p =
-                _scroll.hasClients ? (_scroll.offset / 40).clamp(0.0, 1.0) : 0.0;
-            if (p == 0) return const SizedBox.shrink();
-            return Opacity(
-              opacity: p,
-              child: ClipRect(
-                child: BackdropFilter(
-                  filter: ImageFilter.blur(sigmaX: 20, sigmaY: 20),
-                  child: Container(
-                    height: topInset + 48,
-                    foregroundDecoration: const BoxDecoration(
-                      border: Border(
-                          bottom:
-                              BorderSide(color: AppColors.hairline, width: 0.5)),
+              padding: const EdgeInsets.fromLTRB(16, 12, 16, 4),
+              child: Row(
+                children: [
+                  Text('记录',
+                      style: AppText.pageTitle.copyWith(color: AppColors.ink)),
+                  const Spacer(),
+                  // 搜索（需求 #11；#10 放大：圆底按钮更明显）
+                  GestureDetector(
+                    onTap: () => setState(() {
+                      _searching = !_searching;
+                      if (!_searching) _query = '';
+                    }),
+                    child: Container(
+                      width: 34,
+                      height: 34,
+                      decoration: BoxDecoration(
+                        color: _searching
+                            ? accent.withValues(alpha: .14)
+                            : Colors.white,
+                        shape: BoxShape.circle,
+                        border: Border.all(
+                            color: _searching ? accent : AppColors.hairline),
+                      ),
+                      child: Icon(
+                          _searching ? Icons.search_off : Icons.search,
+                          size: 20,
+                          color: _searching ? accent : AppColors.ink),
                     ),
-                    color: AppColors.bg.withValues(alpha: 0.74),
-                    padding: EdgeInsets.only(top: topInset),
-                    alignment: Alignment.center,
-                    child: const Text('记录',
-                        style: TextStyle(
-                            fontSize: 17,
-                            fontWeight: FontWeight.w600,
-                            letterSpacing: -0.17)),
                   ),
+                ],
+              ),
+            ),
+            if (_searching)
+              Padding(
+                padding: const EdgeInsets.fromLTRB(16, 6, 16, 4),
+                child: TextField(
+                  autofocus: true,
+                  controller: _searchCtl,
+                  decoration: InputDecoration(
+                    isDense: true,
+                    hintText: '搜索老师 / 舞种 / 舞室',
+                    hintStyle:
+                        const TextStyle(fontSize: 12, color: AppColors.faint),
+                    prefixIcon:
+                        const Icon(Icons.search, size: 18, color: AppColors.faint),
+                    contentPadding: const EdgeInsets.symmetric(vertical: 8),
+                    border: OutlineInputBorder(
+                      borderRadius: BorderRadius.circular(10),
+                      borderSide: const BorderSide(color: AppColors.hairline),
+                    ),
+                  ),
+                  style: const TextStyle(fontSize: 13),
+                  onChanged: (v) => setState(() => _query = v.trim()),
                 ),
               ),
-            );
-          },
+            Expanded(
+              // 2026-10-07 需求 #2：日历随列表一起滚动（不再固定顶部）。
+              // 滚动即上报：后台预热据此给交互让路（修 v1.5.20 预热
+              // 与滚动抢 UI 线程导致卡顿/ANR）
+              child: NotificationListener<ScrollUpdateNotification>(
+                onNotification: (_) {
+                  StartupWarmup.noteUserScroll();
+                  return false;
+                },
+                child: _stream(),
+              ),
+            ),
+          ],
         ),
       ),
     );
@@ -352,7 +302,6 @@ class _RecordsPageState extends State<RecordsPage>
   }
 
   Widget _stream() {
-    final topInset = MediaQuery.paddingOf(context).top;
     if (!_loaded) {
       return const Center(
           child: SizedBox(
@@ -378,9 +327,8 @@ class _RecordsPageState extends State<RecordsPage>
           (r.note ?? '').toLowerCase().contains(q);
       filtered = filtered.where(hit).toList();
     }
-    // 时间流（T5 v1 形态）：大标题、日历壳随列表滚动，时间轴圆点竖线移除
+    // 时间流：日历壳随列表滚动，时间轴圆点竖线已移除（T5）
     final children = <Widget>[
-      _largeTitleRow(),
       _calendarShell(),
       if (_selectedDay != null) _filterBar(),
     ];
@@ -417,15 +365,9 @@ class _RecordsPageState extends State<RecordsPage>
         ));
       }
     }
-    return Stack(
-      children: [
-        ListView(
-          controller: _scroll,
-          padding: EdgeInsets.fromLTRB(16, topInset + 6, 16, 90),
-          children: children,
-        ),
-        _frostedTopBar(topInset),
-      ],
+    return ListView(
+      padding: const EdgeInsets.fromLTRB(16, 4, 16, 90),
+      children: children,
     );
   }
 
@@ -965,9 +907,20 @@ class _RecordCardState extends State<RecordCard> {
         builder: (_) => PlayerPage.pendingMedia(
           rel: m.fileName,
           resolver: context.read<MediaPathResolver?>(), // push 前取好
+          // 顶栏标题（T10b）：日期 · 舞种，与原型 pv-title 同构
+          title: _playerTitle(),
         ),
       ),
     ).whenComplete(() => _opening = false);
+  }
+
+  /// 播放器顶栏标题：「10月31日 · 爵士舞」（无舞种时只留日期）
+  String _playerTitle() {
+    final d = r.dateAsDateTime;
+    final style = (r.styleName == null || r.styleName!.isEmpty)
+        ? null
+        : r.styleName;
+    return style == null ? '${d.month}月${d.day}日' : '${d.month}月${d.day}日 · $style';
   }
 
   void _showActions() {

@@ -142,6 +142,34 @@ void main() {
     expect(find.text('sheet内容'), findsNothing);
   });
 
+  testWidgets('老师弹层：键盘弹出只上移一次（无双重 viewInsets 撑满全屏）',
+      (tester) async {
+    tester.view.physicalSize = const Size(400, 890);
+    tester.view.devicePixelRatio = 1.0;
+    addTearDown(tester.view.reset);
+    await tester.pumpWidget(host(Builder(builder: (context) => Center(
+      child: TextButton(
+        onPressed: () => showTextSheet(context, repo, TaxonomyKind.teacher,
+            title: '授课老师', hint: '老师名字'),
+        child: const Text('open'),
+      ),
+    ))));
+    await tester.tap(find.text('open'));
+    await tester.pumpAndSettle();
+
+    // 键盘占 300：弹层应整体上移且高度不变（双重 viewInsets 会让高度 +300）
+    final handle = find.byKey(const ValueKey('spring-sheet-handle'));
+    double sheetHeight() =>
+        890 - tester.view.viewInsets.bottom - tester.getRect(handle).top;
+    final h0 = sheetHeight();
+    final top0 = tester.getRect(handle).top;
+    expect(h0, lessThan(400)); // 远非整屏
+    tester.view.viewInsets = const FakeViewPadding(bottom: 300);
+    await tester.pumpAndSettle();
+    expect(tester.getRect(handle).top, lessThan(top0 - 200)); // 确已上移
+    expect(sheetHeight(), closeTo(h0, 1.0)); // 高度不变＝只避让一次
+  });
+
   testWidgets('text sheet shows recent chips and tap chip returns',
       (tester) async {
     await repo.touchByName(TaxonomyKind.teacher, '小鹿');

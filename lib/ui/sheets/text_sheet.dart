@@ -53,16 +53,15 @@ class _TextSheetState extends State<_TextSheet> {
   @override
   Widget build(BuildContext context) {
     final accent = Theme.of(context).colorScheme.primary;
-    return Padding(
-      padding:
-          EdgeInsets.only(bottom: MediaQuery.of(context).viewInsets.bottom),
-      child: SafeArea(
-        child: Padding(
-          padding: const EdgeInsets.fromLTRB(16, 14, 16, 16),
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
+    // 用户 2026-10-31 反馈：键盘避让由 SpringSheet 容器统一负责，
+    // 此处不再叠加 viewInsets（双重 padding 会把弹层顶到近全屏）
+    return SafeArea(
+      child: Padding(
+        padding: const EdgeInsets.fromLTRB(16, 14, 16, 16),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
               Row(
                 mainAxisAlignment: MainAxisAlignment.spaceBetween,
                 children: [
@@ -155,7 +154,6 @@ class _TextSheetState extends State<_TextSheet> {
             ],
           ),
         ),
-      ),
     );
   }
 }

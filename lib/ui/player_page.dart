@@ -8,6 +8,7 @@ import 'package:video_player/video_player.dart';
 
 import '../services/abs_path_cache.dart';
 import '../services/archive_fs.dart' show MediaPathResolver;
+import '../theme.dart';
 import 'widgets/save_to_gallery_button.dart';
 
 const _speeds = [0.5, 0.75, 1.0, 1.25, 1.5, 2.0];
@@ -38,7 +39,7 @@ Offset clampViewOffset(
 /// 控制条：播放暂停＋进度＋倍速＋全屏切换（全屏横屏沉浸）。支持捏合缩放。
 class PlayerPage extends StatefulWidget {
   /// 直通模式：传已解析的绝对路径（SAF 模式已复制到缓存）。
-  const PlayerPage({super.key, required this.fileName})
+  const PlayerPage({super.key, required this.fileName, this.title})
       : pendingRel = null,
         pendingResolver = null;
 
@@ -49,6 +50,7 @@ class PlayerPage extends StatefulWidget {
     super.key,
     required String rel,
     required MediaPathResolver? resolver,
+    this.title,
   })  : pendingRel = rel,
         pendingResolver = resolver,
         fileName = '';
@@ -56,6 +58,7 @@ class PlayerPage extends StatefulWidget {
   final String fileName; // 直通模式的绝对路径
   final String? pendingRel; // 页内加载模式的存档相对路径
   final MediaPathResolver? pendingResolver;
+  final String? title; // 顶栏标题（如「10月31日 · 爵士舞」），可空
 
   @override
   State<PlayerPage> createState() => _PlayerPageState();
@@ -229,29 +232,70 @@ class _PlayerPageState extends State<PlayerPage> {
                         onScaleEnd: (_) => _scaleBase = null,
                       ),
                     ),
-                    // T10：顶部控制钮深色毛玻璃圆底（常驻不变——保存钮是
-                    // 记录列表直达播放页时的唯一保存入口，显隐状态机不动）
+                    // T10b（用户 2026-10-31 反馈 4）：顶栏改通栏深色毛玻璃，
+                    // 随控制条一起浮现/隐藏（保存钮也跟随——用户已确认接受）
                     Positioned(
-                      top: topInset + 10,
-                      left: 10,
-                      child: _glassCircle(
-                        IconButton(
-                          padding: EdgeInsets.zero,
-                          constraints: const BoxConstraints.tightFor(
-                              width: 40, height: 40),
-                          icon: const Icon(Icons.close, color: Colors.white),
-                          onPressed: () => Navigator.pop(context),
+                      top: 0,
+                      left: 0,
+                      right: 0,
+                      child: AnimatedOpacity(
+                        opacity: _controls ? 1 : 0,
+                        duration: const Duration(milliseconds: 250),
+                        child: AnimatedSlide(
+                          // 隐藏时上移 8px（原型 translateY(-8px)，条高约 52）
+                          offset:
+                              _controls ? Offset.zero : const Offset(0, -0.16),
+                          duration: const Duration(milliseconds: 250),
+                          curve: Curves.easeOut,
+                          child: IgnorePointer(
+                            ignoring: !_controls,
+                            child: ClipRect(
+                              child: BackdropFilter(
+                                filter:
+                                    ImageFilter.blur(sigmaX: 20, sigmaY: 20),
+                                child: Container(
+                                  color: _glassBarColor,
+                                  padding:
+                                      EdgeInsets.only(top: topInset, left: 4),
+                                  foregroundDecoration: const BoxDecoration(
+                                    border: Border(
+                                      bottom: BorderSide(
+                                          color: Color(0x1AFFFFFF),
+                                          width: 0.5),
+                                    ),
+                                  ),
+                                  child: SizedBox(
+                                    height: 52,
+                                    child: Row(
+                                      children: [
+                                        IconButton(
+                                          icon: const Icon(Icons.close,
+                                              color: Colors.white),
+                                          onPressed: () =>
+                                              Navigator.pop(context),
+                                        ),
+                                        Expanded(
+                                          child: Center(
+                                            child: Text(
+                                              widget.title ?? '',
+                                              maxLines: 1,
+                                              overflow: TextOverflow.ellipsis,
+                                              style:
+                                                  AppText.appBarTitle.copyWith(
+                                                      color: Colors.white),
+                                            ),
+                                          ),
+                                        ),
+                                        SaveToGalleryButton(path: _path),
+                                      ],
+                                    ),
+                                  ),
+                                ),
+                              ),
+                            ),
+                          ),
                         ),
                       ),
-                    ),
-                    // 保存到相册（规格 §3.1）：与左上关闭按钮对称、常驻显示，
-                    // 不随控制条显隐——记录列表直达播放页时这是唯一保存入口
-                    Positioned(
-                      top: topInset + 10,
-                      right: 10,
-                      child: _glassCircle(SaveToGalleryButton(
-                        path: _path,
-                      )),
                     ),
                     Positioned(
                       left: 0,
@@ -345,22 +389,6 @@ class _PlayerPageState extends State<PlayerPage> {
                     ),
                   ],
                 ),
-    );
-  }
-
-  /// 顶部控制钮的圆形毛玻璃底（T10：rgba(24,24,24,.55)＋blur 20）
-  Widget _glassCircle(Widget child) {
-    return ClipOval(
-      child: BackdropFilter(
-        filter: ImageFilter.blur(sigmaX: 20, sigmaY: 20),
-        child: Container(
-          width: 40,
-          height: 40,
-          color: _glassBarColor,
-          alignment: Alignment.center,
-          child: child,
-        ),
-      ),
     );
   }
 

@@ -91,16 +91,12 @@ void main() {
     ], child: const MaterialApp(home: RecordsPage())));
     await tester.pumpAndSettle();
 
-    // T5 子项 1：Large Title「记录」＋搜索钮（不再有页头 16 号「首页」）
+    // 页头还原 16/w700/ls3（用户 2026-10-31 反馈 1/3），搜索钮同一行
     expect(find.text('记录'), findsOneWidget);
     expect(find.byIcon(Icons.search), findsOneWidget);
     expect(find.byIcon(Icons.search_off), findsNothing);
-    expect(
-        tester
-            .widget<Text>(find.text('记录'))
-            .style!
-            .fontSize,
-        28);
+    expect(tester.widget<Text>(find.text('记录')).style!.fontSize, 16);
+    expect(tester.widget<Text>(find.text('记录')).style!.letterSpacing, 3);
     expect(find.text('收起日历 ⌃'), findsNothing); // 文字钮已移除
 
     // 感受完整显示一遍（2026-10-07 #6/#7：单遍、不折叠）

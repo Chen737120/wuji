@@ -145,21 +145,22 @@ class _SheetScaffoldState<T> extends State<_SheetScaffold<T>>
             child: Column(
               mainAxisSize: MainAxisSize.min,
               children: [
-                // 把手（＋标题）拖拽热区（原型 .sheet-dragzone/.sheet-grab）
+                // 把手（＋标题）拖拽热区（原型 .sheet-dragzone/.sheet-grab）；
+                // 用户 2026-10-31 反馈：顶部留白收紧（把手区 6+5+2＝13px）
                 GestureDetector(
                   key: const ValueKey('spring-sheet-handle'),
                   behavior: HitTestBehavior.opaque,
                   onVerticalDragUpdate: _onDragUpdate,
                   onVerticalDragEnd: _onDragEnd,
                   child: Container(
-                    padding: const EdgeInsets.fromLTRB(20, 8, 20, 0),
+                    padding: const EdgeInsets.fromLTRB(20, 6, 20, 0),
                     width: double.infinity,
                     child: Column(
                       children: [
                         Container(
                           width: 36,
                           height: 5,
-                          margin: const EdgeInsets.only(bottom: 10),
+                          margin: const EdgeInsets.only(bottom: 2),
                           decoration: BoxDecoration(
                             color: const Color(0x383C3C43),
                             borderRadius: BorderRadius.circular(3),
