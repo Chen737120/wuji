@@ -141,15 +141,19 @@ final SpringDescription kSpringTransition = SpringDescription.withDampingRatio(
 );
 
 /// 临界阻尼弹簧曲线（damping 1.0）：x(t)=1−e^(−2πt)·(1+2πt)。
-/// 作为 Curve 使用时 duration 应取 2×response，使终点精确收敛 1
-/// （t=0.5 即 response 处已达 98.6%）。
+/// 原始式在 t=1 处只到 98.64%；按端点归一化后 transform(1.0) == 1.0，
+/// 满足 Curve 契约（形状偏差 ≤1.4%，手感不变），避免图表终场留缺口。
 class SpringHeightCurve extends Curve {
   const SpringHeightCurve();
 
+  static final double _end = 1 - math.exp(-2 * math.pi) * (1 + 2 * math.pi);
+
   @override
   double transform(double t) {
+    if (t <= 0) return 0;
+    if (t >= 1) return 1;
     final x = 2 * math.pi * t;
-    return 1 - math.exp(-x) * (1 + x);
+    return (1 - math.exp(-x) * (1 + x)) / _end;
   }
 }
 

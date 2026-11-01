@@ -84,4 +84,16 @@ void main() {
     expect(kSpringTransition.stiffness, closeTo(246.74, 0.01));
     expect(kSpringTransition.damping, closeTo(31.42, 0.01));
   });
+
+  test('SpringHeightCurve：终场精确收敛 1、全程单调', () {
+    const c = SpringHeightCurve();
+    expect(c.transform(0), 0);
+    expect(c.transform(1), 1); // 修前为 0.986399
+    var last = 0.0;
+    for (var i = 1; i <= 200; i++) {
+      final v = c.transform(i / 200);
+      expect(v, greaterThan(last));
+      last = v;
+    }
+  });
 }
