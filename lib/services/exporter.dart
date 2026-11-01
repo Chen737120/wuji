@@ -143,10 +143,17 @@ class Exporter {
         try {
           await sink.close();
         } catch (_) {}
-        // 半成品必须删掉，否则用户看到的是个损坏的视频文件
-        try {
-          if (out.existsSync()) out.deleteSync();
-        } catch (_) {}
+        // 半成品必须删掉，否则用户看到的是个损坏的视频文件（P1-3）。
+        // 写句柄刚关闭时部分文件系统（Windows 实测）会短暂拒绝删除，
+        // 单次 deleteSync＋静默吞异常会偶发残留 → 有界重试。
+        for (var attempt = 0; attempt < 5; attempt++) {
+          try {
+            if (out.existsSync()) out.deleteSync();
+            break;
+          } on FileSystemException {
+            await Future<void>.delayed(const Duration(milliseconds: 20));
+          }
+        }
         rethrow;
       }
     }
