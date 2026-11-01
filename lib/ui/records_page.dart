@@ -688,22 +688,29 @@ class _CalendarState extends State<_Calendar> {
     );
   }
 
-  /// 普通数字格（无封面）：选中/今天＝accent 实底圆角方白字（T5 子项 5）。
+  /// 普通数字格（无封面）：今天＝accent 实底；选中但非今天＝15% 淡底＋
+  /// 1.5px 描边（与周条「今天实底 / 选中描边」语义一致，T5 子项 5）。
   Widget _dayCell(int day, bool isSelected, bool isToday) {
-    final filled = isSelected || isToday;
+    final accent = Theme.of(context).colorScheme.primary;
+    final selectedOnly = isSelected && !isToday;
     return Container(
       width: 26,
       height: 26,
       alignment: Alignment.center,
       decoration: BoxDecoration(
         borderRadius: BorderRadius.circular(9),
-        color: filled ? Theme.of(context).colorScheme.primary : null,
+        color: isToday
+            ? accent
+            : (selectedOnly ? accent.withValues(alpha: .15) : null),
+        border: selectedOnly ? Border.all(color: accent, width: 1.5) : null,
       ),
       child: Text('$day',
           style: TextStyle(
               fontSize: 11,
-              color: filled ? Colors.white : AppColors.ink,
-              fontWeight: filled ? FontWeight.w700 : FontWeight.w400)),
+              color: isToday ? Colors.white : AppColors.ink,
+              fontWeight: isToday || selectedOnly
+                  ? FontWeight.w700
+                  : FontWeight.w400)),
     );
   }
 

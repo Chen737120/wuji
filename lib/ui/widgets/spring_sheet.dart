@@ -167,6 +167,16 @@ class _SheetScaffoldState<T> extends State<_SheetScaffold<T>>
 
   @override
   Widget build(BuildContext context) {
+    // 复刻 showModalBottomSheet 的 removeTop：各 sheet 自带 SafeArea，不剥离
+    // 顶部 padding 时状态栏高度会插在把手与内容之间（Android 15+ edge-to-edge）
+    return MediaQuery.removePadding(
+      context: context,
+      removeTop: true,
+      child: _buildSheet(context),
+    );
+  }
+
+  Widget _buildSheet(BuildContext context) {
     return Padding(
       // 键盘适配：内容整体随 viewInsets 上移（text_sheet 输入场景）
       padding:

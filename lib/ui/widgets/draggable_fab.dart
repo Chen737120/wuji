@@ -148,6 +148,10 @@ class _DraggableFabState extends State<DraggableFab> with TickerProviderStateMix
           onPanEnd: _onPanEnd,
           onPanCancel: () => setState(() {
             _dragging = false;
+            // 被系统取消（非正常释放）时不做贴边，只把 rubber-band 出界位置
+            // 收回屏内
+            _offset = FabLogic.clampIntoScreen(
+                _offset, MediaQuery.sizeOf(context), _ballSize);
           }),
           onTap: widget.onTap,
           child: Container(
