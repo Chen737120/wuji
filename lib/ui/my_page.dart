@@ -152,12 +152,12 @@ class _MyPageState extends State<MyPage> {
 
   Future<_Usage> _usage(ClassSaver saver) async {
     final records = await saver.allRecords();
+    final media = await saver.mediaByClass();
     var mediaCount = 0;
     var bytes = 0;
-    for (final r in records) {
-      final m = await saver.mediaOf(r.id);
-      mediaCount += m.length;
-      bytes += m.fold<int>(0, (a, x) => a + x.sizeBytes);
+    for (final list in media.values) {
+      mediaCount += list.length;
+      bytes += list.fold<int>(0, (a, x) => a + x.sizeBytes);
     }
     return _Usage(records.length, mediaCount, humanBytes(bytes));
   }

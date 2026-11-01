@@ -63,9 +63,9 @@ class _TrendBarsState extends State<TrendBars>
   void initState() {
     super.initState();
     _jumpToEnd();
-    WidgetsBinding.instance.addPostFrameCallback((_) {
-      if (mounted) _replayEntry();
-    });
+    // 首次构建即终态（统计页在 IndexedStack 里启动即构建，不该白跑进场）；
+    // 进场只在 entryGeneration 变化（切入统计 tab）时重放
+    _entry.value = 1.0;
   }
 
   @override
@@ -205,10 +205,8 @@ class _TrendBarsState extends State<TrendBars>
                             height: barH + labelH,
                             child: Stack(
                               children: [
-                                // T9：柱高弹簧生长（错峰 12ms），只 rebuild 柱区
-                                AnimatedBuilder(
-                                  animation: _entry,
-                                  builder: (_, _) => Row(
+                                // T9：柱高弹簧生长（错峰 12ms），只 rebuild 柱高
+                                Row(
                                   crossAxisAlignment:
                                       CrossAxisAlignment.start,
                                   children: [
@@ -231,43 +229,49 @@ class _TrendBarsState extends State<TrendBars>
                                                       MainAxisAlignment
                                                           .end,
                                                   children: [
-                                                    Container(
-                                                      // T9：柱高从 0 弹簧生长到目标（0 分钟柱的 2px 灰底线同乘进度）
-                                                      height: (points[i]
-                                                                  .minutes ==
-                                                              0
-                                                          ? 2.0
-                                                          : (points[i].minutes /
-                                                                  (peak == 0
-                                                                      ? 1
-                                                                      : peak)) *
-                                                              (barH - 4)) *
-                                                          _barProgress(i),
-                                                      margin: EdgeInsets
-                                                          .symmetric(
-                                                              horizontal: widget
-                                                                          .mode ==
-                                                                      TrendMode
-                                                                          .monthly
-                                                                  ? 4.0
-                                                                  : 1.5),
-                                                      decoration:
-                                                          BoxDecoration(
-                                                        // 选中柱同色系加深（2026-10-08 需求 #4-3：
-                                                        // 深绿等色相加深，不变纯黑）；其余柱
-                                                        // 全部用点缀色
-                                                        color: _selected ==
-                                                                i
-                                                            ? darkenChartColor(
-                                                                accent)
-                                                            : points[i].minutes >
-                                                                    0
-                                                                ? accent
-                                                                : AppColors
-                                                                    .hairline,
-                                                        borderRadius:
-                                                            BorderRadius
-                                                                .circular(3),
+                                                    // T9：只让柱高自己逐帧重建（日期标签不参与）
+                                                    AnimatedBuilder(
+                                                      animation: _entry,
+                                                      builder: (_, _) =>
+                                                          Container(
+                                                        // T9：柱高从 0 弹簧生长到目标（0 分钟柱的 2px 灰底线同乘进度）
+                                                        height: (points[i]
+                                                                    .minutes ==
+                                                                0
+                                                            ? 2.0
+                                                            : (points[i].minutes /
+                                                                    (peak == 0
+                                                                        ? 1
+                                                                        : peak)) *
+                                                                (barH - 4)) *
+                                                            _barProgress(i),
+                                                        margin: EdgeInsets
+                                                            .symmetric(
+                                                                horizontal: widget
+                                                                            .mode ==
+                                                                        TrendMode
+                                                                            .monthly
+                                                                    ? 4.0
+                                                                    : 1.5),
+                                                        decoration:
+                                                            BoxDecoration(
+                                                          // 选中柱同色系加深（2026-10-08 需求 #4-3：
+                                                          // 深绿等色相加深，不变纯黑）；其余柱
+                                                          // 全部用点缀色
+                                                          color: _selected ==
+                                                                  i
+                                                              ? darkenChartColor(
+                                                                  accent)
+                                                              : points[i]
+                                                                          .minutes >
+                                                                      0
+                                                                  ? accent
+                                                                  : AppColors
+                                                                      .hairline,
+                                                          borderRadius:
+                                                              BorderRadius
+                                                                  .circular(3),
+                                                        ),
                                                       ),
                                                     ),
                                                   ],
@@ -289,7 +293,6 @@ class _TrendBarsState extends State<TrendBars>
                                         ),
                                       ),
                                   ],
-                                ),
                                 ),
                                 // 时长气泡（点击柱子时显示；2026-10-08 需求 #4-2
                                 // 气泡尺寸与文字同步缩小一档）
@@ -416,9 +419,8 @@ class _StyleDonutState extends State<StyleDonut>
   @override
   void initState() {
     super.initState();
-    WidgetsBinding.instance.addPostFrameCallback((_) {
-      if (mounted) _replayEntry();
-    });
+    // 首次构建即终态；进场只在 entryGeneration 变化时重放
+    _entry.value = 1.0;
   }
 
   @override
@@ -631,9 +633,8 @@ class _NameBarsState extends State<NameBars>
   @override
   void initState() {
     super.initState();
-    WidgetsBinding.instance.addPostFrameCallback((_) {
-      if (mounted) _replayEntry();
-    });
+    // 首次构建即终态；进场只在 entryGeneration 变化时重放
+    _entry.value = 1.0;
   }
 
   @override
@@ -664,9 +665,7 @@ class _NameBarsState extends State<NameBars>
     final visible = _expanded ? items : items.take(widget.collapsedTop).toList();
     final overflow = items.length > widget.collapsedTop;
     final accent = Theme.of(context).colorScheme.primary;
-    return AnimatedBuilder(
-      animation: _entry,
-      builder: (_, _) => Column(
+    return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         Text(widget.title,
@@ -694,19 +693,22 @@ class _NameBarsState extends State<NameBars>
                       color: AppColors.hairline,
                       borderRadius: BorderRadius.circular(6),
                     ),
-                    child: FractionallySizedBox(
-                      alignment: Alignment.centerLeft,
-                      // T9：条宽弹簧生长（visible 序错峰）
-                      widthFactor: (totalSessions == 0
-                              ? 0.0
-                              : item.sessions / totalSessions) *
-                          _barProgress(visible.indexOf(item)),
-                      child: Container(
-                        decoration: BoxDecoration(
-                          // 前十色循环 + 整体调亮一档（2026-10-07：轻松活泼）
-                          color: brightenChartColor(kRainbowPalette[
-                              items.indexOf(item) % kRainbowPalette.length]),
-                          borderRadius: BorderRadius.circular(6),
+                    child: AnimatedBuilder(
+                      animation: _entry,
+                      // T9：条宽弹簧生长（visible 序错峰）——只让宽度逐帧重建
+                      builder: (_, _) => FractionallySizedBox(
+                        alignment: Alignment.centerLeft,
+                        widthFactor: (totalSessions == 0
+                                ? 0.0
+                                : item.sessions / totalSessions) *
+                            _barProgress(visible.indexOf(item)),
+                        child: Container(
+                          decoration: BoxDecoration(
+                            // 前十色循环 + 整体调亮一档（2026-10-07：轻松活泼）
+                            color: brightenChartColor(kRainbowPalette[
+                                items.indexOf(item) % kRainbowPalette.length]),
+                            borderRadius: BorderRadius.circular(6),
+                          ),
                         ),
                       ),
                     ),
@@ -752,7 +754,6 @@ class _NameBarsState extends State<NameBars>
             ),
           ),
       ],
-      ),
     );
   }
 }
