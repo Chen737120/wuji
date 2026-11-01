@@ -103,6 +103,7 @@ class _SheetScaffold<T> extends StatefulWidget {
 class _SheetScaffoldState<T> extends State<_SheetScaffold<T>>
     with SingleTickerProviderStateMixin {
   double _dragDy = 0;
+  final GlobalKey _sheetKey = GlobalKey();
   late final AnimationController _settle =
       AnimationController.unbounded(vsync: this);
 
@@ -129,7 +130,7 @@ class _SheetScaffoldState<T> extends State<_SheetScaffold<T>>
   }
 
   double _sheetHeight() {
-    final box = context.findRenderObject();
+    final box = _sheetKey.currentContext?.findRenderObject();
     return box is RenderBox && box.hasSize ? box.size.height : 400;
   }
 
@@ -159,6 +160,7 @@ class _SheetScaffoldState<T> extends State<_SheetScaffold<T>>
           // Material 祖先；等价原 showModalBottomSheet 的 backgroundColor+
           // shape 由容器统一接管）
           child: Material(
+            key: _sheetKey,
             color: AppColors.bg,
             borderRadius:
                 const BorderRadius.vertical(top: Radius.circular(20)),

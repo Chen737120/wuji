@@ -142,6 +142,39 @@ void main() {
     expect(find.text('sheet内容'), findsNothing);
   });
 
+  testWidgets('SpringSheet 位移关闭：慢速拖过内容高 45%（T2 回归）',
+      (tester) async {
+    tester.view.physicalSize = const Size(400, 890);
+    tester.view.devicePixelRatio = 1.0;
+    addTearDown(tester.view.reset);
+    await tester.pumpWidget(MaterialApp(
+        home: Scaffold(
+            body: Center(
+      child: Builder(
+          builder: (context) => TextButton(
+                onPressed: () => showSpringSheet<void>(
+                  context,
+                  builder: (_) =>
+                      const SizedBox(height: 300, child: Text('sheet内容')),
+                ),
+                child: const Text('open'),
+              )),
+    ))));
+    await tester.tap(find.text('open'));
+    await tester.pumpAndSettle();
+    expect(find.text('sheet内容'), findsOneWidget);
+
+    // 内容 300 + 把手约 12 → 阈值约 140；220px/1200ms ≈ 183px/s（<700 速度阈值），
+    // 只走位移判定。修前阈值是屏高 0.45≈400，220px 不会关 —— 此断言即回归保护。
+    await tester.timedDrag(
+      find.byKey(const ValueKey('spring-sheet-handle')),
+      const Offset(0, 220),
+      const Duration(milliseconds: 1200),
+    );
+    await tester.pumpAndSettle();
+    expect(find.text('sheet内容'), findsNothing);
+  });
+
   testWidgets('老师弹层：键盘弹出只上移一次（无双重 viewInsets 撑满全屏）',
       (tester) async {
     tester.view.physicalSize = const Size(400, 890);
