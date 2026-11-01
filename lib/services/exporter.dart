@@ -112,7 +112,7 @@ class Exporter {
         await encoder.close();
       } catch (_) {}
       final f = File(targetPath);
-      if (f.existsSync()) f.deleteSync();
+      await _deleteQuietly(f);
       rethrow;
     }
   }
@@ -143,22 +143,26 @@ class Exporter {
         try {
           await sink.close();
         } catch (_) {}
-        // 半成品必须删掉，否则用户看到的是个损坏的视频文件（P1-3）。
-        // 写句柄刚关闭时部分文件系统（Windows 实测）会短暂拒绝删除，
-        // 单次 deleteSync＋静默吞异常会偶发残留 → 有界重试。
-        for (var attempt = 0; attempt < 5; attempt++) {
-          try {
-            if (out.existsSync()) out.deleteSync();
-            break;
-          } on FileSystemException {
-            await Future<void>.delayed(const Duration(milliseconds: 20));
-          }
-        }
+        // 半成品必须删掉，否则用户看到的是个损坏的视频文件（P1-3）
+        await _deleteQuietly(out);
         rethrow;
       }
     }
     await File('${dir.path}/感受.txt')
         .writeAsString(feelingsTxt(record), encoding: utf8);
+  }
+
+  /// 删除半成品（Windows 上写句柄刚关闭时可能短暂拒绝删除 → 有界重试）。
+  /// 永不抛：清理失败不得覆盖调用方的原始异常。
+  Future<void> _deleteQuietly(File f) async {
+    for (var attempt = 0; attempt < 5; attempt++) {
+      try {
+        if (f.existsSync()) f.deleteSync();
+        return;
+      } catch (_) {
+        await Future<void>.delayed(const Duration(milliseconds: 20));
+      }
+    }
   }
 
   String _withSeq(String fileName, int n) {
