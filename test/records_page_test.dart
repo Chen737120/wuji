@@ -76,9 +76,10 @@ void main() {
     tester.view.devicePixelRatio = 1.0;
     addTearDown(tester.view.reset);
     // 2026-10-08 需求 #6：日历默认**当前月份**——种数据用当月日期验证
+    // 固定取当月 1/2 号（原「今天-1」在月初会与 d2 撞成同一天，导致断言失效）
     final now = DateTime.now();
-    final d1 = DateTime(now.year, now.month, now.day >= 2 ? now.day - 1 : 1);
-    final d2 = DateTime(now.year, now.month, 1);
+    final d1 = DateTime(now.year, now.month, 1);
+    final d2 = DateTime(now.year, now.month, 2);
     final lastMonth = DateTime(now.year, now.month, 0); // 上月最后一天
     final saver = FakeSaver(records: [
       rec('r1', iso(d1), style: '爵士', teacher: '小鹿', studio: '舞动空间',
@@ -130,8 +131,10 @@ void main() {
     tester.view.devicePixelRatio = 1.0;
     addTearDown(tester.view.reset);
     final now = DateTime.now();
-    final d1 = DateTime(now.year, now.month, now.day >= 2 ? now.day - 1 : 1);
-    final d2 = DateTime(now.year, now.month, 1);
+    // 固定取当月 1/2 号（原「今天-1」在月初会与 d2 撞成同一天，
+    // 两条记录同日 → 过滤后仍显示两条，断言必然失败）
+    final d1 = DateTime(now.year, now.month, 1);
+    final d2 = DateTime(now.year, now.month, 2);
     final saver = FakeSaver(records: [
       rec('r1', iso(d1), style: '爵士', note: '标题一'),
       rec('r2', iso(d2), style: '韩舞', note: '标题二'),
