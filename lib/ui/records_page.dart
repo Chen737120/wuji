@@ -374,18 +374,24 @@ class _RecordsPageState extends State<RecordsPage>
   /// 日历/周条（需求 #2：放进滚动流，随页面滚动；T5 子项 5：
   /// AnimatedSize 弹簧高度＋进入者淡入，替换现状 setState 直切）
   Widget _calendarShell() {
-    Widget fadeIn(Widget child) => TweenAnimationBuilder<double>(
-          tween: Tween(begin: 0, end: 1),
-          duration: const Duration(milliseconds: 200),
-          curve: Curves.easeOut,
-          builder: (_, v, c) => Opacity(opacity: v, child: c),
-          child: child,
-        );
+    // 系统开启「移除动画」时展开/收起瞬切（spec §2.1 reduced motion）
+    final reduce = MediaQuery.disableAnimationsOf(context);
+    Widget fadeIn(Widget child) => reduce
+        ? child
+        : TweenAnimationBuilder<double>(
+            tween: Tween(begin: 0, end: 1),
+            duration: const Duration(milliseconds: 200),
+            curve: Curves.easeOut,
+            builder: (_, v, c) => Opacity(opacity: v, child: c),
+            child: child,
+          );
     return Padding(
       padding: const EdgeInsets.only(bottom: 12),
       child: AnimatedSize(
         alignment: Alignment.topCenter,
-        duration: const Duration(milliseconds: 700),
+        duration: reduce
+            ? Duration.zero
+            : const Duration(milliseconds: 700),
         curve: const SpringHeightCurve(),
         child: _expanded
             ? KeyedSubtree(

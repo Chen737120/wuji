@@ -144,9 +144,10 @@ class _HomeShellState extends State<HomeShell>
     return TextButton(
       onPressed: () {
         if (_tab == idx) return;
+        final reduce = MediaQuery.disableAnimationsOf(context);
         setState(() => _tab = idx);
         HomeShell.currentTab.value = idx;
-        _bump.forward(from: 0);
+        if (!reduce) _bump.forward(from: 0);
       },
       child: Column(
         mainAxisAlignment: MainAxisAlignment.center,

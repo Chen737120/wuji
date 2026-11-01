@@ -45,8 +45,28 @@ class AppRoute<T> extends PageRoute<T> with CupertinoRouteTransitionMixin<T> {
   @override
   bool get maintainState => true;
 
+  /// 不做继承依赖注册的 MediaQuery 读取（只用于一次性判定）
+  MediaQueryData? get _mq {
+    final ctx = navigator?.context;
+    return ctx?.getInheritedWidgetOfExactType<MediaQuery>()?.data;
+  }
+
+  bool get _reduceMotion => _mq?.disableAnimations ?? false;
+
+  @override
+  TickerFuture didPush() {
+    if (_reduceMotion) {
+      // 让父类 super.didPush() 走 controller.forward()（createSimulation
+      // 返回 null），时长为 0 → 瞬切
+      controller!.duration = Duration.zero;
+      controller!.reverseDuration = Duration.zero;
+    }
+    return super.didPush();
+  }
+
   @override
   Simulation? createSimulation({required bool forward}) {
+    if (_reduceMotion) return null;
     if (forward) {
       return SpringSimulation(kSpringTransition, 0, 1, 0);
     }

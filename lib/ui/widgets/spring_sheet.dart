@@ -66,8 +66,28 @@ class SpringSheetRoute<T> extends PopupRoute<T> {  SpringSheetRoute({this.title,
   @override
   Duration get reverseTransitionDuration => const Duration(milliseconds: 400);
 
+  /// 不做继承依赖注册的 MediaQuery 读取（只用于一次性判定）
+  MediaQueryData? get _mq {
+    final ctx = navigator?.context;
+    return ctx?.getInheritedWidgetOfExactType<MediaQuery>()?.data;
+  }
+
+  bool get _reduceMotion => _mq?.disableAnimations ?? false;
+
+  @override
+  TickerFuture didPush() {
+    if (_reduceMotion) {
+      // createSimulation 返回 null 时框架走 controller.forward()，
+      // 时长为 0 → 弹层与遮罩瞬现
+      controller!.duration = Duration.zero;
+      controller!.reverseDuration = Duration.zero;
+    }
+    return super.didPush();
+  }
+
   @override
   Simulation? createSimulation({required bool forward}) {
+    if (_reduceMotion) return null;
     if (forward) return SpringSimulation(kSpringDefault, 0, 1, 0);
     return SpringSimulation(kSpringDefault, controller!.value, 0, 0);
   }

@@ -175,6 +175,40 @@ void main() {
     expect(find.text('sheet内容'), findsNothing);
   });
 
+  testWidgets('disableAnimations：弹层瞬现（修前 500ms 弹簧）', (tester) async {
+    tester.view.physicalSize = const Size(400, 890);
+    tester.view.devicePixelRatio = 1.0;
+    addTearDown(tester.view.reset);
+    await tester.pumpWidget(MaterialApp(
+      builder: (context, child) => MediaQuery(
+        data: MediaQuery.of(context).copyWith(disableAnimations: true),
+        child: child!,
+      ),
+      home: Scaffold(
+        body: Center(
+          child: Builder(
+            builder: (context) => TextButton(
+              onPressed: () => showSpringSheet<void>(
+                context,
+                builder: (_) => SizedBox(
+                  height: 300,
+                  child: Builder(
+                    builder: (ctx) => Text(
+                        'done=${ModalRoute.of(ctx)!.animation!.isCompleted}'),
+                  ),
+                ),
+              ),
+              child: const Text('open'),
+            ),
+          ),
+        ),
+      ),
+    ));
+    await tester.tap(find.text('open'));
+    await tester.pump();
+    expect(find.text('done=true'), findsOneWidget); // 修前为 done=false
+  });
+
   testWidgets('老师弹层：键盘弹出只上移一次（无双重 viewInsets 撑满全屏）',
       (tester) async {
     tester.view.physicalSize = const Size(400, 890);

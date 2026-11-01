@@ -56,6 +56,29 @@ void main() {
     expect(find.text('root'), findsOneWidget);
   });
 
+  testWidgets('disableAnimations：push/pop 瞬切（修前 450ms 弹簧）', (tester) async {
+    final navKey = GlobalKey<NavigatorState>();
+    await tester.pumpWidget(MaterialApp(
+      navigatorKey: navKey,
+      builder: (context, child) => MediaQuery(
+        data: MediaQuery.of(context).copyWith(disableAnimations: true),
+        child: child!,
+      ),
+      home: const Scaffold(body: Text('root')),
+    ));
+    final route =
+        AppRoute(builder: (_) => const Scaffold(body: Text('detail')));
+    navKey.currentState!.push(route);
+    await tester.pump();
+    expect(route.animation!.isCompleted, isTrue); // 修前为 false
+    expect(find.text('detail'), findsOneWidget);
+
+    // pop 也瞬切：一帧后 detail 已从树上移除（修前 400ms 反向弹簧仍在，会 findsOneWidget）
+    navKey.currentState!.pop();
+    await tester.pump();
+    expect(find.text('detail'), findsNothing);
+  });
+
   testWidgets('Hero 飞行与弹簧转场兼容：push/pop 均无异常收场', (tester) async {
     final navKey = GlobalKey<NavigatorState>();
     await tester.pumpWidget(MaterialApp(

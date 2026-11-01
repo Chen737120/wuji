@@ -62,4 +62,31 @@ void main() {
     await tester.pumpAndSettle(); // bump 收尾回到 1.0
     expect(cutIconScale().scale.value, 1.0);
   });
+
+  testWidgets('disableAnimations：切 tab 不启动 bump（修前 1→1.14→1）',
+      (tester) async {
+    tester.view.physicalSize = const Size(400, 1000);
+    tester.view.devicePixelRatio = 1.0;
+    addTearDown(tester.view.reset);
+    addTearDown(() => HomeShell.currentTab.value = 0); // 静态 notifier 复位
+    await tester.pumpWidget(MaterialApp(
+      builder: (context, child) => MediaQuery(
+        data: MediaQuery.of(context).copyWith(disableAnimations: true),
+        child: child!,
+      ),
+      home: HomeShell(
+          pages: const [SizedBox(), SizedBox(), SizedBox(), SizedBox()],
+          onFabPressed: null),
+    ));
+    await tester.pumpAndSettle();
+    ScaleTransition cutIconScale() => tester.widget<ScaleTransition>(
+        find.byWidgetPredicate((w) =>
+            w is ScaleTransition &&
+            w.child is Icon &&
+            (w.child as Icon).icon == Icons.content_cut));
+    await tester.tap(find.text('剪辑'));
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 100));
+    expect(cutIconScale().scale.value, 1.0); // 修前 >1.0
+  });
 }

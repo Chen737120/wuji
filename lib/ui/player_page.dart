@@ -167,6 +167,10 @@ class _PlayerPageState extends State<PlayerPage> {
   Widget build(BuildContext context) {
     final accent = Theme.of(context).colorScheme.primary;
     final c = _controller;
+    // 系统开启「移除动画」时控制条瞬显/瞬隐（spec §2.1 reduced motion）
+    final controlsDuration = MediaQuery.disableAnimationsOf(context)
+        ? Duration.zero
+        : const Duration(milliseconds: 250);
     // 顶部按钮避开状态栏/刘海（F14）：竖屏正常态加状态栏高度，
     // 全屏沉浸态 padding 为 0 时仍保留 10dp 边距。
     final topInset = MediaQuery.paddingOf(context).top;
@@ -248,12 +252,12 @@ class _PlayerPageState extends State<PlayerPage> {
                       right: 0,
                       child: AnimatedOpacity(
                         opacity: _controls ? 1 : 0,
-                        duration: const Duration(milliseconds: 250),
+                        duration: controlsDuration,
                         child: AnimatedSlide(
                           // 隐藏时上移 8px（原型 translateY(-8px)，条高约 52）
                           offset:
                               _controls ? Offset.zero : const Offset(0, -0.16),
-                          duration: const Duration(milliseconds: 250),
+                          duration: controlsDuration,
                           curve: Curves.easeOut,
                           child: IgnorePointer(
                             ignoring: !_controls,
@@ -311,14 +315,14 @@ class _PlayerPageState extends State<PlayerPage> {
                       bottom: 0,
                       child: AnimatedOpacity(
                         opacity: _controls ? 1 : 0,
-                        duration: const Duration(milliseconds: 250),
+                        duration: controlsDuration,
                         child: AnimatedSlide(
                           // T10：浮现/隐藏带 8px 纵向位移（原型 translateY(8px)，
                           // 底部条约 66px 高 → fraction ≈ 0.12）
                           offset: _controls
                               ? Offset.zero
                               : const Offset(0, 0.12),
-                          duration: const Duration(milliseconds: 250),
+                          duration: controlsDuration,
                           curve: Curves.easeOut,
                           child: IgnorePointer(
                             ignoring: !_controls,
