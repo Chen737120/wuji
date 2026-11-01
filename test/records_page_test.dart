@@ -229,7 +229,7 @@ void main() {
     ], child: const MaterialApp(home: RecordsPage())));
     await tester.pumpAndSettle();
 
-    // 时长胶囊：134s → 02:14（durationSec 为 null 时不显示，见上一用例）
+    // 时长胶囊：134s → 02:14（durationSec 为 null 时不显示，见下一用例）
     expect(find.text('02:14'), findsOneWidget);
     // 媒体格包 PressableScale
     expect(find.byType(PressableScale), findsWidgets);
@@ -245,6 +245,43 @@ void main() {
     expect(
         find.byKey(ValueKey('day-${now.year}-${now.month}-1')),
         findsOneWidget);
+  });
+
+  testWidgets('T7：durationSec 为 null 的视频不显示时长胶囊（角标仍在）',
+      (tester) async {
+    SharedPreferences.setMockInitialValues({});
+    tester.view.physicalSize = const Size(400, 890);
+    tester.view.devicePixelRatio = 1.0;
+    addTearDown(tester.view.reset);
+    final now = DateTime.now();
+    final d1 = DateTime(now.year, now.month, 1);
+    final saver = FakeSaver(
+      records: [rec('r1', iso(d1), style: '爵士', note: '标题一')],
+      media: [
+        MediaAsset(
+          id: 'm1',
+          classId: 'r1',
+          type: 'video',
+          fileName: 'media/2026-10/u1.mp4',
+          thumbName: 'media/2026-10/t.jpg',
+          durationSec: null,
+          sizeBytes: 4,
+          createdAt: DateTime(2026, 10, 31),
+        ),
+      ],
+    );
+    await tester.pumpWidget(MultiProvider(providers: [
+      Provider<ClassSaver>.value(value: saver),
+      // resolver 返回假绝对路径 → 有封面叠加层（Image 失败走占位不影响断言）
+      Provider<MediaPathResolver>.value(
+          value: _FixedResolver('C:/fake/t.jpg')),
+    ], child: const MaterialApp(home: RecordsPage())));
+    await tester.pumpAndSettle();
+
+    // null 时长不叠 MM:SS 胶囊
+    expect(find.textContaining(RegExp(r'^\d{2}:\d{2}$')), findsNothing);
+    // 播放角标仍在（有封面图的视频格）
+    expect(find.byIcon(Icons.play_arrow), findsWidgets);
   });
 }
 

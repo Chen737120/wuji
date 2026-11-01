@@ -12,15 +12,19 @@ void main() {
     ));
   }
 
-  testWidgets('push 弹簧驱动：进度单调上升至完成', (tester) async {
+  testWidgets('push 弹簧驱动：120ms 时处于 (0,1)，终态到 1', (tester) async {
     final navKey = GlobalKey<NavigatorState>();
     await pumpRoot(tester, navKey);
-    navKey.currentState!.push(
-        AppRoute(builder: (_) => const Scaffold(body: Text('detail'))));
+    final route =
+        AppRoute(builder: (_) => const Scaffold(body: Text('detail')));
+    navKey.currentState!.push(route);
     await tester.pump(); // 激活转场
     await tester.pump(const Duration(milliseconds: 120));
-    await tester.pump(const Duration(milliseconds: 120));
+    expect(route.animation!.value, greaterThan(0.0));
+    expect(route.animation!.value, lessThan(1.0)); // 证明是动画而非瞬切
     await tester.pumpAndSettle();
+    // 弹簧收尾停在 isDone 容差内（实测 0.99996），不要求精确 1.0
+    expect(route.animation!.value, closeTo(1.0, 0.001));
     expect(find.text('detail'), findsOneWidget);
   });
 
@@ -109,6 +113,7 @@ void main() {
     await tester.pump(const Duration(milliseconds: 100));
     await tester.pumpAndSettle();
     expect(tester.takeException(), isNull);
-    expect(find.text('detail'), findsNothing);
+    // 回到底层页：root 里的 Hero 内容仍在（原断言查的 'detail' 两边都不存在）
+    expect(find.text('cover'), findsOneWidget);
   });
 }

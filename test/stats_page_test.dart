@@ -5,7 +5,9 @@ import 'package:shared_preferences/shared_preferences.dart';
 import 'package:wuji/data/app_repository.dart';
 import 'package:wuji/data/db.dart';
 import 'package:wuji/theme.dart';
+import 'package:wuji/ui/home_shell.dart';
 import 'package:wuji/ui/stats_page.dart';
+import 'package:wuji/ui/widgets/charts.dart';
 import 'helpers/fake_saver.dart';
 
 ClassRecord rec(String id, String date, int sessions, int minutesEach,
@@ -125,5 +127,27 @@ void main() {
     await tester.tap(find.text('近1月'));
     await tester.pumpAndSettle();
     expect(find.text('小时'), findsOneWidget);
+  });
+
+  testWidgets('切入统计 tab 触发图表重放；页头无齿轮', (tester) async {
+    tester.view.physicalSize = const Size(400, 1800);
+    tester.view.devicePixelRatio = 1.0;
+    addTearDown(tester.view.reset);
+    HomeShell.currentTab.value = 0;
+    addTearDown(() => HomeShell.currentTab.value = 0); // 静态 notifier，别污染后续用例
+    await tester.pumpWidget(host(FakeSaver(records: [
+      rec('a', '2026-10-01', 1, 60),
+    ])));
+    await tester.pumpAndSettle();
+    expect(find.byIcon(Icons.settings_outlined), findsNothing); // T3 齿轮已移除
+
+    final before =
+        tester.widget<TrendBars>(find.byType(TrendBars)).entryGeneration;
+    HomeShell.currentTab.value = HomeShell.statsTabIndex;
+    await tester.pump();
+    final after =
+        tester.widget<TrendBars>(find.byType(TrendBars)).entryGeneration;
+    expect(after, before + 1);
+    await tester.pumpAndSettle(); // 收掉重放动画的 ticker
   });
 }
