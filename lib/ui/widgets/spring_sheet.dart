@@ -6,7 +6,7 @@ import '../../theme.dart';
 
 /// 弹层弹簧容器（任务书 T6 / spec §2.1）：自建 PopupRoute——
 /// - 内容 translateY 由 kSpringDefault 弹簧驱动（createSimulation 原生通路）；
-/// - 顶部 36×5 把手（＋可选标题）为拖拽热区，VelocityTracker 速度判定：
+/// - 顶部 36×5 把手为拖拽热区，VelocityTracker 速度判定：
 ///   释放速度 >700px/s 或位移 >45% 内容高 → 关，否则 kSpringGesture
 ///   带释放初速度回弹；上拖过头 rubber-band(0.55) 阻尼；
 /// - scrim rgba(0,0,0,.38) 随转场淡入淡出；
@@ -16,11 +16,10 @@ import '../../theme.dart';
 /// 各 sheet 内容 builder 原样不动。
 Future<T?> showSpringSheet<T>(
   BuildContext context, {
-  String? title,
   required WidgetBuilder builder,
 }) {
   return Navigator.of(context, rootNavigator: true)
-      .push(SpringSheetRoute<T>(title: title, builder: builder));
+      .push(SpringSheetRoute<T>(builder: builder));
 }
 
 /// 弹层标题行的关闭钮（用户 2026-10-31 反馈：标题紧贴顶边）。
@@ -45,9 +44,9 @@ class SheetCloseButton extends StatelessWidget {
   }
 }
 
-class SpringSheetRoute<T> extends PopupRoute<T> {  SpringSheetRoute({this.title, required this.builder});
+class SpringSheetRoute<T> extends PopupRoute<T> {
+  SpringSheetRoute({required this.builder});
 
-  final String? title;
   final WidgetBuilder builder;
 
   @override
@@ -188,7 +187,7 @@ class _SheetScaffoldState<T> extends State<_SheetScaffold<T>>
             child: Column(
               mainAxisSize: MainAxisSize.min,
               children: [
-                // 把手（＋标题）拖拽热区（原型 .sheet-dragzone/.sheet-grab）；
+                // 把手拖拽热区（原型 .sheet-dragzone/.sheet-grab）；
                 // 用户 2026-10-31 反馈：顶部留白收紧（把手区 6+5+2＝13px）
                 GestureDetector(
                   key: const ValueKey('spring-sheet-handle'),
@@ -209,15 +208,6 @@ class _SheetScaffoldState<T> extends State<_SheetScaffold<T>>
                             borderRadius: BorderRadius.circular(3),
                           ),
                         ),
-                        if (widget.route.title != null)
-                          Padding(
-                            padding: const EdgeInsets.only(bottom: 12),
-                            child: Text(widget.route.title!,
-                                style: const TextStyle(
-                                    fontSize: 14,
-                                    fontWeight: FontWeight.w600,
-                                    letterSpacing: 1)),
-                          ),
                       ],
                     ),
                   ),

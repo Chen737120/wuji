@@ -22,21 +22,6 @@ void main() {
       expect(neg, Offset.zero);
     });
 
-    test('snapEdge picks nearer horizontal edge', () {
-      final right = FabLogic.snapEdge(
-          const Offset(300, 500), screen, ball);
-      expect(right.dx, 400 - 48);
-      final left =
-          FabLogic.snapEdge(const Offset(80, 500), screen, ball);
-      expect(left.dx, 0);
-    });
-
-    test('isTap threshold 6dp', () {
-      expect(FabLogic.isTap(const Offset(5, 3)), isTrue);
-      expect(FabLogic.isTap(const Offset(7, 0)), isFalse);
-      expect(FabLogic.isTap(Offset.zero), isTrue);
-    });
-
     test('initial offset = 右下（默认）', () {
       final initial = FabLogic.initialOffset(screen, ball);
       expect(initial.dx, 400 - 48);

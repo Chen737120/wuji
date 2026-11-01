@@ -49,9 +49,6 @@ void main() {
   });
 
   test('AppText type scale per task book T1 (spec §5)', () {
-    expect(AppText.homeTitle.fontSize, 28);
-    expect(AppText.homeTitle.fontWeight, FontWeight.w800);
-    expect(AppText.homeTitle.letterSpacing, -0.56); // −2% of 28
     expect(AppText.pageTitle.fontSize, 16);
     expect(AppText.pageTitle.fontWeight, FontWeight.w700);
     expect(AppText.pageTitle.letterSpacing, 3.0);

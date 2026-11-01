@@ -56,18 +56,19 @@ class AppColors {
   static const faint = Color(0xFFB8B8B4);
 }
 
+/// 卡片阴影（原型 --shadow-card：0 1px 2px 4% / 0 4px 14px 5%），
+/// 日历卡与记录卡共用（T5 子项 3/5）。
+const List<BoxShadow> kCardShadow = [
+  BoxShadow(
+      color: Color(0x0A1A1A1A), offset: Offset(0, 1), blurRadius: 2),
+  BoxShadow(
+      color: Color(0x0D1A1A1A), offset: Offset(0, 4), blurRadius: 14),
+];
+
 /// 字阶常量（spec §5 / 任务书 T1）。仅供首页 v1 重写与后续新代码引用，
 /// 不批量替换现有页面文字（App 视觉零变化）。颜色由调用处指定，此处不耦合。
 class AppText {
   AppText._();
-
-  /// 首页 Large Title「记录」：28 / w800 / 字距 −2%（原型 .t-large）
-  static const TextStyle homeTitle = TextStyle(
-    fontSize: 28,
-    fontWeight: FontWeight.w800,
-    letterSpacing: -0.56,
-    height: 1.12,
-  );
 
   /// 页头标题（其余 tab）：16 / w700 / 字距 3px（原型 .t-page）
   static const TextStyle pageTitle = TextStyle(

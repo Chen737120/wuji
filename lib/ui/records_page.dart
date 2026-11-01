@@ -70,15 +70,6 @@ List<DayGroup> groupByDay(List<ClassRecord> records) {
   return map.values.toList();
 }
 
-/// 卡片阴影（原型 --shadow-card：0 1px 2px 4% / 0 4px 14px 5%），
-/// 日历卡与记录卡共用（T5 子项 3/5）。
-const List<BoxShadow> kCardShadow = [
-  BoxShadow(
-      color: Color(0x0A1A1A1A), offset: Offset(0, 1), blurRadius: 2),
-  BoxShadow(
-      color: Color(0x0D1A1A1A), offset: Offset(0, 4), blurRadius: 14),
-];
-
 /// 记录页（规格 §3.3）：日历（默认展开、记住状态）＋按月分组时间流。
 class RecordsPage extends StatefulWidget {
   const RecordsPage({super.key});
@@ -88,7 +79,7 @@ class RecordsPage extends StatefulWidget {
 }
 
 class _RecordsPageState extends State<RecordsPage>
-    with WidgetsBindingObserver, TickerProviderStateMixin {
+    with WidgetsBindingObserver {
   List<ClassRecord> _records = [];
   Map<String, List<MediaAsset>> _mediaByClass = {};
   bool _expanded = true;
@@ -141,7 +132,7 @@ class _RecordsPageState extends State<RecordsPage>
     }
   }
 
-  Future<void> _toggleExpanded() async {
+  void _toggleExpanded() {
     setState(() => _expanded = !_expanded);
   }
 
@@ -1107,7 +1098,6 @@ class _RecordCardState extends State<RecordCard> {
 
     Widget cell(MediaAsset m) {
       final rel = m.thumbName ?? (m.type == 'image' ? m.fileName : null);
-      final first = m == widget.media.first;
       final isVideo = m.type == 'video';
       // 不在 build 里做 existsSync（快速滚动时是 UI 线程同步盘 IO）；
       // 文件丢失/解码失败统一走 errorBuilder 的占位态
@@ -1157,8 +1147,7 @@ class _RecordCardState extends State<RecordCard> {
       );
       // T5 子项 6：媒体格按压反馈（Listener 不消费事件，onTap 照常）
       core = PressableScale(child: core);
-      // 首图与详情页首图共用 Hero tag（卡片"展开成详情页"）
-      return first ? Hero(tag: 'record-cover-${r.id}', child: core) : core;
+      return core;
     }
 
     final count = list.length;

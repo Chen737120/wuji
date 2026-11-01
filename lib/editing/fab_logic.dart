@@ -25,17 +25,6 @@ class FabLogic {
     return Offset(_clampAxis(o.dx, 0, maxX), _clampAxis(o.dy, 0, maxY));
   }
 
-  /// 松手吸附到较近的左/右边缘（y 不动）。
-  static Offset snapEdge(Offset o, Size screen, Size ball) {
-    final maxX = (screen.width - ball.width).clamp(0.0, double.infinity);
-    final x = o.dx.clamp(0.0, maxX);
-    final snapped = x < maxX / 2 ? 0.0 : maxX;
-    return Offset(snapped, o.dy);
-  }
-
-  /// 位移阈值 <6dp 判定为点击（规格 §3）。
-  static bool isTap(Offset delta) => delta.distance < 6;
-
   /// 动量投影（T11，原型 project(v, decelRate .998) 闭式）：
   /// 释放速度 px/s → 惯性滑行总位移 px。
   static double projectMomentum(double vPerSec, [double rate = .998]) =>

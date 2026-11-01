@@ -17,11 +17,6 @@ import '../../theme.dart';
 ///   simulation 无冲突；视差与右滑返回由 CupertinoPageTransition 随
 ///   animation 值自动跟随；
 /// - 无第三方包。
-///
-/// Hero tag 命名规范：`<对象类型>-<业务字段>-<唯一id>`，例如
-/// `record-cover-<记录id>`、`record-title-<记录id>`——同一次导航
-/// 源/目标页各放一个同 tag 的 Hero；列表页多卡片用记录 id（**不要用
-/// index**：滚动/增删后 index 会变，跨页 tag 配对会错）。
 class AppRoute<T> extends PageRoute<T> with CupertinoRouteTransitionMixin<T> {
   AppRoute({required this.builder});
 

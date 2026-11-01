@@ -28,9 +28,6 @@ class _DraggableFabState extends State<DraggableFab> with TickerProviderStateMix
   Offset _offset = Offset.zero;
   bool _loaded = false;
   bool _dragging = false;
-  // 拖动阈值（任务书 T11：6px 区分点击/拖动；pan 手势 slop 更大，
-  // 首次 onPanUpdate 已过阈值，点击路径不受影响）
-  Offset? _panStart;
 
   // X/Y 独立弹簧（kSpringGesture 带初速度吸附）
   late final AnimationController _springX =
@@ -103,15 +100,10 @@ class _DraggableFabState extends State<DraggableFab> with TickerProviderStateMix
     _stopSprings();
     setState(() {
       _dragging = true;
-      _panStart = d.localPosition;
     });
   }
 
   void _onPanUpdate(DragUpdateDetails d) {
-    // 拖动阈值 6px：未达阈值前不进入拖动态（isTap 阈值，任务书 T11）
-    if (_panStart != null && !_dragging) {
-      if ((d.localPosition - _panStart!).distance < 6) return;
-    }
     setState(() {
       // 拖出边界 rubber-band(0.55) 弹性阻尼（T11）
       _offset = FabLogic.clampRubberBand(
@@ -156,7 +148,6 @@ class _DraggableFabState extends State<DraggableFab> with TickerProviderStateMix
           onPanEnd: _onPanEnd,
           onPanCancel: () => setState(() {
             _dragging = false;
-            _panStart = null;
           }),
           onTap: widget.onTap,
           child: Container(
