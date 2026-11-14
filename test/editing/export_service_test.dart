@@ -134,6 +134,14 @@ void main() {
     ]);
   });
 
+  test('galleryRelativePath: iOS 相册名即 relativePath，显式用 wuji', () {
+    expect(galleryRelativePath(isIOS: true), 'wuji');
+  });
+
+  test('galleryRelativePath: 非 iOS 保持 Movies 目录下 wuji 子目录', () {
+    expect(galleryRelativePath(isIOS: false), 'Movies/wuji');
+  });
+
   test('run: success moves output to Movies/wuji and reports path', () async {
     final runner = FakeRunner();
     final mover = FakeMover();

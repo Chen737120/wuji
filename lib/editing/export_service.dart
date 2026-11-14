@@ -107,9 +107,15 @@ Future<bool> defaultProbeHasVideoStream(String path) async {
   }
 }
 
+/// 保存相册的 relativePath：安卓 = Movies 目录下 wuji 子目录；
+/// iOS 无目录树概念，relativePath 即相册名，显式用 wuji（避免 Movies/wuji）。
+/// 被 [GalleryMover] 与三处导出链路的用户可见文案共用（须与实际保存结果一致）。
+String galleryRelativePath({required bool isIOS}) =>
+    isIOS ? 'wuji' : 'Movies/wuji';
+
 /// 产物搬运（窄接口）：成功=搬进相册并消费临时文件；失败/取消=清半成品。
 abstract class FileMover {
-  /// 把临时产物保存进相册 `Movies/wuji/`，返回相册内路径（展示用）。
+  /// 把临时产物保存进相册（路径见 [galleryRelativePath]），返回相册内路径（展示用）。
   Future<String> moveToGallery(String tempPath, String fileName);
 
   /// 幂等清理半成品。
@@ -345,9 +351,9 @@ class FFmpegKitRunner implements CommandRunner {
   void cancel() => FFmpegKit.cancel();
 }
 
-/// 设备端实现：photo_manager 存相册（Movies/wuji/）＋媒体扫描＋删临时。
+/// 设备端实现：photo_manager 存相册（路径见 [galleryRelativePath]）＋媒体扫描＋删临时。
 class GalleryMover implements FileMover {
-  static const _relativePath = 'Movies/wuji';
+  String get _relativePath => galleryRelativePath(isIOS: Platform.isIOS);
 
   @override
   Future<String> moveToGallery(String tempPath, String fileName) async {

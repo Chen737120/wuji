@@ -266,7 +266,7 @@ class _ComparePageState extends State<ComparePage> {
         fpsCap: teacherInfo?.fps == 0 ? 30 : (teacherInfo?.fps ?? 30),
         containerAspect: containerAspect,
       );
-      await _exportSvc!.run(
+      final galleryPath = await _exportSvc!.run(
         ExportJob(command: cmd, base: '对比', expectedDurationMs: overlapMs),
         onProgress: (p) {
           if (mounted) {
@@ -276,7 +276,7 @@ class _ComparePageState extends State<ComparePage> {
       );
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('已保存到相册 Movies/wuji/')));
+          SnackBar(content: Text('已保存到相册 $galleryPath')));
     } on ExportCancelled {
       if (mounted) {
         ScaffoldMessenger.of(context)

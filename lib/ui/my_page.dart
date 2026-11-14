@@ -1,7 +1,10 @@
+import 'dart:io';
+
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import '../app_version.dart';
 import '../data/app_repository.dart' show ClassSaver;
+import '../editing/export_service.dart' show galleryRelativePath;
 import '../reload_bus.dart';
 import '../theme.dart';
 import 'export_preview_page.dart';
@@ -129,7 +132,7 @@ class _MyPageState extends State<MyPage> {
                             '· 剪辑：舞蹈直拍（圈选区域+关键帧跟框）、同屏对比'
                             '（时间/画面微调）\n'
                             '· 导出：整包/按时间段 zip（视频+感受+总表），'
-                            '成片存相册 Movies/wuji/\n'
+                            '成片存相册 ${galleryRelativePath(isIOS: Platform.isIOS)}/\n'
                             '· 备份：换手机一键恢复\n\n'
                             '卸载 App 存档不丢；导出的 zip 就是异地备份。\n\n'
                             'create by：AI × 一棵卷心菜',

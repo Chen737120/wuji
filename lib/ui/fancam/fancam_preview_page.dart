@@ -227,11 +227,11 @@ class _FancamPreviewPageState extends State<FancamPreviewPage> {
     setState(() => _saving = true);
     try {
       final fileName = _exportedPath!.split(Platform.pathSeparator).last;
-      await _svc!.saveToGallery(_exportedPath!, fileName);
+      final galleryPath = await _svc!.saveToGallery(_exportedPath!, fileName);
       _savedToGallery = true;
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('已保存到相册 Movies/wuji/')));
+          SnackBar(content: Text('已保存到相册 $galleryPath')));
       Navigator.of(context).pop(); // 回编辑页
     } catch (e) {
       if (mounted) {
@@ -345,7 +345,8 @@ class _FancamPreviewPageState extends State<FancamPreviewPage> {
                   if (widget.trimEnd != null)
                     _row('时长',
                         '${((widget.trimEnd! - widget.trimStart).inMilliseconds / 1000).toStringAsFixed(1)} 秒（已修剪）'),
-                  _row('保存位置', '确认预览后存入相册 Movies/wuji/'),
+                  _row('保存位置',
+                      '确认预览后存入相册 ${galleryRelativePath(isIOS: Platform.isIOS)}/'),
                   if (_followError != null)
                     Padding(
                       padding: const EdgeInsets.only(top: 8),
