@@ -73,4 +73,21 @@ void main() {
     expect(humanBytes(12 * 1024 * 1024), '约 12 MB');
     expect(humanBytes(3 * 1024 * 1024 * 1024), '约 3.0 GB');
   });
+
+  test('archiveSwitchHint: iOS 与实际一致（应用内存档），安卓保持原引导', () {
+    expect(archiveSwitchHint(isIOS: true), 'iOS 版存档固定在应用内，暂不支持切换');
+    expect(archiveSwitchHint(isIOS: false), '当前版本暂不支持切换，请重装后选择存档文件夹');
+  });
+
+  test('archiveLocationSubtitle: iOS 无「更换」且卸载即删，安卓原文不变', () {
+    expect(archiveLocationSubtitle(isIOS: true),
+        '查看应用内存档（卸载即删，请定期导出备份）');
+    expect(archiveLocationSubtitle(isIOS: false), '查看或更换存档文件夹（卸载不清空）');
+  });
+
+  test('archiveUninstallNote: iOS 卸载即删语义，安卓「不丢」原文不变', () {
+    expect(archiveUninstallNote(isIOS: true),
+        '卸载 App 存档会清空，请定期导出 zip 备份；导出的 zip 就是异地备份。');
+    expect(archiveUninstallNote(isIOS: false), '卸载 App 存档不丢；导出的 zip 就是异地备份。');
+  });
 }

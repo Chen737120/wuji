@@ -23,6 +23,29 @@ String humanBytes(num bytes) {
   return '约 ${(mb / 1024).toStringAsFixed(1)} GB';
 }
 
+/// 「存档位置」无 ArchiveSwitcher 时的提示：iOS 无 SAF/重装选目录流程，
+/// 文案必须与 iOS 实际（应用内存档）一致；安卓保持原引导语境。
+/// 注：Info.plist 未开 UIFileSharingEnabled，文件 App 不显示「舞记」目录，
+/// 故 iOS 文案不提「文件 App 可见」（可见性以 T5 清单第 10 项真机核对为准）。
+@visibleForTesting
+String archiveSwitchHint({required bool isIOS}) => isIOS
+    ? 'iOS 版存档固定在应用内，暂不支持切换'
+    : '当前版本暂不支持切换，请重装后选择存档文件夹';
+
+/// 「存档位置」入口副标题：iOS 无 SAF「更换」流程且 Documents 卸载即删
+/// （main.dart 存档初始化注释自证），安卓保持原引导语境。
+@visibleForTesting
+String archiveLocationSubtitle({required bool isIOS}) => isIOS
+    ? '查看应用内存档（卸载即删，请定期导出备份）'
+    : '查看或更换存档文件夹（卸载不清空）';
+
+/// 「关于」弹窗的卸载语义句：iOS 应用沙盒 Documents 卸载即删，
+/// 安卓外部存档卸载不清空；两句后半均为「导出 zip 即异地备份」。
+@visibleForTesting
+String archiveUninstallNote({required bool isIOS}) => isIOS
+    ? '卸载 App 存档会清空，请定期导出 zip 备份；导出的 zip 就是异地备份。'
+    : '卸载 App 存档不丢；导出的 zip 就是异地备份。';
+
 /// 「我的」页（规格 §3.6）：用量、导出/导入、存档位置、管理、外观、关于。
 class MyPage extends StatefulWidget {
   const MyPage({super.key});
@@ -91,15 +114,16 @@ class _MyPageState extends State<MyPage> {
                       onTap: () => Navigator.push(context,
                           MaterialPageRoute(builder: (_) => const ImportPage()))),
                   _navRow(context, '存档位置',
-                      sub: '查看或更换存档文件夹（卸载不清空）',
+                      sub: archiveLocationSubtitle(isIOS: Platform.isIOS),
                       onTap: () async {
                         ArchiveSwitcher? switcher;
                         try {
                           switcher = context.read<ArchiveSwitcher>();
                         } catch (_) {}
                         if (switcher == null) {
-                          ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
-                              content: Text('当前版本暂不支持切换，请重装后选择存档文件夹')));
+                          ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+                              content: Text(archiveSwitchHint(
+                                  isIOS: Platform.isIOS))));
                           return;
                         }
                         await switcher.run();
@@ -134,7 +158,7 @@ class _MyPageState extends State<MyPage> {
                             '· 导出：整包/按时间段 zip（视频+感受+总表），'
                             '成片存相册 ${galleryRelativePath(isIOS: Platform.isIOS)}/\n'
                             '· 备份：换手机一键恢复\n\n'
-                            '卸载 App 存档不丢；导出的 zip 就是异地备份。\n\n'
+                            '${archiveUninstallNote(isIOS: Platform.isIOS)}\n\n'
                             'create by：AI × 一棵卷心菜',
                             style: TextStyle(fontSize: 13, height: 1.7)),
                         actions: [TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('好的'))],
