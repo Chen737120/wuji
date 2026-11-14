@@ -20,6 +20,40 @@ String _json({
 }
 
 void main() {
+  test('hasAudio：真实 aac 音轨计入（回归）', () {
+    final j = '{"streams":['
+        '{"codec_type":"video","width":1920,"height":1080,"avg_frame_rate":"30/1"},'
+        '{"codec_type":"audio","codec_name":"aac"}],'
+        '"format":{"duration":"10.0"}}';
+    expect(parseMediaInformationJson(j)!.hasAudio, isTrue);
+  });
+
+  test('hasAudio：mebx 假音轨不计入（codec_name 缺失/none，2026-11-14 iPhone 实证族）', () {
+    // iPhone 视频含 Core Media 元数据流：FFmpeg 误标 codec_type=audio 且
+    // codec_id=NONE（导出报 Decoder (codec none) not found）——ffprobe JSON
+    // 里 codec_name 缺失或为 none。不能算有音轨。
+    final j = '{"streams":['
+        '{"codec_type":"video","width":1920,"height":1080,"avg_frame_rate":"30/1"},'
+        '{"codec_type":"audio"},'
+        '{"codec_type":"audio","codec_name":"none"}],'
+        '"format":{"duration":"10.0"}}';
+    expect(parseMediaInformationJson(j)!.hasAudio, isFalse);
+  });
+
+  test('hasAudio：codec_name 为 none/unknown 不计入，真音轨并存时为 true', () {
+    final noneOnly = '{"streams":['
+        '{"codec_type":"video","width":1920,"height":1080,"avg_frame_rate":"30/1"},'
+        '{"codec_type":"audio","codec_name":"none"}],'
+        '"format":{"duration":"10.0"}}';
+    expect(parseMediaInformationJson(noneOnly)!.hasAudio, isFalse);
+    final mixed = '{"streams":['
+        '{"codec_type":"video","width":1920,"height":1080,"avg_frame_rate":"30/1"},'
+        '{"codec_type":"audio","codec_name":"unknown"},'
+        '{"codec_type":"audio","codec_name":"aac"}],'
+        '"format":{"duration":"10.0"}}';
+    expect(parseMediaInformationJson(mixed)!.hasAudio, isTrue);
+  });
+
   test('side_data rotation=-90：显示尺寸交换为竖屏', () {
     final info = parseMediaInformationJson(_json(sideDataRotation: '-90'))!;
     expect(info.rotationDegrees, -90);

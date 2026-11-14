@@ -44,7 +44,17 @@ MediaInfo? parseMediaInformationJson(String json) {
     var hasAudio = false;
     for (final s in streams) {
       if (s['codec_type'] == 'video' && video == null) video = s;
-      if (s['codec_type'] == 'audio') hasAudio = true;
+      // iPhone 视频的 mebx 元数据流会被 FFmpeg 误标为 codec_type=audio 且
+      // 无解码器（codec_name 缺失/none/unknown，2026-11-14 真机实证）：
+      // 不能计入 hasAudio——否则无真实音轨的 iPhone 视频会在导出命令里
+      // 带上音轨参数并选中假音轨解码失败（与 8225e66 的 map 收紧同族，
+      // 这是探测侧补强；真音轨恒有 codec_name 如 aac）。
+      if (s['codec_type'] == 'audio') {
+        final codec = '${s['codec_name'] ?? ''}'.toLowerCase();
+        if (codec.isNotEmpty && codec != 'none' && codec != 'unknown') {
+          hasAudio = true;
+        }
+      }
     }
     if (video == null) return null;
     final durationSec = double.tryParse(
