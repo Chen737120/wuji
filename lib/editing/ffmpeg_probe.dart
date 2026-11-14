@@ -101,10 +101,12 @@ double _parseRate(String rate) {
 }
 
 /// 设备端：探测 H.264 硬编编码器是否可用（决定 min / min-gpl 变体，规格 §2）。
+/// 双平台编码器：安卓 mediacodec / iOS videotoolbox（仅探针用，不影响主流程）。
 Future<bool> hasHardwareH264Encoder() async {
   final session = await FFmpegKit.execute('-hide_banner -encoders');
   final output = (await session.getAllLogsAsString()) ?? '';
-  return output.contains('h264_mediacodec');
+  return output.contains('h264_mediacodec') ||
+      output.contains('h264_videotoolbox');
 }
 
 /// 设备端：读取媒体信息。
