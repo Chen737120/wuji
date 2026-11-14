@@ -32,6 +32,20 @@ class PickedMedia {
       );
 }
 
+/// 入库扩展名：优先取选择器给的源文件名（iPhone 视频是 .MOV、照片是
+/// .HEIC——硬编码 mp4/jpg 会让存档文件名与容器/编码不符，导出 zip 后
+/// 外部播放器/看图软件只能靠内容探测碰运气）；标题缺失或无合法扩展名
+/// 时按类型兜底（历史行为）。
+String mediaExtFor({required bool isVideo, String? title}) {
+  final t = title ?? '';
+  final dot = t.lastIndexOf('.');
+  if (dot > 0 && dot < t.length - 1) {
+    final ext = t.substring(dot + 1).toLowerCase();
+    if (ext.length <= 5 && RegExp(r'^[a-z0-9]+$').hasMatch(ext)) return ext;
+  }
+  return isVideo ? 'mp4' : 'jpg';
+}
+
 /// 选择结果：picked 是可用项；failedNames 是读取失败被跳过的文件名（规格 §8 要求列出）。
 class PickResult {
   const PickResult({required this.picked, this.failedNames = const []});
@@ -125,7 +139,7 @@ class PluginMediaImporter implements MediaImporter {
         }
         picked.add(PickedMedia(
           path: file.path,
-          ext: a.type == AssetType.video ? 'mp4' : 'jpg',
+          ext: mediaExtFor(isVideo: a.type == AssetType.video, title: a.title),
           isVideo: a.type == AssetType.video,
           durationSec: a.type == AssetType.video ? a.duration : null,
           sizeBytes: await file.length(),

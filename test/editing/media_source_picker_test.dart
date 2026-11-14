@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:provider/provider.dart';
+import 'package:wuji/app_services.dart' show mediaExtFor;
 import 'package:wuji/data/app_repository.dart';
 import 'package:wuji/data/db.dart';
 import 'package:wuji/editing/media_source_picker.dart';
@@ -147,5 +148,24 @@ void main() {
     expect(picked!.fromArchive, isTrue);
     expect(picked!.path, '/abs/v1.mp4'); // 绝对路径由 resolver 提供
   });
-}
 
+  // 入库扩展名（2026-11-14 iOS 走查）：iPhone 视频源名是 .MOV、照片 .HEIC，
+  // 硬编码 mp4/jpg 会让存档文件名与容器不符；标题缺失回退按类型兜底。
+  group('mediaExtFor', () {
+    test('取源文件名扩展名并小写化（iPhone .MOV）', () {
+      expect(mediaExtFor(isVideo: true, title: 'IMG_0001.MOV'), 'mov');
+      expect(mediaExtFor(isVideo: true, title: 'VID_20261114.mp4'), 'mp4');
+      expect(mediaExtFor(isVideo: false, title: 'IMG_0001.HEIC'), 'heic');
+      expect(mediaExtFor(isVideo: false, title: 'a.Png'), 'png');
+    });
+    test('标题缺失/无扩展名/异常扩展名 → 按类型兜底', () {
+      expect(mediaExtFor(isVideo: true), 'mp4');
+      expect(mediaExtFor(isVideo: false), 'jpg');
+      expect(mediaExtFor(isVideo: true, title: 'noext'), 'mp4');
+      expect(mediaExtFor(isVideo: true, title: '.mp4'), 'mp4'); // dot=0 视为无主名
+      expect(mediaExtFor(isVideo: true, title: 'x.'), 'mp4'); // 空扩展名
+      expect(mediaExtFor(isVideo: true, title: 'a.!!'), 'mp4'); // 非法字符
+      expect(mediaExtFor(isVideo: true, title: 'a.abcdefg'), 'mp4'); // 超长
+    });
+  });
+}
