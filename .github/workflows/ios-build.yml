@@ -11,6 +11,14 @@ on:
     branches: [master]
   workflow_dispatch: {}
 
+# pubspec.lock 内记录的是国内镜像 url（pub.flutter-io.cn）；CI 不配镜像时
+# pub 视为不同 source 触发全量重解析（2026-11-14 实证：重新解析把
+# video_player_avfoundation 升到 2.12.4，其 Swift 6 isolation 代码编译失败）。
+# 配齐后 CI 尊重 lock，与本地环境一致。
+env:
+  PUB_HOSTED_URL: https://pub.flutter-io.cn
+  FLUTTER_STORAGE_BASE_URL: https://storage.flutter-io.cn
+
 jobs:
   build:
     name: Build unsigned IPA
