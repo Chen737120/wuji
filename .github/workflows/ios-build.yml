@@ -14,7 +14,7 @@ on:
 jobs:
   build:
     name: Build unsigned IPA
-    runs-on: macos-14
+    runs-on: macos-15
     steps:
       - uses: actions/checkout@v4
 
@@ -49,7 +49,7 @@ jobs:
 
   smoke:
     name: iOS simulator smoke
-    runs-on: macos-14
+    runs-on: macos-15
     steps:
       - uses: actions/checkout@v4
 
