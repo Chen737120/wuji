@@ -82,6 +82,30 @@ void main() {
       }
     });
 
+    test('用例2b: 非 720p 源（竖拍 1080×1920）坐标域逐轴映射（2026-11-14 走查回归）', () {
+      // 修复前：init fy=norm×srcH÷4=240 超出解码域 180 被 clamp、输出 y=fx×4
+      // 被压进 0..720——竖拍源垂直方向系统性错位（模板抓错+框飞到画面上沿）。
+      // 修复后：init 进解码域（norm×W/H），输出逐轴回映射源域。
+      final pts = trackRgbFrames(
+        frames: _movingSquares(6),
+        // 方块画在解码帧 (80,90)：归一化 = 80/320, 90/180
+        initCxNorm: 80 / 320,
+        initCyNorm: 90 / 180,
+        srcW: 1080,
+        srcH: 1920,
+        fps: 30,
+      );
+      // 首帧：解码域 (80,90) → 源域 (270, 960)（画面正中，修复前 y=360）
+      expect(pts[0].x, closeTo(80 * 1080 / 320, 1e-6));
+      expect(pts[0].y, closeTo(90 * 1920 / 180, 1e-6));
+      for (var i = 0; i < 6; i++) {
+        // 换回解码域断言：x 跟随 +2px/帧，y 不动（与 720p 用例同一帧序列）
+        expect(pts[i].x * 320 / 1080, closeTo(80 + 2 * i, 4),
+            reason: '帧$i x（解码域）');
+        expect(pts[i].y * 180 / 1920, closeTo(90, 4), reason: '帧$i y（解码域）');
+      }
+    });
+
     test('用例3: 丢帧沿用——方块消失后 score<0.6 且位置保持最后有效值', () {
       final pts = trackRgbFrames(
         frames: [..._movingSquares(6), ...List.filled(5, _fillGray())],

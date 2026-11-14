@@ -2,12 +2,16 @@
 // 算法唯一真源：docs/superpowers/prototypes/fancam-follow/track.dart（逐行照搬）。
 // 与原型仅三处差异（Controller ruling）：
 //   ① fps 参数化（时间戳 = frame/fps，原型硬编码 30）；
-//   ② init 归一化坐标参数化（ds 坐标 = norm×srcW÷DS，原型是命令行全分辨率像素÷DS，语义一致）；
-//   ③ 输出 TrackPoint 全分辨率坐标（fx*DS）。
+//   ② init 归一化坐标进**解码帧域**（fx = norm×W——原型素材是 1280×720，其
+//      「全分辨率÷DS」与解码域 320×180 恰好重合；2026-11-14 走查修正：解码
+//      固定 scale=320:180 拉伸至满幅，源≠1280×720 时 norm×srcW÷DS 与图像域
+//      错位——竖拍 1080×1920 的 fy=norm×480 会被 clamp 到图像外、输出 y 域
+//      被压进 0..720，自动跟踪系统性失效。任何源都以解码帧域为准）；
+//   ③ 输出 TrackPoint 源分辨率坐标（fx×srcW/W、fy×srcH/H 逐轴回映射）。
 // 另一处与原型 CSV 的差别：首帧（模板抓取帧）也输出 t=0 的初始点（score=1），
 // 使输出帧数=输入帧数（Task 2 控制器按帧装载需要 t=0；位置即用户点击处，语义不变）。
 // 本文件零 flutter import（isolate 安全）；ffmpeg_kit 仅 decodeRawFrames 用（须在主 isolate 调用）。
-// 常量名（PW/PH/SR/DS/COLOR_GATE/REG_PER_PX）照搬原型 track.dart，便于逐行对照评审。
+// 常量名（W/H/PW/PH/SR/COLOR_GATE/REG_PER_PX）照搬原型 track.dart，便于逐行对照评审。
 // ignore_for_file: constant_identifier_names
 import 'dart:async';
 import 'dart:io';
@@ -19,16 +23,15 @@ import 'package:ffmpeg_kit_flutter_new_min/ffmpeg_kit.dart';
 
 import 'ffmpeg_serial.dart';
 
-const int W = 320, H = 180; // 跟踪分辨率（源 1/4）
-const int PW = 40, PH = 56; // 模板尺寸（ds px，≈全分辨率 160x224 躯干）
-const int SR = 12; // 搜索半径（ds px，≈±48px 全分辨率/帧）
-const double DS = 4.0;
+const int W = 320, H = 180; // 跟踪解码域（源拉伸至此；1280×720 时恰为源÷4）
+const int PW = 40, PH = 56; // 模板尺寸（解码域 px，1280×720 源≈160x224 躯干）
+const int SR = 12; // 搜索半径（解码域 px，1280×720 源≈±48px/帧）
 const double COLOR_GATE = 80; // 候选块 RGB 均值与模板的三通道差和上限（0-255）
 const double REG_PER_PX = 0.010; // 距离正则：大位移的分数惩罚/搜索像素
 const int frameLen = W * H * 3; // 每帧 RGB24 字节数 = 172800
 
-/// 单帧跟踪结果。t 秒；x/y 全分辨率像素（ds×4）；score 为 NCC 置信度，
-/// 全门控帧（所有候选被颜色门控拒绝）时为原型的 -2.0。
+/// 单帧跟踪结果。t 秒；x/y 源分辨率像素（解码域坐标×srcW/W、srcH/H）；
+/// score 为 NCC 置信度，全门控帧（所有候选被颜色门控拒绝）时为原型的 -2.0。
 class TrackPoint {
   const TrackPoint(this.t, this.x, this.y, this.score);
 
@@ -70,16 +73,18 @@ List<TrackPoint> trackRgbFrames({
 /// 颜色门控、速度 EMA 0.7/0.3、每 10 帧 blend 0.25、best≥0.5 才更新位置）。
 class _NccTracker {
   _NccTracker({
+    required this.srcW,
+    required this.srcH,
     required double initCxNorm,
     required double initCyNorm,
-    required int srcW,
-    required int srcH,
     required this.fps,
-  })  : fx = initCxNorm * srcW / DS, // 原型：全分辨率像素÷DS；norm×srcW 即全分辨率像素
-        fy = initCyNorm * srcH / DS,
+  })  : fx = initCxNorm * W, // 解码帧域：图像满幅归一化（差异②）
+        fy = initCyNorm * H,
         lum = List<double>.filled(W * H, 0);
 
   final double fps;
+  final int srcW;
+  final int srcH;
   double fx, fy, vx = 0.0, vy = 0.0;
   final List<double> tmpl = List<double>.filled(PW * PH, 0);
   double tMean = 0.0, tStd = 0.0, tR = 0.0, tG = 0.0, tB = 0.0;
@@ -184,7 +189,9 @@ class _NccTracker {
       if (frame % 10 == 0) grab(f, fx, fy, 0.25); // 模板渐进混合自适应
       score = best;
     }
-    final pt = TrackPoint(frame / fps, fx * DS, fy * DS, score);
+    // 输出源分辨率坐标：解码域逐轴回映射（差异③）。1280×720 源时
+    // srcW/W = srcH/H = 4，与原型 ×DS 逐位一致。
+    final pt = TrackPoint(frame / fps, fx * srcW / W, fy * srcH / H, score);
     frame++;
     return pt;
   }
