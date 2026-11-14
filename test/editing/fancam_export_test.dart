@@ -124,7 +124,7 @@ void main() {
     final cropIdx = cmd.indexOf('crop=', overlayIdx);
     expect(cropIdx, greaterThan(overlayIdx));
     expect(cmd, contains('-map "[vout]"'));
-    expect(cmd, contains('-map 0:a?')); // filter_complex 下显式 map 音频
+    expect(cmd, contains('-map 0:a:0?')); // 只取第一条音频流（iPhone mebx 假音轨防御）
   });
 
   test('直拍无打码：命令与旧版一致（空 regions 零回归）', () {
@@ -200,7 +200,7 @@ void main() {
     expect(cmd, contains('[mo0]sendcmd='));
     expect(cmd, contains('crop=340:604:470:58'));
     expect(cmd, contains('-map "[vout]"'));
-    expect(cmd, contains('-map 0:a?'));
+    expect(cmd, contains('-map 0:a:0?'));
   });
 
   test('跟随导出 trim 拼装与手动一致：-ss 前置于 -i、-t 输出时长', () {

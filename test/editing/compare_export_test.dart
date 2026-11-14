@@ -27,11 +27,11 @@ void main() {
     expect(cmd, contains('hstack=inputs=2'));
     expect(cmd, contains('scale=-2:1080'));
     expect('crop='.allMatches(cmd).length, 2);
-    expect(cmd, contains('-map 0:a'));
+    expect(cmd, contains('-map 0:a:0')); // 只取第一条音频流（iPhone mebx 假音轨防御）
     expect(cmd, contains('fps=30'));
   });
 
-  test('音源可切：mine → -map 1:a；none → -an', () {
+  test('音源可切：mine → -map 1:a:0；none → -an', () {
     final mine = buildCompareCommand(
         teacherPath: '/t.mp4',
         minePath: '/m.mp4',
@@ -45,7 +45,7 @@ void main() {
         audio: 'mine',
         fpsCap: 30,
         containerAspect: ca);
-    expect(mine, contains('-map 1:a'));
+    expect(mine, contains('-map 1:a:0'));
     final none = buildCompareCommand(
         teacherPath: '/t.mp4',
         minePath: '/m.mp4',
@@ -60,7 +60,7 @@ void main() {
         fpsCap: 30,
         containerAspect: ca);
     expect(none, contains('-an'));
-    expect(none, isNot(contains('-map 0:a')));
+    expect(none, isNot(contains('-map 0:a:0')));
   });
 
   test('crop 参数与 toSourceRect 一致（遮罩预览 WYSIWYG）', () {

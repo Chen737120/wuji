@@ -15,8 +15,11 @@ String _fmtSec(Duration d) => (d.inMilliseconds / 1000).toStringAsFixed(3);
 ///   冻结末帧补齐（允许的末尾竞争延长），`-t` 兜底取齐。
 ///
 /// 布局：每侧 crop=取样矩形 → scale=-2:1080 → hstack=inputs=2。
-/// 音频：teacher→`-map 0:a`；mine→`-map 1:a`；none→`-an`。
-/// 帧率：`fps=min(30, teacherFps)`。
+/// 音频：teacher→`-map 0:a:0`；mine→`-map 1:a:0`；none→`-an`。
+/// 只取第一条音频流（`:0`）：iPhone 视频含多条 Core Media 元数据流
+/// （mebx），本 FFmpeg 会把它们误标为 audio 类型（codec none），宽匹配
+/// `0:a` 会选中并因无解码器退出码 1（2026-11-14 真机实证）；安卓源仅
+/// 一条音轨，行为等价。帧率：`fps=min(30, teacherFps)`。
 String buildCompareCommand({
   required String teacherPath,
   required String minePath,
@@ -70,8 +73,8 @@ String buildCompareCommand({
       '[v0][v1]hstack=inputs=2,fps=${_fmtRate(fps)}[v]';
 
   final audioMap = switch (audio) {
-    'teacher' => '-map 0:a',
-    'mine' => '-map 1:a',
+    'teacher' => '-map 0:a:0',
+    'mine' => '-map 1:a:0',
     _ => '-an',
   };
 

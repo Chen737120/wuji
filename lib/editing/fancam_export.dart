@@ -40,7 +40,7 @@ int align16(int v) => math.max(16, ((v + 8) ~/ 16) * 16);
 ///   打码区域坐标为源画面系，须在裁剪前生效）；空列表命令与无打码
 ///   版本逐字节一致（零回归）。`-ss` 前置使滤镜 t 从 0 起，与关键帧
 ///   时间轴相对修剪起点的语义一致（spec §8）；filter_complex 下显式
-///   `-map "[vout]" -map 0:a?`（可选 map，无音轨源无害）。
+///   `-map "[vout]" -map 0:a:0?`（可选 map，无音轨源无害）。
 String buildFancamCommand({
   required String srcPath,
   required KeyframeTrack track,
@@ -95,7 +95,7 @@ String buildFancamCommand({
       inputLabel: '0:v',
     );
     videoPart = '-filter_complex "$graph;[$out]$cropExpr,'
-        'scale=$outW:$outHeight,setsar=1[vout]" -map "[vout]" -map 0:a? ';
+        'scale=$outW:$outHeight,setsar=1[vout]" -map "[vout]" -map 0:a:0? ';
   }
   return '-y $trimPart-i "$srcPath" $durPart'
       '$videoPart'
@@ -117,7 +117,7 @@ String buildFancamCommand({
 ///   音频段（hasAudio ? AAC 标准化 : -an）、编码器与 trim 拼装（`-ss` 前置
 ///   → 滤镜 t 从 0 起，sendcmd 时间相对修剪起点，与 centers 时间轴一致）；
 /// - 打码同手动（spec §5.2）：[regions] 非空时 [buildMosaicGraph] 串联在前、
-///   sendcmd/crop/scale 在后，`-map "[vout]" -map 0:a?`。
+///   sendcmd/crop/scale 在后，`-map "[vout]" -map 0:a:0?`。
 String buildFancamFollowCommand({
   required String srcPath,
   required String cmdsPath,
@@ -171,7 +171,7 @@ String buildFancamFollowCommand({
       inputLabel: '0:v',
     );
     videoPart = '-filter_complex "$graph;[$out]$followSeg[vout]" '
-        '-map "[vout]" -map 0:a? ';
+        '-map "[vout]" -map 0:a:0? ';
   }
   return '-y $trimPart-i "$srcPath" $durPart'
       '$videoPart'
