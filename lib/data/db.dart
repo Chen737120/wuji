@@ -84,6 +84,21 @@ class AppDatabase extends _$AppDatabase {
         },
         beforeOpen: (details) async {
           await customStatement('PRAGMA foreign_keys = ON');
+          // iOS：数据库（含 WAL 伴生文件）排除 iCloud 备份——记录属个人数据，
+          // 异地备份由「导出 zip」覆盖。排除必须放在 beforeOpen：首次启动时
+          // 库文件在本连接打开前不存在，AppDelegate 的 setResourceValue 对
+          // 不存在路径静默失败（try?），_open() 里的预排除必然落空且不再重试；
+          // -wal/-shm 也只在连接打开后才存在。文件未建场景（内存测试库）
+          // 由 Platform.isIOS 门控＋bridge 内部静默兜住。
+          if (Platform.isIOS) {
+            try {
+              final dir = await getApplicationDocumentsDirectory();
+              final p = '${dir.path}/wuji.db';
+              for (final f in [p, '$p-wal', '$p-shm']) {
+                await PhotoManagerBridge.excludeFromBackup(f);
+              }
+            } catch (_) {}
+          }
         },
       );
 
@@ -97,12 +112,7 @@ AppDatabase appDatabaseForTest() =>
 QueryExecutor _open() => LazyDatabase(() async {
       final dir = await getApplicationDocumentsDirectory();
       final file = File('${dir.path}/wuji.db');
-      // iOS：数据库（含 WAL 伴生文件）排除 iCloud 备份——记录属个人数据，
-      // 异地备份由「导出 zip」覆盖；文件未建/通道未就绪时静默
-      if (Platform.isIOS) {
-        for (final p in [file.path, '${file.path}-wal', '${file.path}-shm']) {
-          await PhotoManagerBridge.excludeFromBackup(p);
-        }
-      }
+      // iCloud 排除在 beforeOpen 做（见 migration 注释）：此闭包先于
+      // NativeDatabase 建文件执行，在这里调用对首次启动必然无效。
       return NativeDatabase.createInBackground(file);
     });
