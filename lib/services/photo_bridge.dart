@@ -13,13 +13,15 @@ class PhotoManagerBridge {
   static const _native = MethodChannel('wuji/native');
 
   static Future<void> saveVideo(String path) async {
-    // relativePath 与三条导出链路（GalleryMover）同口径：安卓=Movies/wuji
-    // 子目录、iOS=相册名 wuji。不指定时 iOS 落「最近项目」、安卓落默认目录，
-    // 与导出的「wuji」相册分裂（2026-11-14 iOS 走查）。
+    // relativePath 仅 iOS 显式指定：iOS 无目录树概念，落「最近项目」会与
+    // 导出链路的 wuji 相册分裂（2026-11-14 iOS 走查），显式用相册名 wuji
+    // （与 galleryRelativePath 的 iOS 分支同值）。安卓不指定——维持
+    // photo_manager 原默认目录（用户拍板 2026-11-14：安卓行为不变），
+    // 与导出链路（Movies/wuji）的差异属预期。
     await PhotoManager.editor.saveVideo(
       File(path),
       title: 'WUJI_${DateTime.now().millisecondsSinceEpoch}.mp4',
-      relativePath: galleryRelativePath(isIOS: Platform.isIOS),
+      relativePath: Platform.isIOS ? galleryRelativePath(isIOS: true) : null,
     );
     await _scan(path);
   }
