@@ -139,6 +139,9 @@ String buildFancamFollowCommand({
   final (outW, outHeight) = fancamOutputSize(cropW, cropH, outH: outH);
   final x0 = (centers.first.x - cropW / 2).round() & ~1;
   final y0 = (centers.first.y - cropH / 2).round() & ~1;
+  // cmdsPath 直接拼进 filtergraph：路径含空格或 : ' \ 时需引号/转义，
+  // 当前双平台沙盒缓存路径（/data/user/0/…、/var/mobile/Containers/…）均不满足，
+  // 若未来路径结构变化，先补引号并重跑直拍导出回归。
   final followSeg =
       'sendcmd=f=$cmdsPath,crop=$cropW:$cropH:$x0:$y0,'
       'scale=$outW:$outHeight,setsar=1';
