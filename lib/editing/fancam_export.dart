@@ -70,9 +70,8 @@ String buildFancamCommand({
   // （1080p≈16Mbps ≈ 0.25bpp@30fps，与相册原图放大观感对齐）
   final videoBitrate = videoBitrateFor(outHeight);
 
-  // 硬件编码器按平台：Android=mediacodec；iOS=VideoToolbox（ffmpeg_kit
-  // min 变体内建，同为硬编；失败时 ExportService 回退 mpeg4 软编兜底）
-  final videoCodec = Platform.isIOS ? 'h264_videotoolbox' : 'h264_mediacodec';
+  // 硬件编码器按平台（与对比/打码同口径，见 exportVideoCodec 注释）
+  final videoCodec = exportVideoCodec(isIOS: Platform.isIOS);
 
   final trimPart = trimStart > Duration.zero
       ? '-ss ${(trimStart.inMilliseconds / 1000).toStringAsFixed(3)} '
@@ -151,7 +150,7 @@ String buildFancamFollowCommand({
   final audioPart =
       hasAudio ? '-c:a aac -ar 48000 -ac 2 -b:a 128k' : '-an';
   final videoBitrate = videoBitrateFor(outHeight);
-  final videoCodec = Platform.isIOS ? 'h264_videotoolbox' : 'h264_mediacodec';
+  final videoCodec = exportVideoCodec(isIOS: Platform.isIOS);
 
   final trimPart = trimStart > Duration.zero
       ? '-ss ${(trimStart.inMilliseconds / 1000).toStringAsFixed(3)} '
@@ -183,3 +182,11 @@ String buildFancamFollowCommand({
 /// 更小 6M。设了 -b:v 后 mediacodec 才会按高码率编码。
 String videoBitrateFor(int outHeight) =>
     outHeight >= 1000 ? '16M' : (outHeight >= 700 ? '10M' : '6M');
+
+/// 导出硬编编码器按平台（直拍/对比/打码三处导出命令共用唯一来源）：
+/// Android=mediacodec；iOS=VideoToolbox（ffmpeg_kit min 变体内建）；
+/// 硬编失败/零包时 ExportService 回退 mpeg4 软编兜底。
+/// 2026-11-14 iOS 走查：mosaic 曾漏平台分支硬编码 mediacodec——iOS 无此
+/// 编码器，每次打码导出都先整跑一遍必败命令再回退软编（慢＋日志误导）。
+String exportVideoCodec({required bool isIOS}) =>
+    isIOS ? 'h264_videotoolbox' : 'h264_mediacodec';

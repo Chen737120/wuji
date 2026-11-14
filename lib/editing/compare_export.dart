@@ -1,6 +1,7 @@
 import 'dart:io';
 import 'dart:ui' show Size;
 
+import 'fancam_export.dart' show exportVideoCodec;
 import 'side_transform.dart';
 
 String _fmtSec(Duration d) => (d.inMilliseconds / 1000).toStringAsFixed(3);
@@ -15,7 +16,7 @@ String _fmtSec(Duration d) => (d.inMilliseconds / 1000).toStringAsFixed(3);
 ///   冻结末帧补齐（允许的末尾竞争延长），`-t` 兜底取齐。
 ///
 /// 布局：每侧 crop=取样矩形 → scale=-2:1080 → hstack=inputs=2。
-/// 音频：teacher→`-map 0:a:0`；mine→`-map 1:a:0`；none→`-an`。
+/// 音频：teacher→`-map 0:a:0?`；mine→`-map 1:a:0?`；none→`-an`。
 /// 只取第一条音频流（`:0`）：iPhone 视频含多条 Core Media 元数据流
 /// （mebx），本 FFmpeg 会把它们误标为 audio 类型（codec none），宽匹配
 /// `0:a` 会选中并因无解码器退出码 1（2026-11-14 真机实证）；安卓源仅
@@ -73,15 +74,17 @@ String buildCompareCommand({
       '[v0][v1]hstack=inputs=2,fps=${_fmtRate(fps)}[v]';
 
   final audioMap = switch (audio) {
-    'teacher' => '-map 0:a:0',
-    'mine' => '-map 1:a:0',
+    // 可选 map（?）：所选侧真无音轨时静默出无声片，不再因
+    // "Stream map matches no streams" 整轮导出失败（与直拍/打码同口径）
+    'teacher' => '-map 0:a:0?',
+    'mine' => '-map 1:a:0?',
     _ => '-an',
   };
 
   // 视频码率显式给定（2026-10-08 需求 #1，与直拍共用分档）：
   // mediacodec 默认码率偏低，放大看毛边明显。
-  // 编码器按平台：Android=mediacodec；iOS=VideoToolbox（min 变体内建硬编）
-  final videoCodec = Platform.isIOS ? 'h264_videotoolbox' : 'h264_mediacodec';
+  // 编码器按平台（与直拍/打码共用唯一来源，见 exportVideoCodec 注释）
+  final videoCodec = exportVideoCodec(isIOS: Platform.isIOS);
   final videoBitrate =
       outHeight >= 1000 ? '16M' : (outHeight >= 700 ? '10M' : '6M');
 

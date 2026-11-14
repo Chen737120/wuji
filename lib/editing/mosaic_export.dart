@@ -1,4 +1,6 @@
-import 'fancam_export.dart' show videoBitrateFor;
+import 'dart:io';
+
+import 'fancam_export.dart' show exportVideoCodec, videoBitrateFor;
 import 'ffmpeg_probe.dart' show MediaInfo;
 import 'mosaic_graph.dart' show buildMosaicGraph;
 import 'mosaic_region.dart';
@@ -24,7 +26,7 @@ String buildMosaicExportCommand({
       '-filter_complex "$graph" '
       '-map "[$out]" '
       '${info.hasAudio ? '-map 0:a:0? ' : ''}'
-      '-c:v h264_mediacodec -pix_fmt yuv420p '
+      '-c:v ${exportVideoCodec(isIOS: Platform.isIOS)} -pix_fmt yuv420p '
       '-b:v ${videoBitrateFor(info.displayHeight)} '
       '${info.hasAudio ? '-c:a aac -ar 48000 -ac 2 -b:a 128k' : '-an'} '
       '-movflags +faststart';
